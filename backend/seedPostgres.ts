@@ -137,25 +137,48 @@ async function seedDatabase() {
       return;
     }
 
-    // 4. Insert data into PostgreSQL
-    // We'll clear the table first to ensure a fresh sync.
-    console.log('Step 4: Inserting data into PostgreSQL...');
+    // 4. Insert data into PostgreSQL using an efficient batching strategy
+    console.log('Step 4: Inserting data into PostgreSQL in batches...');
     await pgClient.query('TRUNCATE TABLE opportunities;');
     console.log('\t> Cleared existing data from table.');
 
-    // Loop through rows and insert them. For larger datasets, a more efficient
-    // batch insert or COPY command would be used, but this is clear and effective for <5000 rows.
-    for (const row of rows) {
-        const columns = Object.keys(row);
-        const values = Object.values(row);
-        const valuePlaceholders = columns.map((_, i) => `$${i + 1}`).join(', ');
+    const BATCH_SIZE = 1000;
+    let totalInserted = 0;
+    const columns = Object.keys(rows[0]);
+    const numColumns = columns.length;
 
-        const insertQuery = `INSERT INTO opportunities (${columns.join(', ')}) VALUES (${valuePlaceholders}) ON CONFLICT (opportunities_id) DO UPDATE SET ${columns.map(col => `${col} = EXCLUDED.${col}`).join(', ')}`;
+    for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+        const batch = rows.slice(i, i + BATCH_SIZE);
+        const valuePlaceholders: string[] = [];
+        const flatValues: any[] = [];
+        let paramIndex = 1;
+
+        for (const row of batch) {
+            const placeholders: string[] = [];
+            // Ensure values are in the same order as columns
+            for (const col of columns) {
+                placeholders.push(`$${paramIndex++}`);
+                // Handle null/undefined values explicitly
+                const value = row[col];
+                flatValues.push(value === undefined ? null : value);
+            }
+            valuePlaceholders.push(`(${placeholders.join(', ')})`);
+        }
+
+        const insertQuery = `
+            INSERT INTO opportunities (${columns.join(', ')}) 
+            VALUES ${valuePlaceholders.join(', ')}
+            ON CONFLICT (opportunities_id) DO UPDATE SET 
+            ${columns.map(col => `${col} = EXCLUDED.${col}`).join(', ')}
+        `;
+
+        await pgClient.query(insertQuery, flatValues);
         
-        await pgClient.query(insertQuery, values);
+        totalInserted += batch.length;
+        console.log(`\t> Inserted batch ${Math.ceil(totalInserted / BATCH_SIZE)} of ${Math.ceil(rows.length / BATCH_SIZE)}... (${totalInserted}/${rows.length} rows)`);
     }
     
-    console.log(`\t> Successfully inserted ${rows.length} records.`);
+    console.log(`\t> Successfully inserted ${totalInserted} records.`);
     console.log('--- Database Seeding Process Complete ---');
 
   } catch (error) {
