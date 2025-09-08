@@ -38,6 +38,7 @@ const POSTGRES_CONFIG = {
 const bigquery = new BigQuery({ projectId: GCLOUD_PROJECT_ID });
 
 // The exact SQL for the full opportunities list.
+// Updated to CAST numeric types to FLOAT64 to ensure compatibility with PostgreSQL.
 const OPPORTUNITIES_QUERY = `
     SELECT
         opportunities.id  AS opportunities_id,
@@ -47,9 +48,9 @@ const OPPORTUNITIES_QUERY = `
         opportunities.owner_name  AS opportunities_owner_name,
         CAST(DATE(opportunities.renewal_date_on_creation , 'America/Los_Angeles') AS STRING) AS opportunities_renewal_date_on_creation_date,
         opportunities.automated_renewal_status  AS opportunities_automated_renewal_status,
-        safe_divide((accounts.dollars_balance - coalesce(accounts.dollars_used, 0)), accounts.average_monthly_dollars_used_4_mos)  AS accounts_dollars_months_left,
+        CAST(safe_divide((accounts.dollars_balance - coalesce(accounts.dollars_used, 0)), accounts.average_monthly_dollars_used_4_mos) AS FLOAT64) AS accounts_dollars_months_left,
         (CASE WHEN opportunities.has_services_flag  THEN 'Yes' ELSE 'No' END) AS opportunities_has_services_flag,
-        opportunities.amount_services  AS opportunities_amount_services,
+        CAST(opportunities.amount_services AS FLOAT64) AS opportunities_amount_services,
         accounts.outreach_account_link  AS accounts_outreach_account_link,
         accounts.salesforce_account_name  AS accounts_salesforce_account_name,
         accounts.primary_fivetran_account_status  AS accounts_primary_fivetran_account_status,
@@ -64,8 +65,8 @@ const OPPORTUNITIES_QUERY = `
         accounts.salesforce_account_id  AS accounts_salesforce_account_id,
         opportunities.manager_of_opp_email  AS opportunities_manager_of_opp_email,
         CAST(DATE(accounts.subscription_end_date ) AS STRING) AS accounts_subscription_end_date,
-        COALESCE(SUM(opportunities.incremental_bookings_forecast_c ), 0) AS opportunities_incremental_bookings,
-        COALESCE(SUM(opportunities.amount ), 0) AS opportunities_amount
+        CAST(COALESCE(SUM(opportunities.incremental_bookings_forecast_c ), 0) AS FLOAT64) AS opportunities_incremental_bookings,
+        CAST(COALESCE(SUM(opportunities.amount ), 0) AS FLOAT64) AS opportunities_amount
     FROM \`digital-arbor-400\`.transforms_bi.opportunities  AS opportunities
     INNER JOIN \`digital-arbor-400\`.transforms_bi.accounts  AS accounts ON opportunities.salesforce_account_id = accounts.salesforce_account_id
     WHERE ((UPPER(( accounts.region_name  )) = UPPER('NA - Enterprise') OR UPPER(( accounts.region_name  )) = UPPER('NA - Commercial'))) 
