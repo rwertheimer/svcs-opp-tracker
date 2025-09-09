@@ -79,7 +79,7 @@ interface OpportunityListProps {
 type SortKey = keyof Opportunity;
 
 const OpportunityList: React.FC<OpportunityListProps> = ({ opportunities, allOpportunities, onSelect, filters, onFilterChange, savedFilters, onSaveFilter, onApplyFilter, onClearFilters, onAddScoping }) => {
-  const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: 'ascending' | 'descending' } | null>({ key: 'opportunities_amount', direction: 'descending' });
+  const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: 'ascending' | 'descending' } | null>(null);
   const [newViewName, setNewViewName] = useState('');
 
   const salesReps = useMemo(() => [...new Set(allOpportunities.map(o => o.opportunities_owner_name))].sort(), [allOpportunities]);
@@ -98,26 +98,27 @@ const OpportunityList: React.FC<OpportunityListProps> = ({ opportunities, allOpp
             if (valA < valB) result = -1;
             if (valA > valB) result = 1;
 
-            // If the primary sort column values are equal, apply the secondary default sort.
-            if (result === 0) {
-                if (a.opportunities_amount !== b.opportunities_amount) {
-                    return b.opportunities_amount - a.opportunities_amount;
-                }
-                return b.opportunities_incremental_bookings - a.opportunities_incremental_bookings;
+            if (result !== 0) {
+                return sortConfig.direction === 'ascending' ? result : -result;
             }
-
-            return sortConfig.direction === 'ascending' ? result : -result;
         }
 
-        // Default sort if no config is set (which shouldn't happen with initial state)
+        // Default sort / tie-breaker for any user sort
+        // 1. Total Opp Amount (desc)
         if (a.opportunities_amount !== b.opportunities_amount) {
             return b.opportunities_amount - a.opportunities_amount;
         }
-        return b.opportunities_incremental_bookings - a.opportunities_incremental_bookings;
+        // 2. Incremental Bookings (desc)
+        if (a.opportunities_incremental_bookings !== b.opportunities_incremental_bookings) {
+            return b.opportunities_incremental_bookings - a.opportunities_incremental_bookings;
+        }
+        // 3. Close Date (asc - closer dates first)
+        return new Date(a.accounts_subscription_end_date).getTime() - new Date(b.accounts_subscription_end_date).getTime();
     });
 
     return sortableItems;
   }, [opportunities, sortConfig]);
+
 
   const requestSort = (key: SortKey) => {
     let direction: 'ascending' | 'descending' = 'ascending';
@@ -156,7 +157,7 @@ const OpportunityList: React.FC<OpportunityListProps> = ({ opportunities, allOpp
         <div className="p-4 border-b flex justify-between items-center">
             <div>
                 <h2 className="text-xl font-bold text-slate-800">Professional Services Opportunities</h2>
-                <p className="text-sm text-slate-500 mt-1">Default view shows NA opportunities closing in the next 90 days. Use filters to refine.</p>
+                <p className="text-sm text-slate-500 mt-1">Default view shows active NA opportunities closing in the next 90 days. Use filters to refine.</p>
             </div>
             <button onClick={onAddScoping} className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 font-semibold text-sm flex items-center space-x-2 whitespace-nowrap">
                 {ICONS.add}
@@ -246,9 +247,11 @@ const OpportunityList: React.FC<OpportunityListProps> = ({ opportunities, allOpp
         <table className="w-full text-sm text-left text-slate-500">
           <thead className="text-xs text-slate-700 uppercase bg-slate-50">
             <tr>
-              {tableHeaders.map(({ key, label, className }) => (
-                <th key={key} scope="col" className={`px-4 py-3 cursor-pointer hover:bg-slate-100 ${className || ''}`} onClick={() => requestSort(key as SortKey)}>
-                  {label} <span className="ml-1 text-slate-400">{getSortIndicator(key as SortKey)}</span>
+              {tableHeaders.map(({ key, label, className, isSortable }) => (
+                <th key={key} scope="col" 
+                    className={`px-4 py-3 ${isSortable ? 'cursor-pointer hover:bg-slate-100' : ''} ${className || ''}`} 
+                    onClick={() => isSortable && requestSort(key as SortKey)}>
+                  {label} {isSortable && <span className="ml-1 text-slate-400">{getSortIndicator(key as SortKey)}</span>}
                 </th>
               ))}
             </tr>
@@ -259,19 +262,20 @@ const OpportunityList: React.FC<OpportunityListProps> = ({ opportunities, allOpp
                 <td className="px-4 py-3 font-medium text-slate-800">{opp.accounts_salesforce_account_name}</td>
                 <td className="px-4 py-3 text-indigo-600 font-semibold">{opp.opportunities_name}</td>
                 <td className="px-4 py-3">{opp.opportunities_owner_name}</td>
+                <td className="px-4 py-3">{opp.opportunities_type}</td>
                 <td className="px-4 py-3">{formatDate(opp.accounts_subscription_end_date)}</td>
+                <td className="px-4 py-3 text-center"><Tag status={opp.opportunities_stage_name} /></td>
                 <td className="px-4 py-3 text-right font-medium text-slate-700">{formatCurrency(opp.opportunities_incremental_bookings)}</td>
                 <td className="px-4 py-3 text-right font-bold text-green-700">{formatCurrency(opp.opportunities_amount)}</td>
-                <td className="px-4 py-3 text-center">{opp.opportunities_has_services_flag}</td>
-                <td className="px-4 py-3 text-right">{formatCurrency(opp.opportunities_amount_services)}</td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center space-x-2">
-                    <Tag status={opp.opportunities_stage_name} />
-                    {opp.disposition?.status === 'Services Fit' && <span className="text-green-500" title="Disposition: Services Fit">{ICONS.checkCircle}</span>}
-                    {opp.disposition?.status === 'No Services Opp' && <span className="text-red-500" title="Disposition: No Services Opp">{ICONS.xCircle}</span>}
-                    {opp.disposition?.status === 'Watchlist' && <span className="text-blue-500" title="Disposition: Watchlist">{ICONS.eye}</span>}
+                <td className="px-4 py-3 text-center">
+                    <div className="flex items-center justify-center space-x-2">
+                        <Tag status={opp.opportunities_has_services_flag} />
+                        {opp.disposition?.status === 'Services Fit' && <span className="text-green-500" title="Disposition: Services Fit">{ICONS.checkCircle}</span>}
+                        {opp.disposition?.status === 'No Services Opp' && <span className="text-red-500" title="Disposition: No Services Opp">{ICONS.xCircle}</span>}
+                        {opp.disposition?.status === 'Watchlist' && <span className="text-blue-500" title="Disposition: Watchlist">{ICONS.eye}</span>}
                    </div>
                 </td>
+                <td className="px-4 py-3 text-right">{formatCurrency(opp.opportunities_amount_services)}</td>
               </tr>
             ))}
           </tbody>
@@ -287,15 +291,16 @@ const OpportunityList: React.FC<OpportunityListProps> = ({ opportunities, allOpp
 };
 
 const tableHeaders = [
-  { key: 'accounts_salesforce_account_name', label: 'Account Name' },
-  { key: 'opportunities_name', label: 'Opportunity Name' },
-  { key: 'opportunities_owner_name', label: 'Owner Name' },
-  { key: 'accounts_subscription_end_date', label: 'Close Date' },
-  { key: 'opportunities_incremental_bookings', label: 'Incr. Bookings', className: 'text-right' },
-  { key: 'opportunities_amount', label: 'Total Opp Amount', className: 'text-right' },
-  { key: 'opportunities_has_services_flag', label: 'Services Attached', className: 'text-center' },
-  { key: 'opportunities_amount_services', label: 'Services Amount', className: 'text-right' },
-  { key: 'opportunities_stage_name', label: 'Stage' },
+  { key: 'accounts_salesforce_account_name', label: 'Account Name', isSortable: true },
+  { key: 'opportunities_name', label: 'Opportunity Name', isSortable: true },
+  { key: 'opportunities_owner_name', label: 'Owner Name', isSortable: true },
+  { key: 'opportunities_type', label: 'Opportunity Type', isSortable: true },
+  { key: 'accounts_subscription_end_date', label: 'Close Date', isSortable: true },
+  { key: 'opportunities_stage_name', label: 'Stage', isSortable: true, className: 'text-center' },
+  { key: 'opportunities_incremental_ bookings', label: 'Incr. Bookings', className: 'text-right', isSortable: true },
+  { key: 'opportunities_amount', label: 'Total Opp Amount', className: 'text-right', isSortable: true },
+  { key: 'opportunities_has_services_flag', label: 'Services Attached', className: 'text-center', isSortable: true },
+  { key: 'opportunities_amount_services', label: 'Services Amount', className: 'text-right', isSortable: true },
 ];
 
 export default OpportunityList;

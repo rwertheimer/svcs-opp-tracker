@@ -1,3 +1,4 @@
+
 import type { Opportunity, AccountDetails, SupportTicket, ProjectHistory, UsageData, ActionItem, Document } from '../types';
 import { OpportunityStage, ActionItemStatus, DispositionStatus } from '../types';
 
@@ -23,6 +24,7 @@ const MOCK_OPP_NOUNS = ['Platform Deal', 'Services Engagement', 'Connector Packa
 const MOCK_REPS = ['Alice Johnson', 'Bob Williams', 'Charlie Brown', 'Diana Miller'];
 const MOCK_REGIONS = ['NA - Enterprise', 'NA - Commercial', 'EMEA', 'APAC'];
 const MOCK_STAGES = Object.values(OpportunityStage).filter(s => s !== OpportunityStage.PreSalesScoping);
+const MOCK_OPP_TYPES = ['Renewal', 'New Business', 'Upsell', 'Expansion', 'Sales'];
 
 const generatePreDispositionedOpp = (): Opportunity => {
      const defaultActionItems: ActionItem[] = [
@@ -53,7 +55,7 @@ const generatePreDispositionedOpp = (): Opportunity => {
         opportunities_connectors: 'Oracle, SAP, Salesforce',
         opportunities_connector_tshirt_size_list: 'XL, L, M',
         opportunities_destinations: 'Snowflake',
-        opportunities_type: 'Sales',
+        opportunities_type: 'Expansion',
         accounts_region_name: 'NA - Enterprise',
         accounts_salesforce_account_id: `acc-stark-industries-demo`,
         opportunities_manager_of_opp_email: 'manager@example.com',
@@ -101,7 +103,7 @@ export const generateOpportunities = (count: number): Opportunity[] => {
             opportunities_connectors: 'Salesforce, BigQuery',
             opportunities_connector_tshirt_size_list: 'M, L',
             opportunities_destinations: 'Snowflake',
-            opportunities_type: 'Sales',
+            opportunities_type: getRandomElement(MOCK_OPP_TYPES),
             accounts_region_name: isNAregion ? getRandomElement(['NA - Enterprise', 'NA - Commercial']) : getRandomElement(['EMEA', 'APAC']),
             accounts_salesforce_account_id: `acc-${accountName.toLowerCase().replace(/ /g, '-')}-${getRandomId()}`,
             opportunities_manager_of_opp_email: 'manager@example.com',

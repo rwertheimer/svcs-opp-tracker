@@ -17,8 +17,8 @@ const statusColorMap: { [key: string]: string } = {
   'Engaged': 'bg-purple-100 text-purple-800',
   'Closed - Won': 'bg-green-100 text-green-800',
   'Closed - Lost': 'bg-slate-100 text-slate-800',
-  'Yes': 'bg-red-100 text-red-800',
-  'No': 'bg-gray-100 text-gray-800',
+  'Yes': 'bg-green-100 text-green-800',
+  'No': 'bg-red-100 text-red-800',
   
   // Ticket Statuses
   'Open': 'bg-green-100 text-green-800',

@@ -56,10 +56,19 @@ const App: React.FC = () => {
 
     // Apply the base filter first as per requirements
     const baseFilteredOpps = opportunities.filter(opp => {
+      const allowedTypes = ['Renewal', 'New Business', 'Upsell', 'Expansion'];
+      const typeMatch = allowedTypes.includes(opp.opportunities_type);
       const regionMatch = opp.accounts_region_name === 'NA - Enterprise' || opp.accounts_region_name === 'NA - Commercial';
-      const endDate = new Date(opp.accounts_subscription_end_date);
-      const dateMatch = endDate >= today && endDate <= ninetyDaysFromNow;
-      return regionMatch && dateMatch;
+      
+      const closeDate = new Date(opp.accounts_subscription_end_date);
+      const subscriptionEndDate = new Date(opp.accounts_subscription_end_date);
+      const dateMatch = (closeDate <= ninetyDaysFromNow) || (subscriptionEndDate <= ninetyDaysFromNow);
+
+      // Exclude opportunities with "Closed", "Won", or "Lost" in the stage name.
+      const stageNameLower = opp.opportunities_stage_name.toLowerCase();
+      const stageMatch = !stageNameLower.includes('closed') && !stageNameLower.includes('won') && !stageNameLower.includes('lost');
+
+      return typeMatch && regionMatch && dateMatch && stageMatch;
     });
 
     // Then apply the user's interactive filters
