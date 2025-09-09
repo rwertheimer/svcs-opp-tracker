@@ -1,58 +1,66 @@
-
 import type { Opportunity, AccountDetails } from '../types';
 import { generateOpportunities, generateAccountDetails } from './mockData';
 
 /**
- * apiService.ts: The Frontend's Gateway to the Backend
- * 
- * This file replaces the old geminiService. Its responsibility is to communicate
- * with the backend API. In a real application, the functions here would use `fetch`
- * to make network requests to your Cloud Run server.
- * 
- * For this prototype, we are *simulating* those API calls. Instead of a real network
- * request, we are importing mock data from `mockData.ts` and returning it inside a
- * Promise. This perfectly mimics the asynchronous nature of a real API without
- * needing a live backend, and ensures the rest of the application is built correctly.
+ * apiService.ts: A dual-mode API service for flexible development.
+ *
+ * This service can operate in two modes, controlled by the `USE_MOCK_DATA` flag.
+ * 1. Mock Mode (USE_MOCK_DATA = true): The service uses local mock data. This ensures
+ *    the application is self-contained and works perfectly in a browser-only
+ *    prototyping environment (like this one).
+ * 2. Live Mode (USE_MOCK_DATA = false): The service makes live HTTP requests to a
+ *    local backend server. This is for full-stack local development where you are
+ *    running the Node.js server from `backend/server.ts` in your terminal.
  */
 
-const API_BASE_URL = '/api'; // A conventional base URL for API calls
+// --- CONFIGURATION ---
+// Set to `true` for browser-based prototyping.
+// Set to `false` for local development when running the backend server.
+const USE_MOCK_DATA = true;
+const API_BASE_URL = 'http://localhost:8080/api';
 
 /**
  * Fetches the main list of opportunities.
- * In a real app, this would make a GET request to `${API_BASE_URL}/opportunities`.
  */
 export const fetchOpportunities = async (): Promise<Opportunity[]> => {
-  console.log("Simulating API call to GET /api/opportunities...");
-  // Simulate network delay
-  await new Promise(resolve => setTimeout(resolve, 500));
-  
-  // In a real app:
-  // const response = await fetch(`${API_BASE_URL}/opportunities`);
-  // if (!response.ok) {
-  //   throw new Error('Failed to fetch opportunities');
-  // }
-  // return await response.json();
-
-  // For the prototype, return mock data:
-  return Promise.resolve(generateOpportunities(30));
+  if (USE_MOCK_DATA) {
+    console.log("Fetching opportunities from local mock data...");
+    await new Promise(resolve => setTimeout(resolve, 500));
+    return generateOpportunities(50);
+  } else {
+    console.log(`Fetching real opportunities from GET ${API_BASE_URL}/opportunities...`);
+    const response = await fetch(`${API_BASE_URL}/opportunities`);
+    if (!response.ok) {
+      throw new Error('Failed to fetch opportunities from the backend. Is the server running?');
+    }
+    const data = await response.json();
+    // The server fetches real data but doesn't have the 'disposition' field.
+    // We add it here to conform to the frontend type.
+    return data.map((opp: Omit<Opportunity, 'disposition'>) => ({
+      ...opp,
+      disposition: {
+        status: 'Not Reviewed',
+        notes: '',
+        actionItems: []
+      }
+    }));
+  }
 };
 
 /**
  * Fetches the detailed data for a specific account.
- * In a real app, this would make a GET request to `${API_BASE_URL}/accounts/${accountId}/details`.
  */
 export const fetchOpportunityDetails = async (accountId: string): Promise<AccountDetails> => {
-    console.log(`Simulating API call to GET /api/accounts/${accountId}/details...`);
-    // Simulate network delay
-    await new Promise(resolve => setTimeout(resolve, 800));
-
-    // In a real app:
-    // const response = await fetch(`${API_BASE_URL}/accounts/${accountId}/details`);
-    // if (!response.ok) {
-    //   throw new Error('Failed to fetch opportunity details');
-    // }
-    // return await response.json();
-
-    // For the prototype, return mock data:
-    return Promise.resolve(generateAccountDetails(accountId));
+  if (USE_MOCK_DATA) {
+    console.log(`Generating mock details for account ${accountId}...`);
+    await new Promise(resolve => setTimeout(resolve, 300));
+    return generateAccountDetails(accountId);
+  } else {
+    console.log(`Fetching real details for account ${accountId} from GET ${API_BASE_URL}/accounts/${accountId}/details...`);
+    const response = await fetch(`${API_BASE_URL}/accounts/${accountId}/details`);
+     if (!response.ok) {
+      throw new Error(`Failed to fetch details for account ${accountId}. Is the server running?`);
+    }
+    return await response.json();
+  }
 };
