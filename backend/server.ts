@@ -5,24 +5,27 @@
 import express from 'express';
 import cors from 'cors';
 import { Client } from 'pg';
+import * as dotenv from 'dotenv';
+
+// Load environment variables from .env file
+dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 8080;
 
 // --- CONFIGURATION ---
-// IMPORTANT: Replace with your actual Postgres connection details from seedPostgres.ts
-const POSTGRES_CONFIG = {
-  user: 'postgres',
-  host: 'YOUR_INSTANCE_PUBLIC_IP',
-  database: 'opportunity_tracker',
-  password: 'YOUR_POSTGRES_PASSWORD',
-  port: 5432,
+// Database connection details are now loaded securely from environment variables.
+const pgClient = new Client({
+  host: process.env.PG_HOST,
+  port: parseInt(process.env.PG_PORT || '5432', 10),
+  user: process.env.PG_USER,
+  password: process.env.PG_PASSWORD,
+  database: process.env.PG_DATABASE,
   ssl: {
     rejectUnauthorized: false,
   },
-};
+});
 
-const pgClient = new Client(POSTGRES_CONFIG);
 
 // --- MOCK DATA GENERATION for /details endpoint ---
 // This section is copied and adapted from the frontend's mockData.ts
@@ -149,13 +152,16 @@ app.get('/api/accounts/:accountId/details', async (req, res) => {
 
 // --- START SERVER ---
 const startServer = async () => {
-    if (POSTGRES_CONFIG.host === 'YOUR_INSTANCE_PUBLIC_IP' || POSTGRES_CONFIG.password === 'YOUR_POSTGRES_PASSWORD') {
+    const requiredEnvVars = ['PG_HOST', 'PG_USER', 'PG_DATABASE', 'PG_PASSWORD', 'PG_PORT'];
+    const missingVars = requiredEnvVars.filter(v => !process.env[v]);
+
+    if (missingVars.length > 0) {
         console.error('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
-        console.error('!!! PLEASE UPDATE POSTGRES_CONFIG in backend/server.ts         !!!');
-        console.error('!!! The backend server will not be able to start without it.   !!!');
+        console.error(`!!! ERROR: Missing required environment variables: ${missingVars.join(', ')}`);
+        console.error('!!! Please create a .env file and fill in the details.');
         console.error('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
-        return; // Prevent server from starting with placeholder credentials
-      }
+        return; // Prevent server from starting
+    }
 
     try {
         await pgClient.connect();
