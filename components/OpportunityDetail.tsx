@@ -24,7 +24,7 @@ const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     // Adjust for timezone to prevent date from shifting
     const utcDate = new Date(date.getTime() + date.getTimezoneOffset() * 60000);
-    return utcDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    return utcDate.toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 };
 
 // --- Sub-components defined outside the main component for performance ---
@@ -261,7 +261,7 @@ const HistoricalOpportunitiesList: React.FC<{ opportunities: Opportunity[] }> = 
     const sortedOpps = useMemo(() => {
         // Sort by close date, descending
         return [...opportunities].sort((a, b) => 
-            new Date(b.accounts_subscription_end_date).getTime() - new Date(a.accounts_subscription_end_date).getTime()
+            new Date(b.opportunities_close_date).getTime() - new Date(a.opportunities_close_date).getTime()
         );
     }, [opportunities]);
 
@@ -279,6 +279,7 @@ const HistoricalOpportunitiesList: React.FC<{ opportunities: Opportunity[] }> = 
                         <th className="px-4 py-2">Stage</th>
                         <th className="px-4 py-2 text-right">Amount</th>
                         <th className="px-4 py-2 text-right">Incr. Bookings</th>
+                        <th className="px-4 py-2 text-center">Services Attached</th>
                         <th className="px-4 py-2">Type</th>
                         <th className="px-4 py-2">Close Date</th>
                         <th className="px-4 py-2">Connectors</th>
@@ -294,8 +295,9 @@ const HistoricalOpportunitiesList: React.FC<{ opportunities: Opportunity[] }> = 
                             <td className="px-4 py-2"><Tag status={opp.opportunities_stage_name} /></td>
                             <td className="px-4 py-2 text-right font-semibold">{formatCurrency(opp.opportunities_amount)}</td>
                             <td className="px-4 py-2 text-right">{formatCurrency(opp.opportunities_incremental_bookings)}</td>
+                            <td className="px-4 py-2 text-center"><Tag status={opp.opportunities_has_services_flag} /></td>
                             <td className="px-4 py-2">{opp.opportunities_type}</td>
-                            <td className="px-4 py-2 whitespace-nowrap">{formatDate(opp.accounts_subscription_end_date)}</td>
+                            <td className="px-4 py-2 whitespace-nowrap">{formatDate(opp.opportunities_close_date)}</td>
                             <td className="px-4 py-2 truncate max-w-[150px]" title={opp.opportunities_connectors}>{opp.opportunities_connectors}</td>
                             <td className="px-4 py-2 truncate max-w-[50px]" title={opp.opportunities_connector_tshirt_size_list}>{opp.opportunities_connector_tshirt_size_list}</td>
                             <td className="px-4 py-2 truncate max-w-[100px]" title={opp.opportunities_destinations}>{opp.opportunities_destinations}</td>
@@ -325,25 +327,29 @@ const OpportunityDetail: React.FC<OpportunityDetailProps> = ({ opportunity, deta
         </div>
       </header>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        <div className="xl:col-span-3">
-           <Card title="Account Usage History (Last 3 Months)" icon={ICONS.table}>
-                <UsageHistoryTable usage={details.usageHistory} />
-           </Card>
-        </div>
-        <div className="xl:col-span-2 space-y-6">
-          <Card title="Account Support Summary" icon={ICONS.ticket}>
-             <SupportTickets tickets={details.supportTickets} />
-          </Card>
-        </div>
-        <div className="space-y-6">
+      <div className="space-y-6">
+        {/* Row 1: Full-width Usage History */}
+        <Card title="Account Usage History (Last 3 Months)" icon={ICONS.table}>
+            <UsageHistoryTable usage={details.usageHistory} />
+        </Card>
+
+        {/* Row 2: Two-column section for Support & Historical Opps */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2">
+                <Card title="Account Support Summary" icon={ICONS.ticket}>
+                    <SupportTickets tickets={details.supportTickets} />
+                </Card>
+            </div>
+            
             <Card title="Historical Opportunities" icon={ICONS.history}>
                 <HistoricalOpportunitiesList opportunities={historicalOpportunities} />
             </Card>
-            <Card title="Past Services Projects" icon={ICONS.briefcase}>
-                <ProjectHistoryList projects={details.projectHistory} />
-            </Card>
         </div>
+
+        {/* Row 3: Full-width Past Projects */}
+        <Card title="Past Services Projects" icon={ICONS.briefcase}>
+            <ProjectHistoryList projects={details.projectHistory} />
+        </Card>
       </div>
       
       <div className="mt-8">

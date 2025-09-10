@@ -11,6 +11,7 @@ const useResizableColumns = (initialWidths: { [key: string]: number }) => {
     const startWidth = useRef(0);
 
     const onMouseDown = useCallback((key: string, e: React.MouseEvent<HTMLDivElement>) => {
+        e.preventDefault();
         isResizing.current = key;
         startX.current = e.clientX;
         startWidth.current = columnWidths[key] || 0;
