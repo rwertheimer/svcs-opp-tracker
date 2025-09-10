@@ -27,9 +27,8 @@ const pgClient = new Client({
 });
 
 
-// --- MOCK DATA GENERATION for /details endpoint ---
-// This section is copied and adapted from the frontend's mockData.ts
-// to simulate the on-demand BigQuery calls for the details view.
+// --- MOCK DATA GENERATION for detail endpoints ---
+// This section simulates the on-demand BigQuery calls for the details view.
 const getRandomElement = <T,>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
 const createPastDate = (daysAgo: number) => {
     const date = new Date();
@@ -37,17 +36,9 @@ const createPastDate = (daysAgo: number) => {
     return date.toISOString().split('T')[0];
 };
 const getRandomId = () => Math.random().toString(36).substring(2, 10);
-const MOCK_INTEGRATIONS = [
-    { name: 'orders', group: 'Salesforce', service: 'salesforce' },
-    { name: 'leads', group: 'Salesforce', service: 'salesforce' },
-    { name: 'ad_spend', group: 'Google Ads', service: 'google_ads' },
-    { name: 'audit_logs', group: 'BigQuery', service: 'bigquery' },
-    { name: 'customer_data', group: 'Zendesk', service: 'zendesk' },
-];
-const MOCK_WAREHOUSES = ['SNOWFLAKE', 'BIGQUERY', 'REDSHIFT'];
 
-const generateAccountDetails = (accountId: string) => {
-    const supportTickets = Array.from({ length: 3 }, (_, i) => ({
+const generateSupportTickets = (accountId: string) => {
+    return Array.from({ length: 3 }, (_, i) => ({
         accounts_salesforce_account_id: accountId,
         accounts_outreach_account_link: 'http://example.com',
         accounts_salesforce_account_name: 'Mock Account',
@@ -63,9 +54,17 @@ const generateAccountDetails = (accountId: string) => {
         days_since_last_responce: i + 1,
         tickets_priority: getRandomElement(['High', 'Medium', 'Low']),
     }));
+};
 
+const generateUsageHistory = (accountId: string) => {
+    const MOCK_INTEGRATIONS = [
+      { name: 'orders', group: 'Salesforce', service: 'salesforce' },
+      { name: 'ad_spend', group: 'Google Ads', service: 'google_ads' },
+      { name: 'customer_data', group: 'Zendesk', service: 'zendesk' },
+    ];
+    const MOCK_WAREHOUSES = ['SNOWFLAKE', 'BIGQUERY', 'REDSHIFT'];
     const usageHistory: any[] = [];
-    const numIntegrations = Math.floor(Math.random() * 3) + 2;
+    const numIntegrations = Math.floor(Math.random() * 2) + 1;
     const selectedIntegrations = MOCK_INTEGRATIONS.sort(() => 0.5 - Math.random()).slice(0, numIntegrations);
     const warehouse = getRandomElement(MOCK_WAREHOUSES);
 
@@ -90,8 +89,11 @@ const generateAccountDetails = (accountId: string) => {
             });
         }
     }
+    return usageHistory;
+};
 
-    const projectHistory = Array.from({ length: 2 }, (_, i) => ({
+const generateProjectHistory = (accountId: string) => {
+    return Array.from({ length: 2 }, (_, i) => ({
         accounts_salesforce_account_id: accountId,
         accounts_outreach_account_link: 'http://example.com',
         accounts_salesforce_account_name: 'Mock Account',
@@ -102,16 +104,10 @@ const generateAccountDetails = (accountId: string) => {
         opportunities_rl_open_project_new_end_date: createPastDate(i * 180),
         opportunities_subscription_end_date: createPastDate(i * 180 - 30),
         opportunities_budgeted_hours: 100 + i * 20,
-        opportunities_billable_hours: 95 + i * 20,
-        opportunities_non_billable_hours: 5,
-        opportunities_remaining_billable_hours: 0,
+        opportunities_billable_hours: 80 + i * 25,
+        opportunities_non_billable_hours: 5 + i * 2,
+        opportunities_remaining_billable_hours: 20 - i * 5,
     }));
-    
-    return {
-        supportTickets,
-        usageHistory,
-        projectHistory,
-    };
 };
 // --- END MOCK DATA GENERATION ---
 
@@ -136,19 +132,122 @@ app.get('/api/opportunities', async (req, res) => {
     }
 });
 
-// GET /api/accounts/:accountId/details
-// Mocks the on-demand BigQuery calls for detailed account data.
-app.get('/api/accounts/:accountId/details', async (req, res) => {
+
+// --- ACCOUNT DETAIL ENDPOINTS ---
+
+// GET /api/accounts/:accountId/support-tickets
+app.get('/api/accounts/:accountId/support-tickets', async (req, res) => {
     const { accountId } = req.params;
-    console.log(`Generating mock details for account ${accountId}`);
+    console.log(`[Mock Endpoint] GET Support Tickets for account ${accountId}`);
+    /* 
+     * --- SQL BLUEPRINT ---
+     * This is the query to run against your data warehouse (e.g., BigQuery) when ready.
+     * It fetches recent support tickets for the specified account.
+     *
+    const GET_TICKETS_QUERY = `
+      SELECT
+          t.salesforce_account_id AS accounts_salesforce_account_id,
+          a.outreach_account_link AS accounts_outreach_account_link,
+          a.salesforce_account_name AS accounts_salesforce_account_name,
+          a.owner_name AS accounts_owner_name,
+          t.ticket_url AS tickets_ticket_url,
+          t.ticket_number AS tickets_ticket_number,
+          t.created_date AS tickets_created_date,
+          t.status AS tickets_status,
+          t.subject AS tickets_subject,
+          DATE_DIFF(CURRENT_DATE(), DATE(t.created_date), DAY) AS days_open,
+          t.last_response_from_support_at_date AS tickets_last_response_from_support_at_date,
+          (CASE WHEN t.is_escalated THEN 'Yes' ELSE 'No' END) AS tickets_is_escalated,
+          DATE_DIFF(CURRENT_DATE(), DATE(t.last_response_from_support_at_date), DAY) AS days_since_last_responce,
+          t.priority AS tickets_priority
+      FROM \`your_project.your_dataset.tickets\` AS t
+      JOIN \`your_project.your_dataset.accounts\` AS a ON t.salesforce_account_id = a.salesforce_account_id
+      WHERE t.salesforce_account_id = ? -- Parameter: accountId
+      ORDER BY t.created_date DESC;
+    `;
+    */
     try {
-        const details = generateAccountDetails(accountId);
-        res.status(200).json(details);
+        const mockTickets = generateSupportTickets(accountId);
+        res.status(200).json(mockTickets);
     } catch (error) {
-        console.error(`Error generating details for account ${accountId}:`, error);
+        console.error(`Error generating support tickets for account ${accountId}:`, error);
         res.status(500).send('Internal Server Error');
     }
 });
+
+// GET /api/accounts/:accountId/usage-history
+app.get('/api/accounts/:accountId/usage-history', async (req, res) => {
+    const { accountId } = req.params;
+    console.log(`[Mock Endpoint] GET Usage History for account ${accountId}`);
+    /* 
+     * --- SQL BLUEPRINT ---
+     * This query fetches the last 3 months of usage data for the specified account.
+     *
+    const GET_USAGE_QUERY = `
+      SELECT
+          DATE_TRUNC(c.timeline_date, MONTH) AS accounts_timeline_date_month,
+          c.table_name AS connections_table_timeline_table_name,
+          c.group_name AS connections_group_name,
+          c.warehouse_subtype AS connections_warehouse_subtype,
+          c.service AS connections_timeline_service_eom,
+          SUM(c.raw_volume) AS connections_table_timeline_raw_volume_updated,
+          SUM(c.billable_volume) AS connections_table_timeline_total_billable_volume
+      FROM \`your_project.your_dataset.connections_timeline\` AS c
+      WHERE c.salesforce_account_id = ? -- Parameter: accountId
+        AND c.timeline_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 3 MONTH)
+      GROUP BY 1, 2, 3, 4, 5
+      ORDER BY 1 DESC, 7 DESC;
+    `;
+    */
+    try {
+        const mockUsage = generateUsageHistory(accountId);
+        res.status(200).json(mockUsage);
+    } catch (error) {
+        console.error(`Error generating usage history for account ${accountId}:`, error);
+        res.status(500).send('Internal Server Error');
+    }
+});
+
+// GET /api/accounts/:accountId/project-history
+app.get('/api/accounts/:accountId/project-history', async (req, res) => {
+    const { accountId } = req.params;
+    console.log(`[Mock Endpoint] GET Project History for account ${accountId}`);
+    /* 
+     * --- SQL BLUEPRINT ---
+     * This query fetches past services projects for the specified account.
+     *
+    const GET_PROJECTS_QUERY = `
+      SELECT
+          o.salesforce_account_id AS accounts_salesforce_account_id,
+          a.outreach_account_link AS accounts_outreach_account_link,
+          a.salesforce_account_name AS accounts_salesforce_account_name,
+          o.id AS opportunities_id,
+          o.name AS opportunities_name,
+          o.project_owner_email AS opportunities_project_owner_email,
+          o.close_date AS opportunities_close_date,
+          o.project_end_date AS opportunities_rl_open_project_new_end_date,
+          a.subscription_end_date AS opportunities_subscription_end_date,
+          o.budgeted_hours AS opportunities_budgeted_hours,
+          o.billable_hours AS opportunities_billable_hours,
+          o.non_billable_hours AS opportunities_non_billable_hours,
+          (o.budgeted_hours - o.billable_hours) AS opportunities_remaining_billable_hours
+      FROM \`your_project.your_dataset.opportunities\` AS o
+      JOIN \`your_project.your_dataset.accounts\` AS a ON o.salesforce_account_id = a.salesforce_account_id
+      WHERE o.salesforce_account_id = ? -- Parameter: accountId
+        AND o.has_services_flag = TRUE
+        AND o.stage_name LIKE 'Closed%'
+      ORDER BY o.close_date DESC;
+    `;
+    */
+    try {
+        const mockProjects = generateProjectHistory(accountId);
+        res.status(200).json(mockProjects);
+    } catch (error) {
+        console.error(`Error generating project history for account ${accountId}:`, error);
+        res.status(500).send('Internal Server Error');
+    }
+});
+
 
 // --- START SERVER ---
 const startServer = async () => {

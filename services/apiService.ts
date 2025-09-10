@@ -1,5 +1,5 @@
 import type { Opportunity, AccountDetails } from '../types';
-import { generateOpportunities, generateAccountDetails } from './mockData';
+import { generateOpportunities } from './mockData';
 
 /**
  * apiService.ts: A dual-mode API service for flexible development.
@@ -16,7 +16,7 @@ import { generateOpportunities, generateAccountDetails } from './mockData';
 // --- CONFIGURATION ---
 // Set to `true` for browser-based prototyping.
 // Set to `false` for local development when running the backend server.
-const USE_MOCK_DATA = true;
+const USE_MOCK_DATA = false;
 const API_BASE_URL = 'http://localhost:8080/api';
 
 /**
@@ -48,19 +48,44 @@ export const fetchOpportunities = async (): Promise<Opportunity[]> => {
 };
 
 /**
- * Fetches the detailed data for a specific account.
+ * Fetches the detailed data for a specific account by calling multiple specialized endpoints.
  */
 export const fetchOpportunityDetails = async (accountId: string): Promise<AccountDetails> => {
   if (USE_MOCK_DATA) {
+    // This mode is now deprecated in favor of the backend service,
+    // but kept for reference or standalone frontend work.
+    console.warn("USE_MOCK_DATA is true for details, but this is deprecated. Using backend mock endpoints is preferred.");
     console.log(`Generating mock details for account ${accountId}...`);
-    await new Promise(resolve => setTimeout(resolve, 300));
-    return generateAccountDetails(accountId);
+    // Simulating the old behavior would require re-importing mock data generator.
+    // The primary path is now the 'else' block.
+    throw new Error("Mock data generation for details has been moved to the backend. Please set USE_MOCK_DATA to false.");
   } else {
-    console.log(`Fetching real details for account ${accountId} from GET ${API_BASE_URL}/accounts/${accountId}/details...`);
-    const response = await fetch(`${API_BASE_URL}/accounts/${accountId}/details`);
-     if (!response.ok) {
-      throw new Error(`Failed to fetch details for account ${accountId}. Is the server running?`);
+    console.log(`Fetching real details for account ${accountId} from backend endpoints...`);
+
+    try {
+      const [supportTicketsRes, usageHistoryRes, projectHistoryRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/accounts/${accountId}/support-tickets`),
+        fetch(`${API_BASE_URL}/accounts/${accountId}/usage-history`),
+        fetch(`${API_BASE_URL}/accounts/${accountId}/project-history`)
+      ]);
+
+      if (!supportTicketsRes.ok || !usageHistoryRes.ok || !projectHistoryRes.ok) {
+        // Log the status for better debugging
+        console.error('Support Tickets Status:', supportTicketsRes.status);
+        console.error('Usage History Status:', usageHistoryRes.status);
+        console.error('Project History Status:', projectHistoryRes.status);
+        throw new Error(`Failed to fetch one or more details for account ${accountId}. Is the server running?`);
+      }
+
+      const supportTickets = await supportTicketsRes.json();
+      const usageHistory = await usageHistoryRes.json();
+      const projectHistory = await projectHistoryRes.json();
+
+      return { supportTickets, usageHistory, projectHistory };
+
+    } catch (error) {
+      console.error("Error in fetchOpportunityDetails:", error);
+      throw error; // Re-throw the error to be caught by the calling component
     }
-    return await response.json();
   }
 };
