@@ -6,44 +6,78 @@ import { ICONS } from '../constants';
 // --- Custom Hook for Resizable Columns (New, more robust implementation) ---
 const useResizableColumns = (initialWidths: { [key: string]: number }) => {
     const [columnWidths, setColumnWidths] = useState(initialWidths);
+    
+    // Use a ref to store information about the column being resized.
+    // This is better than state because it doesn't trigger re-renders and avoids closure issues.
+    const resizingColumnRef = useRef<{
+        key: string;
+        startX: number;
+        startWidth: number;
+    } | null>(null);
 
+    // This is the mouse down handler attached to each resize handle.
+    // It just records the starting state of the resize operation.
     const onMouseDown = useCallback((key: string, e: React.MouseEvent<HTMLDivElement>) => {
-        console.log(`[Resize Debug] Mouse Down event triggered for column: ${key}`);
-        // Prevent text selection and other default browser actions
         e.preventDefault();
         e.stopPropagation();
+        
+        const thElement = e.currentTarget.closest('th');
+        if (!thElement) {
+             console.error("[Resize Debug] Could not find parent <th> element.");
+             return;
+        }
 
-        const thElement = (e.currentTarget.parentElement as HTMLElement);
-        const startX = e.clientX;
-        const startWidth = thElement.offsetWidth;
-        console.log(`[Resize Debug] Start X: ${startX}, Start Width: ${startWidth}`);
+        resizingColumnRef.current = {
+            key,
+            startX: e.clientX,
+            startWidth: thElement.offsetWidth,
+        };
+        console.log(`[Resize Debug] MOUSE DOWN triggered. Ref set to:`, resizingColumnRef.current);
+    }, []);
 
-        // This function is created dynamically on mouse down
-        const handleMouseMove = (moveEvent: MouseEvent) => {
-            const deltaX = moveEvent.clientX - startX;
+    // These event listeners are attached to the window just once.
+    // They check the ref to see if a resize is in progress.
+    useEffect(() => {
+        const handleMouseMove = (e: MouseEvent) => {
+            // Only run if a resize is in progress
+            if (!resizingColumnRef.current) {
+                return;
+            }
+             // Apply resize cursor only when moving to give immediate feedback
+            document.body.style.cursor = 'col-resize';
+            
+            const { key, startX, startWidth } = resizingColumnRef.current;
+            const deltaX = e.clientX - startX;
             const newWidth = Math.max(startWidth + deltaX, 80); // Minimum width 80px
+
+            console.log(`[Resize Debug] MOUSE MOVE detected. DeltaX: ${deltaX.toFixed(2)}, New Width: ${newWidth.toFixed(2)}`);
+
             setColumnWidths(prev => ({
                 ...prev,
                 [key]: newWidth
             }));
         };
 
-        // This function is also created dynamically
-        const handleMouseUp = () => {
-            console.log('[Resize Debug] Mouse Up event triggered. Cleaning up listeners.');
-            // Reset global cursor style
-            document.body.style.cursor = '';
-            // IMPORTANT: Clean up the event listeners
-            document.removeEventListener('mousemove', handleMouseMove);
-            document.removeEventListener('mouseup', handleMouseUp);
+        const handleMouseUp = (e: MouseEvent) => {
+            // Only run if a resize was in progress
+            if (!resizingColumnRef.current) {
+                return;
+            }
+            console.log(`[Resize Debug] MOUSE UP detected. Clearing ref and cleaning up.`);
+            document.body.style.cursor = ''; // Reset cursor
+            resizingColumnRef.current = null; // End the resize operation
         };
-        
-        // Set global cursor to give user feedback during resize
-        document.body.style.cursor = 'col-resize';
-        // Add the listeners to the document for the duration of the drag
-        document.addEventListener('mousemove', handleMouseMove);
-        document.addEventListener('mouseup', handleMouseUp);
-    }, []); // This callback is now stable and has no dependencies, improving performance.
+
+        // Attach listeners to the window, not the document
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
+
+        // Cleanup function to remove listeners when the component unmounts
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+        };
+    }, []); // Empty dependency array means this effect runs only once on mount.
 
     return { columnWidths, onMouseDown };
 };
