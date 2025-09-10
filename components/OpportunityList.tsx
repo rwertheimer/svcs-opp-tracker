@@ -8,6 +8,7 @@ const useResizableColumns = (initialWidths: { [key: string]: number }) => {
     const [columnWidths, setColumnWidths] = useState(initialWidths);
 
     const onMouseDown = useCallback((key: string, e: React.MouseEvent<HTMLDivElement>) => {
+        console.log(`[Resize Debug] Mouse Down event triggered for column: ${key}`);
         // Prevent text selection and other default browser actions
         e.preventDefault();
         e.stopPropagation();
@@ -15,6 +16,7 @@ const useResizableColumns = (initialWidths: { [key: string]: number }) => {
         const thElement = (e.currentTarget.parentElement as HTMLElement);
         const startX = e.clientX;
         const startWidth = thElement.offsetWidth;
+        console.log(`[Resize Debug] Start X: ${startX}, Start Width: ${startWidth}`);
 
         // This function is created dynamically on mouse down
         const handleMouseMove = (moveEvent: MouseEvent) => {
@@ -28,6 +30,7 @@ const useResizableColumns = (initialWidths: { [key: string]: number }) => {
 
         // This function is also created dynamically
         const handleMouseUp = () => {
+            console.log('[Resize Debug] Mouse Up event triggered. Cleaning up listeners.');
             // Reset global cursor style
             document.body.style.cursor = '';
             // IMPORTANT: Clean up the event listeners
@@ -218,7 +221,7 @@ const OpportunityList: React.FC<OpportunityListProps> = ({
                   </div>
                   <div
                       onMouseDown={(e) => onMouseDown(key, e)}
-                      className="absolute top-0 right-0 h-full w-4 cursor-col-resize flex items-center justify-end"
+                      className="absolute top-0 right-0 h-full w-4 cursor-col-resize flex items-center justify-end z-20"
                    >
                        <div className="w-px h-6 bg-slate-300 opacity-0 group-hover:opacity-100 transition-opacity" />
                    </div>
