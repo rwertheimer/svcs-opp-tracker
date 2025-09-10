@@ -1,22 +1,34 @@
+// Fix: The /// <reference types="vite/client" /> directive was causing a "Cannot find type definition file" error.
+// To resolve this and the subsequent error on `import.meta.env`, we provide a minimal global
+// type definition for `import.meta.env` to satisfy TypeScript.
+declare global {
+  interface ImportMeta {
+    readonly env: {
+      readonly VITE_USE_MOCK_DATA?: string;
+    }
+  }
+}
+
 import type { Opportunity, AccountDetails } from '../types';
-import { generateOpportunities } from './mockData';
+import { generateOpportunities, generateAccountDetails } from './mockData';
 
 /**
  * apiService.ts: A dual-mode API service for flexible development.
  *
- * This service can operate in two modes, controlled by the `USE_MOCK_DATA` flag.
- * 1. Mock Mode (USE_MOCK_DATA = true): The service uses local mock data. This ensures
- *    the application is self-contained and works perfectly in a browser-only
- *    prototyping environment (like this one).
- * 2. Live Mode (USE_MOCK_DATA = false): The service makes live HTTP requests to a
- *    local backend server. This is for full-stack local development where you are
- *    running the Node.js server from `backend/server.ts` in your terminal.
+ * This service can operate in two modes, controlled by an environment variable.
+ * Create a local .env file (copy from .env.example) to control the mode.
+ *
+ * 1. Mock Mode (VITE_USE_MOCK_DATA = 'true'): The service uses local mock data. This ensures
+ *    the application is self-contained and works in a browser-only environment.
+ * 2. Live Mode (VITE_USE_MOCK_DATA = 'false'): The service makes live HTTP requests to a
+ *    local backend server (e.g., http://localhost:8080).
  */
 
 // --- CONFIGURATION ---
-// Set to `true` for browser-based prototyping.
-// Set to `false` for local development when running the backend server.
-const USE_MOCK_DATA = false;
+// The app mode is now controlled by an environment variable.
+// In your local .env file, set VITE_USE_MOCK_DATA=false to connect to the backend.
+// Vite automatically loads .env files. The VITE_ prefix is required.
+const USE_MOCK_DATA = (import.meta.env?.VITE_USE_MOCK_DATA ?? 'true') === 'true';
 const API_BASE_URL = 'http://localhost:8080/api';
 
 /**
@@ -52,13 +64,9 @@ export const fetchOpportunities = async (): Promise<Opportunity[]> => {
  */
 export const fetchOpportunityDetails = async (accountId: string): Promise<AccountDetails> => {
   if (USE_MOCK_DATA) {
-    // This mode is now deprecated in favor of the backend service,
-    // but kept for reference or standalone frontend work.
-    console.warn("USE_MOCK_DATA is true for details, but this is deprecated. Using backend mock endpoints is preferred.");
     console.log(`Generating mock details for account ${accountId}...`);
-    // Simulating the old behavior would require re-importing mock data generator.
-    // The primary path is now the 'else' block.
-    throw new Error("Mock data generation for details has been moved to the backend. Please set USE_MOCK_DATA to false.");
+    await new Promise(resolve => setTimeout(resolve, 500));
+    return generateAccountDetails(accountId);
   } else {
     console.log(`Fetching real details for account ${accountId} from backend endpoints...`);
 

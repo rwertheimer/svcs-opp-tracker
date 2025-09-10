@@ -15,8 +15,7 @@ const createFutureDate = (daysAhead: number) => {
     return date.toISOString().split('T')[0];
 };
 
-// --- Mock Data Generation ---
-
+// --- MOCK DATA CONSTANTS ---
 const MOCK_ACCOUNTS = ['Globex Corporation', 'Stark Industries', 'Wayne Enterprises', 'Cyberdyne Systems', 'Tyrell Corporation', 'Sirius Cybernetics Corp', 'Monsters, Inc.', 'Acme Corporation'];
 const MOCK_OPP_ADJECTIVES = ['Enterprise', 'Strategic', 'High-Value', 'Growth', 'Renewal', 'Expansion', 'Migration'];
 const MOCK_OPP_NOUNS = ['Platform Deal', 'Services Engagement', 'Connector Package', 'License Upgrade', 'Database Migration'];
@@ -24,6 +23,96 @@ const MOCK_REPS = ['Alice Johnson', 'Bob Williams', 'Charlie Brown', 'Diana Mill
 const MOCK_REGIONS = ['NA - Enterprise', 'NA - Commercial', 'EMEA', 'APAC'];
 const MOCK_STAGES = Object.values(OpportunityStage).filter(s => s !== OpportunityStage.PreSalesScoping);
 const MOCK_OPP_TYPES = ['Renewal', 'New Business', 'Upsell', 'Expansion', 'Sales'];
+
+// --- More realistic data for the Usage History Table ---
+const MOCK_INTEGRATIONS = [
+    { name: 'orders', group: 'Salesforce', service: 'salesforce' },
+    { name: 'leads', group: 'Salesforce', service: 'salesforce' },
+    { name: 'ad_spend', group: 'Google Ads', service: 'google_ads' },
+    { name: 'audit_logs', group: 'BigQuery', service: 'bigquery' },
+    { name: 'customer_data', group: 'Zendesk', service: 'zendesk' },
+];
+const MOCK_WAREHOUSES = ['SNOWFLAKE', 'BIGQUERY', 'REDSHIFT'];
+
+
+// --- MOCK DATA GENERATION for detail endpoints (restored from backend/server.ts) ---
+
+const generateSupportTickets = (accountId: string): SupportTicket[] => {
+    return Array.from({ length: 3 }, (_, i) => ({
+        accounts_salesforce_account_id: accountId,
+        accounts_outreach_account_link: 'http://example.com',
+        accounts_salesforce_account_name: 'Mock Account',
+        accounts_owner_name: 'Mock Owner',
+        tickets_ticket_url: 'http://example.com',
+        tickets_ticket_number: 12345 + i,
+        tickets_created_date: createPastDate(i * 10 + 5),
+        tickets_status: 'Open',
+        tickets_subject: `Issue with connector sync #${i+1}`,
+        days_open: i * 10 + 5,
+        tickets_last_response_from_support_at_date: createPastDate(i + 1),
+        tickets_is_escalated: 'No',
+        days_since_last_responce: i + 1,
+        tickets_priority: getRandomElement(['High', 'Medium', 'Low']),
+    }));
+};
+
+const generateUsageHistory = (accountId: string): UsageData[] => {
+    const usageHistory: any[] = [];
+    const numIntegrations = Math.floor(Math.random() * 2) + 1;
+    const selectedIntegrations = MOCK_INTEGRATIONS.sort(() => 0.5 - Math.random()).slice(0, numIntegrations);
+    const warehouse = getRandomElement(MOCK_WAREHOUSES);
+
+    for(const integration of selectedIntegrations) {
+        let lastMonthBillable = Math.random() * 1e9 + 1e7;
+        for (let i = 0; i < 3; i++) {
+            const date = new Date();
+            date.setMonth(date.getMonth() - i);
+            const fluctuation = (Math.random() - 0.4);
+            const billable = Math.max(0, lastMonthBillable * (1 + fluctuation));
+            const raw = billable * (Math.random() * 2 + 1.2);
+            lastMonthBillable = billable;
+
+            usageHistory.push({
+                 accounts_timeline_date_month: `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`,
+                 connections_table_timeline_table_name: integration.name,
+                 connections_group_name: integration.group,
+                 connections_warehouse_subtype: warehouse,
+                 connections_timeline_service_eom: integration.service,
+                 connections_table_timeline_raw_volume_updated: raw,
+                 connections_table_timeline_total_billable_volume: billable,
+            });
+        }
+    }
+    return usageHistory;
+};
+
+const generateProjectHistory = (accountId: string): ProjectHistory[] => {
+    return Array.from({ length: 2 }, (_, i) => ({
+        accounts_salesforce_account_id: accountId,
+        accounts_outreach_account_link: 'http://example.com',
+        accounts_salesforce_account_name: 'Mock Account',
+        opportunities_id: `proj-${getRandomId()}`,
+        opportunities_name: `Historical Project ${i+1}`,
+        opportunities_project_owner_email: 'pm@example.com',
+        opportunities_close_date: createPastDate(i * 180 + 90),
+        opportunities_rl_open_project_new_end_date: createPastDate(i * 180),
+        opportunities_subscription_end_date: createPastDate(i * 180 - 30),
+        opportunities_budgeted_hours: 100 + i * 20,
+        opportunities_billable_hours: 80 + i * 25,
+        opportunities_non_billable_hours: 5 + i * 2,
+        opportunities_remaining_billable_hours: 20 - i * 5,
+    }));
+};
+
+export const generateAccountDetails = (accountId: string): AccountDetails => {
+  return {
+    supportTickets: generateSupportTickets(accountId),
+    usageHistory: generateUsageHistory(accountId),
+    projectHistory: generateProjectHistory(accountId),
+  };
+};
+
+// --- Main Mock Data Generation ---
 
 const generatePreDispositionedOpp = (): Opportunity => {
      const defaultActionItems: ActionItem[] = [
@@ -123,13 +212,3 @@ export const generateOpportunities = (count: number): Opportunity[] => {
     }
     return opportunities;
 };
-
-// --- More realistic data for the Usage History Table ---
-const MOCK_INTEGRATIONS = [
-    { name: 'orders', group: 'Salesforce', service: 'salesforce' },
-    { name: 'leads', group: 'Salesforce', service: 'salesforce' },
-    { name: 'ad_spend', group: 'Google Ads', service: 'google_ads' },
-    { name: 'audit_logs', group: 'BigQuery', service: 'bigquery' },
-    { name: 'customer_data', group: 'Zendesk', service: 'zendesk' },
-];
-const MOCK_WAREHOUSES = ['SNOWFLAKE', 'BIGQUERY', 'REDSHIFT'];
