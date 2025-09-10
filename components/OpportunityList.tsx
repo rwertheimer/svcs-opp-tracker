@@ -202,20 +202,23 @@ const OpportunityList: React.FC<OpportunityListProps> = ({
             <tr>
               {tableHeaders.map(({ key, label, className, isSortable }) => (
                 <th key={key} scope="col" 
-                    className={`px-4 py-3 bg-slate-50 border-b border-slate-200 sticky top-0 z-10 ${className || ''}`}
+                    className={`relative group px-4 py-3 bg-slate-50 border-b border-slate-200 sticky top-0 z-10 ${className || ''}`}
                     style={{ width: columnWidths[key] }}
                     >
-                  <div className="flex items-center justify-between group">
-                    <span 
-                        className={isSortable ? 'cursor-pointer' : ''}
-                        onClick={() => isSortable && requestSort(key as SortKey)}>
+                  <div 
+                      className={`flex items-center justify-between ${isSortable ? 'cursor-pointer' : ''}`}
+                      onClick={() => isSortable && requestSort(key as SortKey)}
+                  >
+                    <span>
                       {label} {isSortable && <span className="ml-1 text-slate-400">{getSortIndicator(key as SortKey)}</span>}
                     </span>
-                     <div 
-                        onMouseDown={(e) => onMouseDown(key, e)}
-                        className="w-2 h-5 ml-2 cursor-col-resize opacity-0 group-hover:opacity-100 bg-slate-300"
-                     />
                   </div>
+                  <div
+                      onMouseDown={(e) => onMouseDown(key, e)}
+                      className="absolute top-0 right-0 h-full w-4 cursor-col-resize flex items-center justify-end"
+                   >
+                       <div className="w-px h-6 bg-slate-300 opacity-0 group-hover:opacity-100 transition-opacity" />
+                   </div>
                 </th>
               ))}
             </tr>
