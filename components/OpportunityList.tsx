@@ -3,54 +3,39 @@ import type { Opportunity, SavedFilter } from '../types';
 import Tag from './Tag';
 import { ICONS } from '../constants';
 
-// --- Custom Hook for Resizable Columns (New, more robust implementation) ---
+// --- Custom Hook for Resizable Columns (Final, robust implementation) ---
 const useResizableColumns = (initialWidths: { [key: string]: number }) => {
     const [columnWidths, setColumnWidths] = useState(initialWidths);
     
-    // Use a ref to store information about the column being resized.
-    // This is better than state because it doesn't trigger re-renders and avoids closure issues.
     const resizingColumnRef = useRef<{
         key: string;
         startX: number;
         startWidth: number;
     } | null>(null);
 
-    // This is the mouse down handler attached to each resize handle.
-    // It just records the starting state of the resize operation.
     const onMouseDown = useCallback((key: string, e: React.MouseEvent<HTMLDivElement>) => {
         e.preventDefault();
         e.stopPropagation();
         
         const thElement = e.currentTarget.closest('th');
-        if (!thElement) {
-             console.error("[Resize Debug] Could not find parent <th> element.");
-             return;
-        }
+        if (!thElement) return;
 
         resizingColumnRef.current = {
             key,
             startX: e.clientX,
             startWidth: thElement.offsetWidth,
         };
-        console.log(`[Resize Debug] MOUSE DOWN triggered. Ref set to:`, resizingColumnRef.current);
     }, []);
 
-    // These event listeners are attached to the window just once.
-    // They check the ref to see if a resize is in progress.
     useEffect(() => {
         const handleMouseMove = (e: MouseEvent) => {
-            // Only run if a resize is in progress
-            if (!resizingColumnRef.current) {
-                return;
-            }
-             // Apply resize cursor only when moving to give immediate feedback
+            if (!resizingColumnRef.current) return;
+
             document.body.style.cursor = 'col-resize';
             
             const { key, startX, startWidth } = resizingColumnRef.current;
             const deltaX = e.clientX - startX;
             const newWidth = Math.max(startWidth + deltaX, 80); // Minimum width 80px
-
-            console.log(`[Resize Debug] MOUSE MOVE detected. DeltaX: ${deltaX.toFixed(2)}, New Width: ${newWidth.toFixed(2)}`);
 
             setColumnWidths(prev => ({
                 ...prev,
@@ -58,26 +43,20 @@ const useResizableColumns = (initialWidths: { [key: string]: number }) => {
             }));
         };
 
-        const handleMouseUp = (e: MouseEvent) => {
-            // Only run if a resize was in progress
-            if (!resizingColumnRef.current) {
-                return;
-            }
-            console.log(`[Resize Debug] MOUSE UP detected. Clearing ref and cleaning up.`);
-            document.body.style.cursor = ''; // Reset cursor
-            resizingColumnRef.current = null; // End the resize operation
+        const handleMouseUp = () => {
+            if (!resizingColumnRef.current) return;
+            document.body.style.cursor = '';
+            resizingColumnRef.current = null;
         };
 
-        // Attach listeners to the window, not the document
         window.addEventListener('mousemove', handleMouseMove);
         window.addEventListener('mouseup', handleMouseUp);
 
-        // Cleanup function to remove listeners when the component unmounts
         return () => {
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('mouseup', handleMouseUp);
         };
-    }, []); // Empty dependency array means this effect runs only once on mount.
+    }, []);
 
     return { columnWidths, onMouseDown };
 };
@@ -237,13 +216,17 @@ const OpportunityList: React.FC<OpportunityListProps> = ({
         </div>
 
       <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 350px)' }}>
-        <table className="w-full text-sm text-left text-slate-500 border-separate border-spacing-0">
+        <table className="w-full table-fixed text-sm text-left text-slate-500 border-separate border-spacing-0">
+          <colgroup>
+            {tableHeaders.map(({ key }) => (
+              <col key={`col-${key}`} style={{ width: columnWidths[key] }} />
+            ))}
+          </colgroup>
           <thead className="text-xs text-slate-700 uppercase">
             <tr>
               {tableHeaders.map(({ key, label, className, isSortable }) => (
                 <th key={key} scope="col" 
                     className={`relative group px-4 py-3 bg-slate-50 border-b border-slate-200 sticky top-0 z-10 ${className || ''}`}
-                    style={{ width: columnWidths[key] }}
                     >
                   <div 
                       className={`flex items-center justify-between ${isSortable ? 'cursor-pointer' : ''}`}
@@ -266,15 +249,15 @@ const OpportunityList: React.FC<OpportunityListProps> = ({
           <tbody className="bg-white">
             {sortedOpportunities.map((opp) => (
               <tr key={opp.opportunities_id} className="border-b hover:bg-slate-50 cursor-pointer" onClick={() => onSelect(opp)}>
-                <td className="px-4 py-3 font-medium text-slate-800 break-words" style={{ width: columnWidths['accounts_salesforce_account_name'] }}>{opp.accounts_salesforce_account_name}</td>
-                <td className="px-4 py-3 text-indigo-600 font-semibold break-words" style={{ width: columnWidths['opportunities_name'] }}>{opp.opportunities_name}</td>
-                <td className="px-4 py-3 break-words" style={{ width: columnWidths['opportunities_owner_name'] }}>{opp.opportunities_owner_name}</td>
-                <td className="px-4 py-3 break-words" style={{ width: columnWidths['opportunities_type'] }}>{opp.opportunities_type}</td>
-                <td className="px-4 py-3 whitespace-nowrap" style={{ width: columnWidths['opportunities_close_date'] }}>{formatDate(opp.opportunities_close_date)}</td>
-                <td className="px-4 py-3 text-center" style={{ width: columnWidths['opportunities_stage_name'] }}><Tag status={opp.opportunities_stage_name} /></td>
-                <td className="px-4 py-3 text-right font-medium text-slate-700 whitespace-nowrap" style={{ width: columnWidths['opportunities_incremental_bookings'] }}>{formatCurrency(opp.opportunities_incremental_bookings)}</td>
-                <td className="px-4 py-3 text-right font-bold text-green-700 whitespace-nowrap" style={{ width: columnWidths['opportunities_amount'] }}>{formatCurrency(opp.opportunities_amount)}</td>
-                <td className="px-4 py-3 text-center" style={{ width: columnWidths['opportunities_has_services_flag'] }}>
+                <td className="px-4 py-3 font-medium text-slate-800 break-words">{opp.accounts_salesforce_account_name}</td>
+                <td className="px-4 py-3 text-indigo-600 font-semibold break-words">{opp.opportunities_name}</td>
+                <td className="px-4 py-3 break-words">{opp.opportunities_owner_name}</td>
+                <td className="px-4 py-3 break-words">{opp.opportunities_type}</td>
+                <td className="px-4 py-3 whitespace-nowrap">{formatDate(opp.opportunities_close_date)}</td>
+                <td className="px-4 py-3 text-center"><Tag status={opp.opportunities_stage_name} /></td>
+                <td className="px-4 py-3 text-right font-medium text-slate-700 whitespace-nowrap">{formatCurrency(opp.opportunities_incremental_bookings)}</td>
+                <td className="px-4 py-3 text-right font-bold text-green-700 whitespace-nowrap">{formatCurrency(opp.opportunities_amount)}</td>
+                <td className="px-4 py-3 text-center">
                     <div className="flex items-center justify-center space-x-2">
                         <Tag status={opp.opportunities_has_services_flag} />
                         {opp.disposition?.status === 'Services Fit' && <span className="text-green-500" title="Disposition: Services Fit">{ICONS.checkCircle}</span>}
@@ -282,7 +265,7 @@ const OpportunityList: React.FC<OpportunityListProps> = ({
                         {opp.disposition?.status === 'Watchlist' && <span className="text-blue-500" title="Disposition: Watchlist">{ICONS.eye}</span>}
                    </div>
                 </td>
-                <td className="px-4 py-3 text-right whitespace-nowrap" style={{ width: columnWidths['opportunities_amount_services'] }}>{formatCurrency(opp.opportunities_amount_services)}</td>
+                <td className="px-4 py-3 text-right whitespace-nowrap">{formatCurrency(opp.opportunities_amount_services)}</td>
               </tr>
             ))}
           </tbody>
