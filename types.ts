@@ -54,6 +54,7 @@ export interface Opportunity {
     accounts_salesforce_account_id: string;
     opportunities_manager_of_opp_email: string;
     accounts_subscription_end_date: string;
+    opportunities_close_date: string; // Added new close date field
     opportunities_incremental_bookings: number;
     opportunities_amount: number;
     // App-specific state, not from BigQuery
@@ -146,6 +147,37 @@ export interface ActionItem {
     documents?: Document[];
 }
 
+// --- Interfaces for the new Advanced Filter Builder ---
+
+export type FilterField = keyof Opportunity;
+
+export type FilterOperator = 
+  // Text
+  | 'contains' | 'not_contains' | 'equals' | 'not_equals' 
+  // Number
+  | 'gt' | 'lt' | 'gte' | 'lte' | 'eq' | 'neq'
+  // Date
+  | 'before' | 'after' | 'on'
+  // Select
+  | 'is' | 'is_not';
+
+
+export interface FilterRule {
+  id: string;
+  field: FilterField;
+  operator: FilterOperator;
+  value: any;
+}
+
+export type FilterCombinator = 'AND' | 'OR';
+
+export interface FilterGroup {
+  id: string;
+  combinator: FilterCombinator;
+  rules: (FilterRule | FilterGroup)[];
+}
+
+// Kept for saved views, but not used for active filtering anymore
 export interface FilterCriteria {
   searchTerm: string;
   statuses: OpportunityStage[];
@@ -158,7 +190,7 @@ export interface FilterCriteria {
 export interface SavedFilter {
   id: string;
   name: string;
-  criteria: FilterCriteria;
+  criteria: FilterGroup; // Now saves the advanced filter structure
 }
 
 export interface TaskWithOpportunityContext extends ActionItem {

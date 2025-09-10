@@ -1,7 +1,5 @@
-
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import type { Opportunity, AccountDetails, Disposition, FilterCriteria, SavedFilter, TaskWithOpportunityContext, ActionItem } from './types';
-import { OpportunityStage } from './types';
+import type { Opportunity, AccountDetails, Disposition, SavedFilter, TaskWithOpportunityContext, ActionItem, FilterGroup } from './types';
 import { fetchOpportunities, fetchOpportunityDetails } from './services/apiService';
 import OpportunityList from './components/OpportunityList';
 import OpportunityDetail from './components/OpportunityDetail';
@@ -9,14 +7,12 @@ import Header from './components/Header';
 import LoadingSpinner from './components/LoadingSpinner';
 import TaskCockpit from './components/TaskCockpit';
 import AddScopingModal from './components/AddScopingModal';
+import AdvancedFilterBuilder from './components/AdvancedFilterBuilder';
 
-const initialFilterCriteria: FilterCriteria = {
-  searchTerm: '',
-  statuses: [],
-  salesReps: [],
-  disposition: 'any',
-  minDealSize: null,
-  maxDealSize: null,
+const initialFilterGroup: FilterGroup = {
+    id: 'root',
+    combinator: 'AND',
+    rules: [],
 };
 
 const App: React.FC = () => {
@@ -25,10 +21,11 @@ const App: React.FC = () => {
   const [selectedOpportunityDetails, setSelectedOpportunityDetails] = useState<AccountDetails | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [filters, setFilters] = useState<FilterCriteria>(initialFilterCriteria);
+  const [filters, setFilters] = useState<FilterGroup>(initialFilterGroup);
   const [savedFilters, setSavedFilters] = useState<SavedFilter[]>([]);
   const [activeView, setActiveView] = useState<'opportunities' | 'tasks'>('opportunities');
   const [isScopingModalOpen, setIsScopingModalOpen] = useState(false);
+  const [isFilterBuilderOpen, setIsFilterBuilderOpen] = useState(false);
 
 
   const loadOpportunities = useCallback(async () => {
@@ -49,10 +46,53 @@ const App: React.FC = () => {
     loadOpportunities();
   }, [loadOpportunities]);
   
+  const evaluateFilterGroup = (opp: Opportunity, group: FilterGroup): boolean => {
+    const results = group.rules.map(rule => {
+      if ('combinator' in rule) { // It's a nested group
+        return evaluateFilterGroup(opp, rule);
+      } else { // It's a rule
+        const value = opp[rule.field];
+        if (value === null || value === undefined) return false;
+        
+        const ruleValue = rule.value;
+        const oppValue = typeof value === 'string' ? value.toLowerCase() : value;
+
+        switch (rule.operator) {
+          // Text
+          case 'contains': return oppValue.toString().includes(ruleValue.toLowerCase());
+          case 'not_contains': return !oppValue.toString().includes(ruleValue.toLowerCase());
+          case 'equals': return oppValue === ruleValue.toLowerCase();
+          case 'not_equals': return oppValue !== ruleValue.toLowerCase();
+          // Number
+          case 'eq': return oppValue === Number(ruleValue);
+          case 'neq': return oppValue !== Number(ruleValue);
+          case 'gt': return (oppValue as number) > Number(ruleValue);
+          case 'gte': return (oppValue as number) >= Number(ruleValue);
+          case 'lt': return (oppValue as number) < Number(ruleValue);
+          case 'lte': return (oppValue as number) <= Number(ruleValue);
+          // Date
+          case 'on': return new Date(oppValue as string).toDateString() === new Date(ruleValue).toDateString();
+          case 'before': return new Date(oppValue as string) < new Date(ruleValue);
+          case 'after': return new Date(oppValue as string) > new Date(ruleValue);
+          // Select
+          case 'is': return oppValue === ruleValue;
+          case 'is_not': return oppValue !== ruleValue;
+          default: return false;
+        }
+      }
+    });
+
+    if (group.combinator === 'AND') {
+      return results.every(res => res);
+    } else {
+      return results.some(res => res);
+    }
+  };
+
+
   const filteredOpportunities = useMemo(() => {
     const ninetyDaysFromNow = new Date();
     ninetyDaysFromNow.setDate(ninetyDaysFromNow.getDate() + 90);
-    const today = new Date();
 
     // Apply the base filter first as per requirements
     const baseFilteredOpps = opportunities.filter(opp => {
@@ -60,38 +100,22 @@ const App: React.FC = () => {
       const typeMatch = allowedTypes.includes(opp.opportunities_type);
       const regionMatch = opp.accounts_region_name === 'NA - Enterprise' || opp.accounts_region_name === 'NA - Commercial';
       
-      const closeDate = new Date(opp.accounts_subscription_end_date);
+      const closeDate = new Date(opp.opportunities_close_date);
       const subscriptionEndDate = new Date(opp.accounts_subscription_end_date);
       const dateMatch = (closeDate <= ninetyDaysFromNow) || (subscriptionEndDate <= ninetyDaysFromNow);
 
-      // Exclude opportunities with "Closed", "Won", or "Lost" in the stage name.
       const stageNameLower = opp.opportunities_stage_name.toLowerCase();
       const stageMatch = !stageNameLower.includes('closed') && !stageNameLower.includes('won') && !stageNameLower.includes('lost');
 
       return typeMatch && regionMatch && dateMatch && stageMatch;
     });
 
-    // Then apply the user's interactive filters
-    return baseFilteredOpps.filter(opp => {
-      const searchTermMatch = filters.searchTerm.toLowerCase() === '' ||
-        opp.opportunities_name.toLowerCase().includes(filters.searchTerm.toLowerCase()) ||
-        opp.accounts_salesforce_account_name.toLowerCase().includes(filters.searchTerm.toLowerCase());
+    // Then apply the user's advanced filters
+    if (filters.rules.length === 0) {
+        return baseFilteredOpps;
+    }
+    return baseFilteredOpps.filter(opp => evaluateFilterGroup(opp, filters));
 
-      const statusMatch = filters.statuses.length === 0 || filters.statuses.includes(opp.opportunities_stage_name as OpportunityStage);
-      const salesRepMatch = filters.salesReps.length === 0 || filters.salesReps.includes(opp.opportunities_owner_name);
-
-      const minDealSizeMatch = filters.minDealSize === null || opp.opportunities_amount >= filters.minDealSize;
-      const maxDealSizeMatch = filters.maxDealSize === null || opp.opportunities_amount <= filters.maxDealSize;
-      
-      const dispositionMatch =
-        filters.disposition === 'any' ||
-        (filters.disposition === 'not-reviewed' && (!opp.disposition || opp.disposition.status === 'Not Reviewed')) ||
-        (filters.disposition === 'services-fit' && opp.disposition?.status === 'Services Fit') ||
-        (filters.disposition === 'no-services-opp' && opp.disposition?.status === 'No Services Opp') ||
-        (filters.disposition === 'watchlist' && opp.disposition?.status === 'Watchlist');
-
-      return searchTermMatch && statusMatch && salesRepMatch && minDealSizeMatch && maxDealSizeMatch && dispositionMatch;
-    });
   }, [opportunities, filters]);
 
   const allTasks = useMemo((): TaskWithOpportunityContext[] => {
@@ -170,9 +194,10 @@ const App: React.FC = () => {
     );
   };
 
-  const handleFilterChange = (newFilters: Partial<FilterCriteria>) => {
-    setFilters(prev => ({ ...prev, ...newFilters }));
-  };
+  const handleApplyAdvancedFilters = (newFilters: FilterGroup) => {
+    setFilters(newFilters);
+    setIsFilterBuilderOpen(false);
+  }
 
   const handleSaveFilter = (name: string) => {
     if (!name.trim()) return;
@@ -184,7 +209,7 @@ const App: React.FC = () => {
     setSavedFilters(prev => [...prev, newSavedFilter]);
   };
 
-  const handleApplyFilter = (id: string) => {
+  const handleApplySavedFilter = (id: string) => {
     const savedFilter = savedFilters.find(f => f.id === id);
     if (savedFilter) {
         setFilters(savedFilter.criteria);
@@ -192,7 +217,7 @@ const App: React.FC = () => {
   };
 
   const handleClearFilters = () => {
-    setFilters(initialFilterCriteria);
+    setFilters(initialFilterGroup);
   };
   
   const handleSaveScopingActivity = (data: { accountName: string; contact: string; description: string; }) => {
@@ -222,6 +247,7 @@ const App: React.FC = () => {
       accounts_salesforce_account_id: `acc-scoping-${Date.now()}`,
       opportunities_manager_of_opp_email: '',
       accounts_subscription_end_date: new Date().toISOString(),
+      opportunities_close_date: new Date().toISOString(),
       opportunities_incremental_bookings: 0,
       opportunities_amount: 0,
       disposition: {
@@ -284,15 +310,14 @@ const App: React.FC = () => {
     return (
       <OpportunityList
         opportunities={filteredOpportunities}
-        allOpportunities={opportunities}
         onSelect={handleSelectOpportunity}
-        filters={filters}
-        onFilterChange={handleFilterChange}
         savedFilters={savedFilters}
         onSaveFilter={handleSaveFilter}
-        onApplyFilter={handleApplyFilter}
+        onApplyFilter={handleApplySavedFilter}
         onClearFilters={handleClearFilters}
         onAddScoping={() => setIsScopingModalOpen(true)}
+        onOpenFilterBuilder={() => setIsFilterBuilderOpen(true)}
+        activeFilterCount={filters.rules.length}
       />
     );
   };
@@ -309,6 +334,14 @@ const App: React.FC = () => {
         onClose={() => setIsScopingModalOpen(false)}
         onSave={handleSaveScopingActivity}
       />
+      {isFilterBuilderOpen && (
+         <AdvancedFilterBuilder
+            isOpen={isFilterBuilderOpen}
+            onClose={() => setIsFilterBuilderOpen(false)}
+            onApply={handleApplyAdvancedFilters}
+            initialFilters={filters}
+         />
+      )}
     </div>
   );
 };

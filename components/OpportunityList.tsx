@@ -1,95 +1,95 @@
-
-import React, { useState, useMemo, useRef, useEffect } from 'react';
-import type { Opportunity, FilterCriteria, SavedFilter } from '../types';
-import { OpportunityStage } from '../types';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import type { Opportunity, SavedFilter } from '../types';
 import Tag from './Tag';
 import { ICONS } from '../constants';
 
-// --- Reusable Multi-Select Dropdown Component ---
-interface MultiSelectDropdownProps {
-  options: string[];
-  selectedOptions: string[];
-  onSelectionChange: (newSelection: string[]) => void;
-  placeholder: string;
-}
+// --- Custom Hook for Resizable Columns ---
+const useResizableColumns = (initialWidths: { [key: string]: number }) => {
+    const [columnWidths, setColumnWidths] = useState(initialWidths);
+    const isResizing = useRef<string | null>(null);
+    const startX = useRef(0);
+    const startWidth = useRef(0);
 
-const MultiSelectDropdown: React.FC<MultiSelectDropdownProps> = ({ options, selectedOptions, onSelectionChange, placeholder }) => {
-    const [isOpen, setIsOpen] = useState(false);
-    const ref = useRef<HTMLDivElement>(null);
+    const onMouseDown = useCallback((key: string, e: React.MouseEvent<HTMLDivElement>) => {
+        isResizing.current = key;
+        startX.current = e.clientX;
+        startWidth.current = columnWidths[key] || 0;
+    }, [columnWidths]);
+
+    const onMouseMove = useCallback((e: MouseEvent) => {
+        if (!isResizing.current) return;
+        const key = isResizing.current;
+        const delta = e.clientX - startX.current;
+        const newWidth = Math.max(startWidth.current + delta, 80); // Minimum width of 80px
+        setColumnWidths(prev => ({ ...prev, [key]: newWidth }));
+    }, []);
+
+    const onMouseUp = useCallback(() => {
+        isResizing.current = null;
+    }, []);
 
     useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (ref.current && !ref.current.contains(event.target as Node)) {
-                setIsOpen(false);
-            }
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+        return () => {
+            document.removeEventListener('mousemove', onMouseMove);
+            document.removeEventListener('mouseup', onMouseUp);
         };
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => document.removeEventListener("mousedown", handleClickOutside);
-    }, [ref]);
+    }, [onMouseMove, onMouseUp]);
 
-    const handleSelect = (option: string) => {
-        const newSelection = selectedOptions.includes(option)
-            ? selectedOptions.filter(item => item !== option)
-            : [...selectedOptions, option];
-        onSelectionChange(newSelection);
-    };
-
-    const displayText = selectedOptions.length > 0 ? `${selectedOptions.length} selected` : placeholder;
-
-    return (
-        <div className="relative" ref={ref}>
-            <button onClick={() => setIsOpen(!isOpen)} className="w-full bg-white border border-slate-300 rounded-md shadow-sm px-4 py-2 text-left text-sm flex justify-between items-center">
-                <span className={selectedOptions.length > 0 ? 'text-slate-800' : 'text-slate-500'}>{displayText}</span>
-                <span className="text-slate-400">▼</span>
-            </button>
-            {isOpen && (
-                <div className="absolute z-10 w-full mt-1 bg-white border border-slate-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
-                    {options.map(option => (
-                        <label key={option} className="flex items-center px-4 py-2 text-sm hover:bg-slate-100 cursor-pointer">
-                            <input
-                                type="checkbox"
-                                checked={selectedOptions.includes(option)}
-                                onChange={() => handleSelect(option)}
-                                className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                            />
-                            <span className="ml-3 text-slate-700">{option}</span>
-                        </label>
-                    ))}
-                </div>
-            )}
-        </div>
-    );
+    return { columnWidths, onMouseDown };
 };
 
 
 // --- Main Component ---
 interface OpportunityListProps {
   opportunities: Opportunity[];
-  allOpportunities: Opportunity[];
   onSelect: (opportunity: Opportunity) => void;
-  filters: FilterCriteria;
-  onFilterChange: (newFilters: Partial<FilterCriteria>) => void;
   savedFilters: SavedFilter[];
   onSaveFilter: (name: string) => void;
   onApplyFilter: (id: string) => void;
   onClearFilters: () => void;
   onAddScoping: () => void;
+  onOpenFilterBuilder: () => void;
+  activeFilterCount: number;
 }
 
 type SortKey = keyof Opportunity;
 
-const OpportunityList: React.FC<OpportunityListProps> = ({ opportunities, allOpportunities, onSelect, filters, onFilterChange, savedFilters, onSaveFilter, onApplyFilter, onClearFilters, onAddScoping }) => {
+const OpportunityList: React.FC<OpportunityListProps> = ({ 
+    opportunities, 
+    onSelect, 
+    savedFilters, 
+    onSaveFilter, 
+    onApplyFilter, 
+    onClearFilters, 
+    onAddScoping,
+    onOpenFilterBuilder,
+    activeFilterCount
+}) => {
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: 'ascending' | 'descending' } | null>(null);
   const [newViewName, setNewViewName] = useState('');
 
-  const salesReps = useMemo(() => [...new Set(allOpportunities.map(o => o.opportunities_owner_name))].sort(), [allOpportunities]);
-  const statuses = useMemo(() => Object.values(OpportunityStage), []);
+  // Initial column widths
+  const initialWidths = useMemo(() => ({
+    accounts_salesforce_account_name: 200,
+    opportunities_name: 250,
+    opportunities_owner_name: 150,
+    opportunities_type: 150,
+    opportunities_close_date: 120,
+    opportunities_stage_name: 150,
+    opportunities_incremental_bookings: 150,
+    opportunities_amount: 150,
+    opportunities_has_services_flag: 180,
+    opportunities_amount_services: 150,
+  }), []);
   
+  const { columnWidths, onMouseDown } = useResizableColumns(initialWidths);
+
   const sortedOpportunities = useMemo(() => {
     let sortableItems = [...opportunities];
     
     sortableItems.sort((a, b) => {
-        // If a sort configuration is set by the user, use it.
         if (sortConfig) {
             const valA = a[sortConfig.key];
             const valB = b[sortConfig.key];
@@ -98,22 +98,13 @@ const OpportunityList: React.FC<OpportunityListProps> = ({ opportunities, allOpp
             if (valA < valB) result = -1;
             if (valA > valB) result = 1;
 
-            if (result !== 0) {
-                return sortConfig.direction === 'ascending' ? result : -result;
-            }
+            if (result !== 0) return sortConfig.direction === 'ascending' ? result : -result;
         }
 
-        // Default sort / tie-breaker for any user sort
-        // 1. Total Opp Amount (desc)
-        if (a.opportunities_amount !== b.opportunities_amount) {
-            return b.opportunities_amount - a.opportunities_amount;
-        }
-        // 2. Incremental Bookings (desc)
-        if (a.opportunities_incremental_bookings !== b.opportunities_incremental_bookings) {
-            return b.opportunities_incremental_bookings - a.opportunities_incremental_bookings;
-        }
-        // 3. Close Date (asc - closer dates first)
-        return new Date(a.accounts_subscription_end_date).getTime() - new Date(b.accounts_subscription_end_date).getTime();
+        // Default sort logic
+        if (a.opportunities_amount !== b.opportunities_amount) return b.opportunities_amount - a.opportunities_amount;
+        if (a.opportunities_incremental_bookings !== b.opportunities_incremental_bookings) return b.opportunities_incremental_bookings - a.opportunities_incremental_bookings;
+        return new Date(a.opportunities_close_date).getTime() - new Date(b.opportunities_close_date).getTime();
     });
 
     return sortableItems;
@@ -129,9 +120,7 @@ const OpportunityList: React.FC<OpportunityListProps> = ({ opportunities, allOpp
   };
   
   const getSortIndicator = (key: SortKey) => {
-    if (!sortConfig || sortConfig.key !== key) {
-      return '↕';
-    }
+    if (!sortConfig || sortConfig.key !== key) return '↕';
     return sortConfig.direction === 'ascending' ? '↑' : '↓';
   };
 
@@ -167,8 +156,7 @@ const OpportunityList: React.FC<OpportunityListProps> = ({ opportunities, allOpp
         
         {/* Saved Views and Filters Panel */}
         <div className="p-4 bg-slate-50 border-b space-y-4">
-            {/* Saved Views */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div className="flex items-center space-x-2">
                     <select
                         onChange={(e) => e.target.value ? onApplyFilter(e.target.value) : onClearFilters()}
@@ -184,90 +172,64 @@ const OpportunityList: React.FC<OpportunityListProps> = ({ opportunities, allOpp
                  <div className="flex items-center space-x-2">
                     <input
                         type="text"
-                        placeholder="Enter name for new view..."
+                        placeholder="Enter name to save view..."
                         value={newViewName}
                         onChange={e => setNewViewName(e.target.value)}
                         className="flex-grow p-2 border border-slate-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm"
                     />
                     <button onClick={handleSaveClick} className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 font-semibold text-sm flex items-center space-x-2">
-                        {ICONS.save}<span>Save View</span>
+                        {ICONS.save}<span>Save</span>
                     </button>
                 </div>
-            </div>
-
-            {/* Filters */}
-            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3 text-sm">
-                <div className="lg:col-span-2">
-                    <input 
-                        type="text"
-                        placeholder="Search Opp or Account..."
-                        value={filters.searchTerm}
-                        onChange={e => onFilterChange({ searchTerm: e.target.value })}
-                        className="w-full p-2 border border-slate-300 rounded-md shadow-sm"
-                    />
-                </div>
-                <div>
-                     <MultiSelectDropdown 
-                        options={statuses}
-                        selectedOptions={filters.statuses}
-                        onSelectionChange={(statuses) => onFilterChange({ statuses: statuses as OpportunityStage[] })}
-                        placeholder="Status"
-                     />
-                </div>
-                 <div>
-                    <MultiSelectDropdown 
-                        options={salesReps}
-                        selectedOptions={filters.salesReps}
-                        onSelectionChange={(salesReps) => onFilterChange({ salesReps })}
-                        placeholder="Sales Rep"
-                     />
-                </div>
-                <div>
-                    <select 
-                        value={filters.disposition}
-                        onChange={e => onFilterChange({ disposition: e.target.value as FilterCriteria['disposition'] })}
-                        className="w-full p-2 border border-slate-300 rounded-md shadow-sm bg-white"
-                    >
-                        <option value="any">Any Disposition</option>
-                        <option value="not-reviewed">Not Reviewed</option>
-                        <option value="services-fit">Services Fit</option>
-                        <option value="no-services-opp">No Services Opp</option>
-                        <option value="watchlist">Watchlist</option>
-                    </select>
-                </div>
-                <div>
-                    <button onClick={onClearFilters} className="w-full px-4 py-2 bg-white text-slate-700 border border-slate-300 rounded-md hover:bg-slate-100 font-semibold">
-                        Clear Filters
+                 <div className="flex items-center space-x-2">
+                     <button onClick={onOpenFilterBuilder} className="relative w-full px-4 py-2 bg-white text-slate-700 border border-slate-300 rounded-md hover:bg-slate-100 font-semibold text-sm flex items-center space-x-2">
+                        {ICONS.filter}
+                        <span>Advanced Filter</span>
+                        {activeFilterCount > 0 && <span className="absolute -top-2 -right-2 bg-indigo-600 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">{activeFilterCount}</span>}
+                    </button>
+                    <button onClick={onClearFilters} className="px-4 py-2 bg-white text-slate-700 border border-slate-300 rounded-md hover:bg-slate-100 font-semibold text-sm">
+                        Clear
                     </button>
                 </div>
             </div>
         </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm text-left text-slate-500">
-          <thead className="text-xs text-slate-700 uppercase bg-slate-50">
+      <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 350px)' }}>
+        <table className="w-full text-sm text-left text-slate-500 border-separate border-spacing-0">
+          <thead className="text-xs text-slate-700 uppercase">
             <tr>
               {tableHeaders.map(({ key, label, className, isSortable }) => (
                 <th key={key} scope="col" 
-                    className={`px-4 py-3 ${isSortable ? 'cursor-pointer hover:bg-slate-100' : ''} ${className || ''}`} 
-                    onClick={() => isSortable && requestSort(key as SortKey)}>
-                  {label} {isSortable && <span className="ml-1 text-slate-400">{getSortIndicator(key as SortKey)}</span>}
+                    className={`px-4 py-3 bg-slate-50 border-b border-slate-200 sticky top-0 z-10 ${className || ''}`}
+                    style={{ width: columnWidths[key] }}
+                    >
+                  <div className="flex items-center justify-between group">
+                    <span 
+                        className={isSortable ? 'cursor-pointer' : ''}
+                        onClick={() => isSortable && requestSort(key as SortKey)}>
+                      {label} {isSortable && <span className="ml-1 text-slate-400">{getSortIndicator(key as SortKey)}</span>}
+                    </span>
+                     <div 
+                        onMouseDown={(e) => onMouseDown(key, e)}
+                        className="w-1 h-5 ml-2 cursor-col-resize opacity-0 group-hover:opacity-100 bg-slate-300"
+                     />
+                  </div>
                 </th>
               ))}
             </tr>
           </thead>
-          <tbody>
+          <tbody className="bg-white">
             {sortedOpportunities.map((opp) => (
-              <tr key={opp.opportunities_id} className="bg-white border-b hover:bg-slate-50 cursor-pointer" onClick={() => onSelect(opp)}>
-                <td className="px-4 py-3 font-medium text-slate-800">{opp.accounts_salesforce_account_name}</td>
-                <td className="px-4 py-3 text-indigo-600 font-semibold">{opp.opportunities_name}</td>
-                <td className="px-4 py-3">{opp.opportunities_owner_name}</td>
-                <td className="px-4 py-3">{opp.opportunities_type}</td>
-                <td className="px-4 py-3">{formatDate(opp.accounts_subscription_end_date)}</td>
-                <td className="px-4 py-3 text-center"><Tag status={opp.opportunities_stage_name} /></td>
-                <td className="px-4 py-3 text-right font-medium text-slate-700">{formatCurrency(opp.opportunities_incremental_bookings)}</td>
-                <td className="px-4 py-3 text-right font-bold text-green-700">{formatCurrency(opp.opportunities_amount)}</td>
-                <td className="px-4 py-3 text-center">
+              <tr key={opp.opportunities_id} className="border-b hover:bg-slate-50 cursor-pointer" onClick={() => onSelect(opp)}>
+                <td className="px-4 py-3 font-medium text-slate-800 break-words" style={{ width: columnWidths['accounts_salesforce_account_name'] }}>{opp.accounts_salesforce_account_name}</td>
+                <td className="px-4 py-3 text-indigo-600 font-semibold break-words" style={{ width: columnWidths['opportunities_name'] }}>{opp.opportunities_name}</td>
+                <td className="px-4 py-3 break-words" style={{ width: columnWidths['opportunities_owner_name'] }}>{opp.opportunities_owner_name}</td>
+                <td className="px-4 py-3 break-words" style={{ width: columnWidths['opportunities_type'] }}>{opp.opportunities_type}</td>
+                <td className="px-4 py-3 whitespace-nowrap" style={{ width: columnWidths['opportunities_close_date'] }}>{formatDate(opp.opportunities_close_date)}</td>
+                <td className="px-4 py-3 text-center" style={{ width: columnWidths['opportunities_stage_name'] }}><Tag status={opp.opportunities_stage_name} /></td>
+                <td className="px-4 py-3 text-right font-medium text-slate-700 whitespace-nowrap" style={{ width: columnWidths['opportunities_incremental_bookings'] }}>{formatCurrency(opp.opportunities_incremental_bookings)}</td>
+                <td className="px-4 py-3 text-right font-bold text-green-700 whitespace-nowrap" style={{ width: columnWidths['opportunities_amount'] }}>{formatCurrency(opp.opportunities_amount)}</td>
+                <td className="px-4 py-3 text-center" style={{ width: columnWidths['opportunities_has_services_flag'] }}>
                     <div className="flex items-center justify-center space-x-2">
                         <Tag status={opp.opportunities_has_services_flag} />
                         {opp.disposition?.status === 'Services Fit' && <span className="text-green-500" title="Disposition: Services Fit">{ICONS.checkCircle}</span>}
@@ -275,7 +237,7 @@ const OpportunityList: React.FC<OpportunityListProps> = ({ opportunities, allOpp
                         {opp.disposition?.status === 'Watchlist' && <span className="text-blue-500" title="Disposition: Watchlist">{ICONS.eye}</span>}
                    </div>
                 </td>
-                <td className="px-4 py-3 text-right">{formatCurrency(opp.opportunities_amount_services)}</td>
+                <td className="px-4 py-3 text-right whitespace-nowrap" style={{ width: columnWidths['opportunities_amount_services'] }}>{formatCurrency(opp.opportunities_amount_services)}</td>
               </tr>
             ))}
           </tbody>
@@ -295,9 +257,9 @@ const tableHeaders = [
   { key: 'opportunities_name', label: 'Opportunity Name', isSortable: true },
   { key: 'opportunities_owner_name', label: 'Owner Name', isSortable: true },
   { key: 'opportunities_type', label: 'Opportunity Type', isSortable: true },
-  { key: 'accounts_subscription_end_date', label: 'Close Date', isSortable: true },
+  { key: 'opportunities_close_date', label: 'Close Date', isSortable: true },
   { key: 'opportunities_stage_name', label: 'Stage', isSortable: true, className: 'text-center' },
-  { key: 'opportunities_incremental_ bookings', label: 'Incr. Bookings', className: 'text-right', isSortable: true },
+  { key: 'opportunities_incremental_bookings', label: 'Incr. Bookings', className: 'text-right', isSortable: true },
   { key: 'opportunities_amount', label: 'Total Opp Amount', className: 'text-right', isSortable: true },
   { key: 'opportunities_has_services_flag', label: 'Services Attached', className: 'text-center', isSortable: true },
   { key: 'opportunities_amount_services', label: 'Services Amount', className: 'text-right', isSortable: true },

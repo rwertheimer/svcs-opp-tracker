@@ -38,7 +38,7 @@ const POSTGRES_CONFIG = {
 const bigquery = new BigQuery({ projectId: GCLOUD_PROJECT_ID });
 
 // The exact SQL for the full opportunities list.
-// Updated to CAST numeric types to FLOAT64 to ensure compatibility with PostgreSQL.
+// Updated to CAST numeric types to FLOAT64 and fetch the correct close_date.
 const OPPORTUNITIES_QUERY = `
     SELECT
         opportunities.id  AS opportunities_id,
@@ -65,13 +65,14 @@ const OPPORTUNITIES_QUERY = `
         accounts.salesforce_account_id  AS accounts_salesforce_account_id,
         opportunities.manager_of_opp_email  AS opportunities_manager_of_opp_email,
         CAST(DATE(accounts.subscription_end_date ) AS STRING) AS accounts_subscription_end_date,
+        CAST(DATE(opportunities.close_date) AS STRING) AS opportunities_close_date,
         CAST(COALESCE(SUM(opportunities.incremental_bookings_forecast_c ), 0) AS FLOAT64) AS opportunities_incremental_bookings,
         CAST(COALESCE(SUM(opportunities.amount ), 0) AS FLOAT64) AS opportunities_amount
     FROM \`digital-arbor-400\`.transforms_bi.opportunities  AS opportunities
     INNER JOIN \`digital-arbor-400\`.transforms_bi.accounts  AS accounts ON opportunities.salesforce_account_id = accounts.salesforce_account_id
     WHERE ((UPPER(( accounts.region_name  )) = UPPER('NA - Enterprise') OR UPPER(( accounts.region_name  )) = UPPER('NA - Commercial'))) 
-    GROUP BY 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24
-    ORDER BY 26 DESC, 25 DESC
+    GROUP BY 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25
+    ORDER BY 27 DESC, 26 DESC
 `;
 
 // This SQL creates a table with a schema that perfectly matches the BigQuery output.
@@ -101,6 +102,7 @@ const CREATE_TABLE_SQL = `
         accounts_salesforce_account_id VARCHAR(255),
         opportunities_manager_of_opp_email VARCHAR(255),
         accounts_subscription_end_date DATE,
+        opportunities_close_date DATE,
         opportunities_incremental_bookings NUMERIC,
         opportunities_amount NUMERIC
     );

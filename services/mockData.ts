@@ -1,4 +1,3 @@
-
 import type { Opportunity, AccountDetails, SupportTicket, ProjectHistory, UsageData, ActionItem, Document } from '../types';
 import { OpportunityStage, ActionItemStatus, DispositionStatus } from '../types';
 
@@ -34,6 +33,7 @@ const generatePreDispositionedOpp = (): Opportunity => {
         { id: 'task-4', name: 'Revise and Finalize Proposal', status: ActionItemStatus.NotStarted, dueDate: createFutureDate(14), notes: '', documents: [] },
         { id: 'task-5', name: 'Approvals', status: ActionItemStatus.NotStarted, dueDate: createFutureDate(21), notes: '', documents: [] },
     ];
+    const closeDate = createFutureDate(45);
 
     return {
         opportunities_id: 'demo-fit-opp-123',
@@ -59,7 +59,8 @@ const generatePreDispositionedOpp = (): Opportunity => {
         accounts_region_name: 'NA - Enterprise',
         accounts_salesforce_account_id: `acc-stark-industries-demo`,
         opportunities_manager_of_opp_email: 'manager@example.com',
-        accounts_subscription_end_date: createFutureDate(45),
+        accounts_subscription_end_date: closeDate,
+        opportunities_close_date: closeDate,
         opportunities_incremental_bookings: 150000,
         opportunities_amount: 500000,
         disposition: {
@@ -82,6 +83,7 @@ export const generateOpportunities = (count: number): Opportunity[] => {
         // Ensure some opportunities match the default filter criteria
         const isNAregion = Math.random() > 0.3;
         const closeDateInNext90Days = Math.random() > 0.3;
+        const closeDate = closeDateInNext90Days ? createFutureDate(Math.floor(Math.random() * 90)) : createFutureDate(90 + Math.floor(Math.random() * 275));
 
         const opp: Opportunity = {
             opportunities_id: getRandomId(),
@@ -107,7 +109,8 @@ export const generateOpportunities = (count: number): Opportunity[] => {
             accounts_region_name: isNAregion ? getRandomElement(['NA - Enterprise', 'NA - Commercial']) : getRandomElement(['EMEA', 'APAC']),
             accounts_salesforce_account_id: `acc-${accountName.toLowerCase().replace(/ /g, '-')}-${getRandomId()}`,
             opportunities_manager_of_opp_email: 'manager@example.com',
-            accounts_subscription_end_date: closeDateInNext90Days ? createFutureDate(Math.floor(Math.random() * 90)) : createFutureDate(90 + Math.floor(Math.random() * 275)),
+            accounts_subscription_end_date: closeDate,
+            opportunities_close_date: closeDate,
             opportunities_incremental_bookings: Math.floor(Math.random() * 50000),
             opportunities_amount: Math.floor(Math.random() * 25 + 5) * 10000,
             disposition: {
