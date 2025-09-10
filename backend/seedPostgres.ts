@@ -7,28 +7,33 @@
  * PRE-REQUISITES:
  * 1. You have created a Cloud SQL for PostgreSQL instance and a database.
  * 2. You have configured the instance to allow connections from your public IP address.
- * 3. You have installed the necessary packages: `npm install`
- * 4. You have authenticated your local machine with GCP: `gcloud auth application-default login`
+ * 3. You have created a .env file with your PG_HOST, PG_USER, etc. credentials.
+ * 4. You have installed the necessary packages: `npm install`
+ * 5. You have authenticated your local machine with GCP: `gcloud auth application-default login`
  *
  * HOW TO RUN:
- * 1. Fill in your database connection details in the CONFIGURATION section below.
- * 2. From the root directory of your project, run:
- *    `npx ts-node backend/seedPostgres.ts`
+ * From the root directory of your project, run:
+ *    `npx ts-node -P backend/tsconfig.json backend/seedPostgres.ts`
  */
 
 import { BigQuery } from '@google-cloud/bigquery';
 import { Client } from 'pg';
+import * as dotenv from 'dotenv';
+
+// Load environment variables from .env file
+dotenv.config();
 
 // --- CONFIGURATION ---
-// IMPORTANT: Replace with your actual GCP Project ID and Postgres connection details.
+// IMPORTANT: Replace with your actual GCP Project ID.
 const GCLOUD_PROJECT_ID = 'digital-arbor-400';
 
+// Database connection details are now loaded securely from environment variables.
 const POSTGRES_CONFIG = {
-  user: 'postgres', // Or your specific user
-  host: 'YOUR_INSTANCE_PUBLIC_IP', // The public IP address of your Cloud SQL instance
-  database: 'opportunity_tracker', // The database name you created
-  password: 'YOUR_POSTGRES_PASSWORD', // The password for your user
-  port: 5432,
+  user: process.env.PG_USER,
+  host: process.env.PG_HOST,
+  database: process.env.PG_DATABASE,
+  password: process.env.PG_PASSWORD,
+  port: parseInt(process.env.PG_PORT || '5432', 10),
   ssl: {
     rejectUnauthorized: false, // Required for simple SSL connection to Cloud SQL
   },
@@ -109,12 +114,16 @@ const CREATE_TABLE_SQL = `
 `;
 
 async function seedDatabase() {
-  if (POSTGRES_CONFIG.host === 'YOUR_INSTANCE_PUBLIC_IP' || POSTGRES_CONFIG.password === 'YOUR_POSTGRES_PASSWORD') {
-    console.error('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
-    console.error('!!! PLEASE UPDATE POSTGRES_CONFIG in backend/seedPostgres.ts !!!');
-    console.error('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
-    return;
-  }
+    const requiredEnvVars = ['PG_HOST', 'PG_USER', 'PG_DATABASE', 'PG_PASSWORD', 'PG_PORT'];
+    const missingVars = requiredEnvVars.filter(v => !process.env[v]);
+
+    if (missingVars.length > 0) {
+        console.error('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
+        console.error(`!!! ERROR: Missing required environment variables: ${missingVars.join(', ')}`);
+        console.error('!!! Please create a .env file and fill in the details.');
+        console.error('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
+        return; // Prevent script from running
+    }
 
   const pgClient = new Client(POSTGRES_CONFIG);
   console.log('--- Starting PostgreSQL Database Seeding Process ---');
