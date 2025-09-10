@@ -75,8 +75,6 @@ interface OpportunityListProps {
   activeFilterCount: number;
 }
 
-type SortKey = keyof Opportunity;
-
 const OpportunityList: React.FC<OpportunityListProps> = ({ 
     opportunities, 
     onSelect, 
@@ -88,7 +86,7 @@ const OpportunityList: React.FC<OpportunityListProps> = ({
     onOpenFilterBuilder,
     activeFilterCount
 }) => {
-  const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: 'ascending' | 'descending' } | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
   const [newViewName, setNewViewName] = useState('');
 
   // Initial column widths
@@ -107,43 +105,27 @@ const OpportunityList: React.FC<OpportunityListProps> = ({
   
   const { columnWidths, onMouseDown } = useResizableColumns(initialWidths);
 
-  const sortedOpportunities = useMemo(() => {
-    let sortableItems = [...opportunities];
+  const displayedOpportunities = useMemo(() => {
+    let filteredItems = [...opportunities];
     
-    sortableItems.sort((a, b) => {
-        if (sortConfig) {
-            const valA = a[sortConfig.key];
-            const valB = b[sortConfig.key];
-            
-            let result = 0;
-            if (valA < valB) result = -1;
-            if (valA > valB) result = 1;
-
-            if (result !== 0) return sortConfig.direction === 'ascending' ? result : -result;
-        }
-
-        // Default sort logic
+    // Apply search term filter
+    if (searchTerm) {
+        const lowercasedFilter = searchTerm.toLowerCase();
+        filteredItems = filteredItems.filter(opp => 
+            opp.accounts_salesforce_account_name.toLowerCase().includes(lowercasedFilter) ||
+            opp.opportunities_name.toLowerCase().includes(lowercasedFilter)
+        );
+    }
+    
+    // Apply default sort logic
+    filteredItems.sort((a, b) => {
         if (a.opportunities_amount !== b.opportunities_amount) return b.opportunities_amount - a.opportunities_amount;
         if (a.opportunities_incremental_bookings !== b.opportunities_incremental_bookings) return b.opportunities_incremental_bookings - a.opportunities_incremental_bookings;
         return new Date(a.opportunities_close_date).getTime() - new Date(b.opportunities_close_date).getTime();
     });
 
-    return sortableItems;
-  }, [opportunities, sortConfig]);
-
-
-  const requestSort = (key: SortKey) => {
-    let direction: 'ascending' | 'descending' = 'ascending';
-    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') {
-      direction = 'descending';
-    }
-    setSortConfig({ key, direction });
-  };
-  
-  const getSortIndicator = (key: SortKey) => {
-    if (!sortConfig || sortConfig.key !== key) return '↕';
-    return sortConfig.direction === 'ascending' ? '↑' : '↓';
-  };
+    return filteredItems;
+  }, [opportunities, searchTerm]);
 
   const formatCurrency = (amount: number) => {
     if (!amount || amount === 0) return '-';
@@ -177,6 +159,18 @@ const OpportunityList: React.FC<OpportunityListProps> = ({
         
         {/* Saved Views and Filters Panel */}
         <div className="p-4 bg-slate-50 border-b space-y-4">
+             <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    {ICONS.search}
+                </div>
+                <input
+                    type="text"
+                    placeholder="Search by account or opportunity name..."
+                    value={searchTerm}
+                    onChange={e => setSearchTerm(e.target.value)}
+                    className="w-full p-2 pl-10 border border-slate-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                />
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div className="flex items-center space-x-2">
                     <select
@@ -215,7 +209,7 @@ const OpportunityList: React.FC<OpportunityListProps> = ({
             </div>
         </div>
 
-      <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 350px)' }}>
+      <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 400px)' }}>
         <table className="w-full table-fixed text-sm text-left text-slate-500 border-separate border-spacing-0">
           <colgroup>
             {tableHeaders.map(({ key }) => (
@@ -224,17 +218,12 @@ const OpportunityList: React.FC<OpportunityListProps> = ({
           </colgroup>
           <thead className="text-xs text-slate-700 uppercase">
             <tr>
-              {tableHeaders.map(({ key, label, className, isSortable }) => (
+              {tableHeaders.map(({ key, label, className }) => (
                 <th key={key} scope="col" 
                     className={`relative group px-4 py-3 bg-slate-50 border-b border-slate-200 sticky top-0 z-10 ${className || ''}`}
                     >
-                  <div 
-                      className={`flex items-center justify-between ${isSortable ? 'cursor-pointer' : ''}`}
-                      onClick={() => isSortable && requestSort(key as SortKey)}
-                  >
-                    <span>
-                      {label} {isSortable && <span className="ml-1 text-slate-400">{getSortIndicator(key as SortKey)}</span>}
-                    </span>
+                  <div className="flex items-center justify-between">
+                    <span>{label}</span>
                   </div>
                   <div
                       onMouseDown={(e) => onMouseDown(key, e)}
@@ -247,7 +236,7 @@ const OpportunityList: React.FC<OpportunityListProps> = ({
             </tr>
           </thead>
           <tbody className="bg-white">
-            {sortedOpportunities.map((opp) => (
+            {displayedOpportunities.map((opp) => (
               <tr key={opp.opportunities_id} className="border-b hover:bg-slate-50 cursor-pointer" onClick={() => onSelect(opp)}>
                 <td className="px-4 py-3 font-medium text-slate-800 break-words">{opp.accounts_salesforce_account_name}</td>
                 <td className="px-4 py-3 text-indigo-600 font-semibold break-words">{opp.opportunities_name}</td>
@@ -271,6 +260,11 @@ const OpportunityList: React.FC<OpportunityListProps> = ({
           </tbody>
         </table>
       </div>
+      {opportunities.length > 0 && displayedOpportunities.length === 0 && (
+        <div className="text-center py-12 text-slate-500">
+          <p>No opportunities match your search or filters.</p>
+        </div>
+      )}
       {opportunities.length === 0 && (
         <div className="text-center py-12 text-slate-500">
           <p>No opportunities match the current filters.</p>
@@ -281,16 +275,16 @@ const OpportunityList: React.FC<OpportunityListProps> = ({
 };
 
 const tableHeaders = [
-  { key: 'accounts_salesforce_account_name', label: 'Account Name', isSortable: true },
-  { key: 'opportunities_name', label: 'Opportunity Name', isSortable: true },
-  { key: 'opportunities_owner_name', label: 'Owner Name', isSortable: true },
-  { key: 'opportunities_type', label: 'Opportunity Type', isSortable: true },
-  { key: 'opportunities_close_date', label: 'Close Date', isSortable: true },
-  { key: 'opportunities_stage_name', label: 'Stage', isSortable: true, className: 'text-center' },
-  { key: 'opportunities_incremental_bookings', label: 'Incr. Bookings', className: 'text-right', isSortable: true },
-  { key: 'opportunities_amount', label: 'Total Opp Amount', className: 'text-right', isSortable: true },
-  { key: 'opportunities_has_services_flag', label: 'Services Attached', className: 'text-center', isSortable: true },
-  { key: 'opportunities_amount_services', label: 'Services Amount', className: 'text-right', isSortable: true },
+  { key: 'accounts_salesforce_account_name', label: 'Account Name' },
+  { key: 'opportunities_name', label: 'Opportunity Name' },
+  { key: 'opportunities_owner_name', label: 'Owner Name' },
+  { key: 'opportunities_type', label: 'Opportunity Type' },
+  { key: 'opportunities_close_date', label: 'Close Date' },
+  { key: 'opportunities_stage_name', label: 'Stage', className: 'text-center' },
+  { key: 'opportunities_incremental_bookings', label: 'Incr. Bookings', className: 'text-right' },
+  { key: 'opportunities_amount', label: 'Total Opp Amount', className: 'text-right' },
+  { key: 'opportunities_has_services_flag', label: 'Services Attached', className: 'text-center' },
+  { key: 'opportunities_amount_services', label: 'Services Amount', className: 'text-right' },
 ];
 
 export default OpportunityList;

@@ -34,6 +34,26 @@ const formatDate = (dateString: string) => {
     return utcDate.toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 };
 
+// --- Helper for rendering multi-value fields as tags ---
+const renderMultiValueTags = (value: string | null | undefined) => {
+    if (!value) return <span className="text-slate-400">N/A</span>;
+    
+    // Split by comma or semicolon, then trim and filter empty strings
+    const items = value.split(/[,;]/).map(s => s.trim()).filter(Boolean);
+    if (items.length === 0) return <span className="text-slate-400">N/A</span>;
+
+    return (
+        <div className="flex flex-wrap gap-1">
+            {items.map((item, index) => (
+                <span key={index} className="px-2 py-0.5 text-xs bg-slate-100 text-slate-700 rounded-full">
+                    {item}
+                </span>
+            ))}
+        </div>
+    );
+};
+
+
 // --- Sub-components defined outside the main component for performance ---
 
 const SupportTickets: React.FC<{ tickets: SupportTicket[] }> = ({ tickets }) => {
@@ -278,36 +298,36 @@ const HistoricalOpportunitiesList: React.FC<{ opportunities: Opportunity[] }> = 
 
     return (
         <div className="overflow-auto max-h-96">
-            <table className="w-full text-sm text-left">
+            <table className="w-full text-sm text-left table-fixed">
                 <thead className="text-xs text-slate-600 uppercase bg-slate-50 sticky top-0">
                     <tr>
-                        <th className="px-4 py-2">Opp Name</th>
-                        <th className="px-4 py-2">Owner</th>
-                        <th className="px-4 py-2">Stage</th>
-                        <th className="px-4 py-2 text-right">Amount</th>
-                        <th className="px-4 py-2 text-right">Incr. Bookings</th>
-                        <th className="px-4 py-2 text-center">Services Attached</th>
-                        <th className="px-4 py-2">Type</th>
-                        <th className="px-4 py-2">Close Date</th>
-                        <th className="px-4 py-2">Connectors</th>
-                        <th className="px-4 py-2">Sizes</th>
-                        <th className="px-4 py-2">Destinations</th>
+                        <th className="px-4 py-2 w-[20%]">Opp Name</th>
+                        <th className="px-4 py-2 w-[10%]">Owner</th>
+                        <th className="px-4 py-2 w-[12%]">Stage</th>
+                        <th className="px-4 py-2 text-right w-[8%]">Amount</th>
+                        <th className="px-4 py-2 text-right w-[10%]">Incr. Bookings</th>
+                        <th className="px-4 py-2 text-center w-[10%]">Services Attached</th>
+                        <th className="px-4 py-2 w-[8%]">Type</th>
+                        <th className="px-4 py-2 w-[10%]">Close Date</th>
+                        <th className="px-4 py-2 w-[15%]">Connectors</th>
+                        <th className="px-4 py-2 w-[8%]">Sizes</th>
+                        <th className="px-4 py-2 w-[10%]">Destinations</th>
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
                     {sortedOpps.map(opp => (
                         <tr key={opp.opportunities_id} className="hover:bg-slate-50">
-                            <td className="px-4 py-2 font-medium text-slate-800" title={opp.opportunities_name}>{opp.opportunities_name}</td>
-                            <td className="px-4 py-2">{opp.opportunities_owner_name}</td>
+                            <td className="px-4 py-2 font-medium text-slate-800 break-words">{opp.opportunities_name}</td>
+                            <td className="px-4 py-2 break-words">{opp.opportunities_owner_name}</td>
                             <td className="px-4 py-2"><Tag status={opp.opportunities_stage_name} /></td>
-                            <td className="px-4 py-2 text-right font-semibold">{formatCurrency(opp.opportunities_amount)}</td>
-                            <td className="px-4 py-2 text-right">{formatCurrency(opp.opportunities_incremental_bookings)}</td>
+                            <td className="px-4 py-2 text-right font-semibold whitespace-nowrap">{formatCurrency(opp.opportunities_amount)}</td>
+                            <td className="px-4 py-2 text-right whitespace-nowrap">{formatCurrency(opp.opportunities_incremental_bookings)}</td>
                             <td className="px-4 py-2 text-center"><Tag status={opp.opportunities_has_services_flag} /></td>
                             <td className="px-4 py-2">{opp.opportunities_type}</td>
                             <td className="px-4 py-2 whitespace-nowrap">{formatDate(opp.opportunities_close_date)}</td>
-                            <td className="px-4 py-2 truncate max-w-[150px]" title={opp.opportunities_connectors}>{opp.opportunities_connectors}</td>
-                            <td className="px-4 py-2 truncate max-w-[50px]" title={opp.opportunities_connector_tshirt_size_list}>{opp.opportunities_connector_tshirt_size_list}</td>
-                            <td className="px-4 py-2 truncate max-w-[100px]" title={opp.opportunities_destinations}>{opp.opportunities_destinations}</td>
+                            <td className="px-4 py-2 align-top">{renderMultiValueTags(opp.opportunities_connectors)}</td>
+                            <td className="px-4 py-2 align-top">{renderMultiValueTags(opp.opportunities_connector_tshirt_size_list)}</td>
+                            <td className="px-4 py-2 align-top">{renderMultiValueTags(opp.opportunities_destinations)}</td>
                         </tr>
                     ))}
                 </tbody>
