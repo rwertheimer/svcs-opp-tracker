@@ -238,12 +238,12 @@ const OpportunityList: React.FC<OpportunityListProps> = ({
           <tbody className="bg-white">
             {displayedOpportunities.map((opp) => (
               <tr key={opp.opportunities_id} className="border-b hover:bg-slate-50 cursor-pointer" onClick={() => onSelect(opp)}>
-                <td className="px-4 py-3 font-medium text-slate-800 break-words">{opp.accounts_salesforce_account_name}</td>
-                <td className="px-4 py-3 text-indigo-600 font-semibold break-words">{opp.opportunities_name}</td>
-                <td className="px-4 py-3 break-words">{opp.opportunities_owner_name}</td>
-                <td className="px-4 py-3 break-words">{opp.opportunities_type}</td>
+                <td className="px-4 py-3 font-medium text-slate-800 truncate" title={opp.accounts_salesforce_account_name}>{opp.accounts_salesforce_account_name}</td>
+                <td className="px-4 py-3 text-indigo-600 font-semibold truncate" title={opp.opportunities_name}>{opp.opportunities_name}</td>
+                <td className="px-4 py-3 truncate" title={opp.opportunities_owner_name}>{opp.opportunities_owner_name}</td>
+                <td className="px-4 py-3 truncate" title={opp.opportunities_type}>{opp.opportunities_type}</td>
                 <td className="px-4 py-3 whitespace-nowrap">{formatDate(opp.opportunities_close_date)}</td>
-                <td className="px-4 py-3 text-center"><Tag status={opp.opportunities_stage_name} /></td>
+                <td className="px-4 py-3 text-center truncate" title={opp.opportunities_stage_name}><Tag status={opp.opportunities_stage_name} /></td>
                 <td className="px-4 py-3 text-right font-medium text-slate-700 whitespace-nowrap">{formatCurrency(opp.opportunities_incremental_bookings)}</td>
                 <td className="px-4 py-3 text-right font-bold text-green-700 whitespace-nowrap">{formatCurrency(opp.opportunities_amount)}</td>
                 <td className="px-4 py-3 text-center">

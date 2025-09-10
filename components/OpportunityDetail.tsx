@@ -317,9 +317,9 @@ const HistoricalOpportunitiesList: React.FC<{ opportunities: Opportunity[] }> = 
                 <tbody className="divide-y divide-slate-200">
                     {sortedOpps.map(opp => (
                         <tr key={opp.opportunities_id} className="hover:bg-slate-50">
-                            <td className="px-4 py-2 font-medium text-slate-800 break-words">{opp.opportunities_name}</td>
-                            <td className="px-4 py-2 break-words">{opp.opportunities_owner_name}</td>
-                            <td className="px-4 py-2"><Tag status={opp.opportunities_stage_name} /></td>
+                            <td className="px-4 py-2 font-medium text-slate-800 truncate" title={opp.opportunities_name}>{opp.opportunities_name}</td>
+                            <td className="px-4 py-2 truncate" title={opp.opportunities_owner_name}>{opp.opportunities_owner_name}</td>
+                            <td className="px-4 py-2 truncate" title={opp.opportunities_stage_name}><Tag status={opp.opportunities_stage_name} /></td>
                             <td className="px-4 py-2 text-right font-semibold whitespace-nowrap">{formatCurrency(opp.opportunities_amount)}</td>
                             <td className="px-4 py-2 text-right whitespace-nowrap">{formatCurrency(opp.opportunities_incremental_bookings)}</td>
                             <td className="px-4 py-2 text-center"><Tag status={opp.opportunities_has_services_flag} /></td>
