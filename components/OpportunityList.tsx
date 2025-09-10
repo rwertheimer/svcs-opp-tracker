@@ -3,41 +3,44 @@ import type { Opportunity, SavedFilter } from '../types';
 import Tag from './Tag';
 import { ICONS } from '../constants';
 
-// --- Custom Hook for Resizable Columns ---
+// --- Custom Hook for Resizable Columns (New, more robust implementation) ---
 const useResizableColumns = (initialWidths: { [key: string]: number }) => {
     const [columnWidths, setColumnWidths] = useState(initialWidths);
-    const isResizing = useRef<string | null>(null);
-    const startX = useRef(0);
-    const startWidth = useRef(0);
 
     const onMouseDown = useCallback((key: string, e: React.MouseEvent<HTMLDivElement>) => {
+        // Prevent text selection and other default browser actions
         e.preventDefault();
-        e.stopPropagation(); // Prevent sort handler on parent from firing
-        isResizing.current = key;
-        startX.current = e.clientX;
-        startWidth.current = columnWidths[key] || 0;
-    }, [columnWidths]);
+        e.stopPropagation();
 
-    const onMouseMove = useCallback((e: MouseEvent) => {
-        if (!isResizing.current) return;
-        const key = isResizing.current;
-        const delta = e.clientX - startX.current;
-        const newWidth = Math.max(startWidth.current + delta, 80); // Minimum width of 80px
-        setColumnWidths(prev => ({ ...prev, [key]: newWidth }));
-    }, []);
+        const thElement = (e.currentTarget.parentElement as HTMLElement);
+        const startX = e.clientX;
+        const startWidth = thElement.offsetWidth;
 
-    const onMouseUp = useCallback(() => {
-        isResizing.current = null;
-    }, []);
-
-    useEffect(() => {
-        document.addEventListener('mousemove', onMouseMove);
-        document.addEventListener('mouseup', onMouseUp);
-        return () => {
-            document.removeEventListener('mousemove', onMouseMove);
-            document.removeEventListener('mouseup', onMouseUp);
+        // This function is created dynamically on mouse down
+        const handleMouseMove = (moveEvent: MouseEvent) => {
+            const deltaX = moveEvent.clientX - startX;
+            const newWidth = Math.max(startWidth + deltaX, 80); // Minimum width 80px
+            setColumnWidths(prev => ({
+                ...prev,
+                [key]: newWidth
+            }));
         };
-    }, [onMouseMove, onMouseUp]);
+
+        // This function is also created dynamically
+        const handleMouseUp = () => {
+            // Reset global cursor style
+            document.body.style.cursor = '';
+            // IMPORTANT: Clean up the event listeners
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', handleMouseUp);
+        };
+        
+        // Set global cursor to give user feedback during resize
+        document.body.style.cursor = 'col-resize';
+        // Add the listeners to the document for the duration of the drag
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('mouseup', handleMouseUp);
+    }, []); // This callback is now stable and has no dependencies, improving performance.
 
     return { columnWidths, onMouseDown };
 };
