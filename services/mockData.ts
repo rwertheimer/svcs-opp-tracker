@@ -24,16 +24,24 @@ const MOCK_REGIONS = ['NA - Enterprise', 'NA - Commercial', 'EMEA', 'APAC'];
 const MOCK_STAGES = Object.values(OpportunityStage).filter(s => s !== OpportunityStage.PreSalesScoping);
 const MOCK_OPP_TYPES = ['Renewal', 'New Business', 'Upsell', 'Expansion', 'Sales'];
 
-// --- More realistic data for the Usage History Table ---
-const MOCK_INTEGRATIONS = [
-    { name: 'orders', group: 'Salesforce', service: 'salesforce' },
-    { name: 'leads', group: 'Salesforce', service: 'salesforce' },
-    { name: 'ad_spend', group: 'Google Ads', service: 'google_ads' },
-    { name: 'audit_logs', group: 'BigQuery', service: 'bigquery' },
-    { name: 'customer_data', group: 'Zendesk', service: 'zendesk' },
+// --- Realistic data for the Usage History Table ---
+const MOCK_USAGE_ROWS = [
+    { table: 'question_response', group: 'PD_COMMUNICATION_PROD', warehouse: 'snowflake', service: 'qualtrics' },
+    { table: 'survey_embedded_data', group: 'PD_COMMUNICATION_PROD', warehouse: 'snowflake', service: 'qualtrics' },
+    { table: 'RatingFactors', group: 'PD_RATING_RAW', warehouse: 'snowflake', service: 'cosmos' },
+    { table: 'RatingResponses', group: 'PD_RATING_RAW', warehouse: 'snowflake', service: 'cosmos' },
+    { table: 'Interview', group: 'PD_SALES_RAW', warehouse: 'snowflake', service: 'cosmos' },
+    { table: 'Prefill', group: 'PD_SALES_RAW', warehouse: 'snowflake', service: 'cosmos' },
+    { table: 'log', group: 'PD_DATAQUALITY', warehouse: 'snowflake', service: 'fivetran_log' },
+    { table: 'CarrierIntegrationData', group: 'PD_RATING_RAW', warehouse: 'snowflake', service: 'cosmos' },
+    { table: 'log', group: 'PD_COMMUNICATION_PROD', warehouse: 'snowflake', service: 'fivetran_log' },
+    { table: 'user', group: 'PD_COMMUNICATION_PROD', warehouse: 'snowflake', service: 'fivetran_log' },
+    { table: 'survey_response', group: 'PD_COMMUNICATION_PROD', warehouse: 'snowflake', service: 'qualtrics' },
+    { table: 'role_permission', group: 'PD_COMMUNICATION_PROD', warehouse: 'snowflake', service: 'fivetran_log' },
+    { table: 'version', group: 'PD_COMMUNICATION_PROD', warehouse: 'snowflake', service: 'qualtrics' },
+    { table: 'team_membership', group: 'PD_COMMUNICATION_PROD', warehouse: 'snowflake', service: 'fivetran_log' },
+    { table: 'InterviewSummary', group: 'PD_SALES_RAW', warehouse: 'snowflake', service: 'cosmos' },
 ];
-const MOCK_WAREHOUSES = ['SNOWFLAKE', 'BIGQUERY', 'REDSHIFT'];
-
 
 // --- MOCK DATA GENERATION for detail endpoints (restored from backend/server.ts) ---
 
@@ -57,29 +65,34 @@ const generateSupportTickets = (accountId: string): SupportTicket[] => {
 };
 
 const generateUsageHistory = (accountId: string): UsageData[] => {
-    const usageHistory: any[] = [];
-    const numIntegrations = Math.floor(Math.random() * 2) + 1;
-    const selectedIntegrations = MOCK_INTEGRATIONS.sort(() => 0.5 - Math.random()).slice(0, numIntegrations);
-    const warehouse = getRandomElement(MOCK_WAREHOUSES);
+    const usageHistory: UsageData[] = [];
+    const now = new Date();
 
-    for(const integration of selectedIntegrations) {
-        let lastMonthBillable = Math.random() * 1e9 + 1e7;
-        for (let i = 0; i < 3; i++) {
-            const date = new Date();
-            date.setMonth(date.getMonth() - i);
-            const fluctuation = (Math.random() - 0.4);
-            const billable = Math.max(0, lastMonthBillable * (1 + fluctuation));
-            const raw = billable * (Math.random() * 2 + 1.2);
-            lastMonthBillable = billable;
+    // Generate data for the last 3 months
+    for (const row of MOCK_USAGE_ROWS) {
+        let lastMonthRaw = Math.random() * 2e7;
+        let lastMonthBillable = lastMonthRaw * (Math.random() * 0.4 + 0.4);
+
+        for (let i = 2; i >= 0; i--) { // Loop from 2 down to 0 to generate oldest data first
+            const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+            
+            const rawFluctuation = (Math.random() - 0.45); // Fluctuate up or down
+            const billableRatio = (Math.random() * 0.4 + 0.4); // Billable is 40-80% of raw
+            
+            const raw = Math.max(0, lastMonthRaw * (1 + rawFluctuation));
+            // Some rows have 0 billable MAR as per screenshot
+            const billable = Math.random() > 0.3 ? raw * billableRatio : 0;
+
+            lastMonthRaw = raw;
 
             usageHistory.push({
                  accounts_timeline_date_month: `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`,
-                 connections_table_timeline_table_name: integration.name,
-                 connections_group_name: integration.group,
-                 connections_warehouse_subtype: warehouse,
-                 connections_timeline_service_eom: integration.service,
-                 connections_table_timeline_raw_volume_updated: raw,
-                 connections_table_timeline_total_billable_volume: billable,
+                 connections_table_timeline_table_name: row.table,
+                 connections_group_name: row.group,
+                 connections_warehouse_subtype: row.warehouse,
+                 connections_timeline_service_eom: row.service,
+                 connections_table_timeline_raw_volume_updated: Math.round(raw),
+                 connections_table_timeline_total_billable_volume: Math.round(billable),
             });
         }
     }
