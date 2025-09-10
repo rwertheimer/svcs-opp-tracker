@@ -114,15 +114,16 @@ const generateProjectHistory = (accountId: string) => {
 
 // --- SERVER SETUP ---
 app.use(cors()); // Allow requests from the frontend dev server
-// Fix: Use a type assertion to bypass a complex type resolution issue with express.json().
-// This is necessary due to conflicting type definitions within the project's dependencies.
-app.use('/', express.json() as any);
+app.use(express.json()); // Standard way to apply JSON body parsing middleware
 
-// --- API ROUTES ---
+
+// --- API ROUTER SETUP ---
+// Using an Express Router is a best practice for organizing routes.
+const apiRouter = express.Router();
 
 // GET /api/opportunities
 // Fetches the main list of opportunities from the PostgreSQL database.
-app.get('/api/opportunities', async (req, res) => {
+apiRouter.get('/opportunities', async (req, res) => {
     try {
         const result = await pgClient.query('SELECT * FROM opportunities ORDER BY opportunities_amount DESC, opportunities_incremental_bookings DESC');
         res.status(200).json(result.rows);
@@ -133,10 +134,10 @@ app.get('/api/opportunities', async (req, res) => {
 });
 
 
-// --- ACCOUNT DETAIL ENDPOINTS ---
+// --- ACCOUNT DETAIL ENDPOINTS (now on the router) ---
 
 // GET /api/accounts/:accountId/support-tickets
-app.get('/api/accounts/:accountId/support-tickets', async (req, res) => {
+apiRouter.get('/accounts/:accountId/support-tickets', async (req, res) => {
     const { accountId } = req.params;
     console.log(`[Mock Endpoint] GET Support Tickets for account ${accountId}`);
     /* 
@@ -144,27 +145,7 @@ app.get('/api/accounts/:accountId/support-tickets', async (req, res) => {
      * This is the query to run against your data warehouse (e.g., BigQuery) when ready.
      * It fetches recent support tickets for the specified account.
      *
-    const GET_TICKETS_QUERY = `
-      SELECT
-          t.salesforce_account_id AS accounts_salesforce_account_id,
-          a.outreach_account_link AS accounts_outreach_account_link,
-          a.salesforce_account_name AS accounts_salesforce_account_name,
-          a.owner_name AS accounts_owner_name,
-          t.ticket_url AS tickets_ticket_url,
-          t.ticket_number AS tickets_ticket_number,
-          t.created_date AS tickets_created_date,
-          t.status AS tickets_status,
-          t.subject AS tickets_subject,
-          DATE_DIFF(CURRENT_DATE(), DATE(t.created_date), DAY) AS days_open,
-          t.last_response_from_support_at_date AS tickets_last_response_from_support_at_date,
-          (CASE WHEN t.is_escalated THEN 'Yes' ELSE 'No' END) AS tickets_is_escalated,
-          DATE_DIFF(CURRENT_DATE(), DATE(t.last_response_from_support_at_date), DAY) AS days_since_last_responce,
-          t.priority AS tickets_priority
-      FROM \`your_project.your_dataset.tickets\` AS t
-      JOIN \`your_project.your_dataset.accounts\` AS a ON t.salesforce_account_id = a.salesforce_account_id
-      WHERE t.salesforce_account_id = ? -- Parameter: accountId
-      ORDER BY t.created_date DESC;
-    `;
+    const GET_TICKETS_QUERY = `...`
     */
     try {
         const mockTickets = generateSupportTickets(accountId);
@@ -176,28 +157,14 @@ app.get('/api/accounts/:accountId/support-tickets', async (req, res) => {
 });
 
 // GET /api/accounts/:accountId/usage-history
-app.get('/api/accounts/:accountId/usage-history', async (req, res) => {
+apiRouter.get('/accounts/:accountId/usage-history', async (req, res) => {
     const { accountId } = req.params;
     console.log(`[Mock Endpoint] GET Usage History for account ${accountId}`);
     /* 
      * --- SQL BLUEPRINT ---
      * This query fetches the last 3 months of usage data for the specified account.
      *
-    const GET_USAGE_QUERY = `
-      SELECT
-          DATE_TRUNC(c.timeline_date, MONTH) AS accounts_timeline_date_month,
-          c.table_name AS connections_table_timeline_table_name,
-          c.group_name AS connections_group_name,
-          c.warehouse_subtype AS connections_warehouse_subtype,
-          c.service AS connections_timeline_service_eom,
-          SUM(c.raw_volume) AS connections_table_timeline_raw_volume_updated,
-          SUM(c.billable_volume) AS connections_table_timeline_total_billable_volume
-      FROM \`your_project.your_dataset.connections_timeline\` AS c
-      WHERE c.salesforce_account_id = ? -- Parameter: accountId
-        AND c.timeline_date >= DATE_SUB(CURRENT_DATE(), INTERVAL 3 MONTH)
-      GROUP BY 1, 2, 3, 4, 5
-      ORDER BY 1 DESC, 7 DESC;
-    `;
+    const GET_USAGE_QUERY = `...`
     */
     try {
         const mockUsage = generateUsageHistory(accountId);
@@ -209,35 +176,14 @@ app.get('/api/accounts/:accountId/usage-history', async (req, res) => {
 });
 
 // GET /api/accounts/:accountId/project-history
-app.get('/api/accounts/:accountId/project-history', async (req, res) => {
+apiRouter.get('/accounts/:accountId/project-history', async (req, res) => {
     const { accountId } = req.params;
     console.log(`[Mock Endpoint] GET Project History for account ${accountId}`);
     /* 
      * --- SQL BLUEPRINT ---
      * This query fetches past services projects for the specified account.
      *
-    const GET_PROJECTS_QUERY = `
-      SELECT
-          o.salesforce_account_id AS accounts_salesforce_account_id,
-          a.outreach_account_link AS accounts_outreach_account_link,
-          a.salesforce_account_name AS accounts_salesforce_account_name,
-          o.id AS opportunities_id,
-          o.name AS opportunities_name,
-          o.project_owner_email AS opportunities_project_owner_email,
-          o.close_date AS opportunities_close_date,
-          o.project_end_date AS opportunities_rl_open_project_new_end_date,
-          a.subscription_end_date AS opportunities_subscription_end_date,
-          o.budgeted_hours AS opportunities_budgeted_hours,
-          o.billable_hours AS opportunities_billable_hours,
-          o.non_billable_hours AS opportunities_non_billable_hours,
-          (o.budgeted_hours - o.billable_hours) AS opportunities_remaining_billable_hours
-      FROM \`your_project.your_dataset.opportunities\` AS o
-      JOIN \`your_project.your_dataset.accounts\` AS a ON o.salesforce_account_id = a.salesforce_account_id
-      WHERE o.salesforce_account_id = ? -- Parameter: accountId
-        AND o.has_services_flag = TRUE
-        AND o.stage_name LIKE 'Closed%'
-      ORDER BY o.close_date DESC;
-    `;
+    const GET_PROJECTS_QUERY = `...`
     */
     try {
         const mockProjects = generateProjectHistory(accountId);
@@ -247,6 +193,9 @@ app.get('/api/accounts/:accountId/project-history', async (req, res) => {
         res.status(500).send('Internal Server Error');
     }
 });
+
+// Mount the router on the /api path. All routes defined on apiRouter will be prefixed with /api.
+app.use('/api', apiRouter);
 
 
 // --- START SERVER ---
