@@ -1,5 +1,4 @@
-
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import type { Opportunity, AccountDetails, SupportTicket, UsageData, ProjectHistory, Disposition } from '../types';
 import Card from './Card';
 import Tag from './Tag';
@@ -13,6 +12,14 @@ interface OpportunityDetailProps {
   onBack: () => void;
   onSave: (disposition: Disposition) => void;
 }
+
+const SECTIONS = [
+    { id: 'usage-history', label: 'Usage', icon: ICONS.table },
+    { id: 'support-summary', label: 'Support', icon: ICONS.ticket },
+    { id: 'historical-opps', label: 'Opp History', icon: ICONS.history },
+    { id: 'past-projects', label: 'Projects', icon: ICONS.briefcase },
+    { id: 'disposition', label: 'Disposition', icon: ICONS.clipboard },
+];
 
 const formatCurrency = (amount: number) => {
     if (!amount) return '$0';
@@ -270,7 +277,7 @@ const HistoricalOpportunitiesList: React.FC<{ opportunities: Opportunity[] }> = 
     }
 
     return (
-        <div className="overflow-auto max-h-72">
+        <div className="overflow-auto max-h-96">
             <table className="w-full text-sm text-left">
                 <thead className="text-xs text-slate-600 uppercase bg-slate-50 sticky top-0">
                     <tr>
@@ -311,14 +318,44 @@ const HistoricalOpportunitiesList: React.FC<{ opportunities: Opportunity[] }> = 
 
 
 const OpportunityDetail: React.FC<OpportunityDetailProps> = ({ opportunity, details, historicalOpportunities, onBack, onSave }) => {
+  const [activeSection, setActiveSection] = useState<string>(SECTIONS[0].id);
+  const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  useEffect(() => {
+      const observer = new IntersectionObserver(
+          (entries) => {
+              entries.forEach(entry => {
+                  if (entry.isIntersecting) {
+                      setActiveSection(entry.target.id);
+                  }
+              });
+          },
+          { rootMargin: '-20% 0px -80% 0px' } // Trigger when section is in the middle 20% of the viewport
+      );
+
+      Object.values(sectionRefs.current).forEach(ref => {
+          if (ref) observer.observe(ref);
+      });
+
+      return () => {
+          Object.values(sectionRefs.current).forEach(ref => {
+              if (ref) observer.unobserve(ref);
+          });
+      };
+  }, []);
+
   return (
     <div className="animate-fade-in">
+      <style>{`
+        html { scroll-behavior: smooth; }
+        .scroll-mt-24 { scroll-margin-top: 6rem; }
+      `}</style>
       <button onClick={onBack} className="mb-6 flex items-center space-x-2 text-sm font-semibold text-indigo-600 hover:text-indigo-800 transition">
         {ICONS.arrowLeft}
         <span>Back to Opportunities</span>
       </button>
 
-      <header className="mb-8 p-4 bg-white rounded-lg shadow-md">
+      <header className="mb-4 p-4 bg-white rounded-lg shadow-md">
         <p className="text-sm text-indigo-600 font-semibold">{opportunity.accounts_salesforce_account_name} / {opportunity.accounts_region_name}</p>
         <h2 className="text-3xl font-bold text-slate-800 mt-1">{opportunity.opportunities_name}</h2>
         <div className="mt-2 text-sm text-slate-500 flex items-center space-x-4">
@@ -327,35 +364,62 @@ const OpportunityDetail: React.FC<OpportunityDetailProps> = ({ opportunity, deta
         </div>
       </header>
 
-      <div className="space-y-6">
-        {/* Row 1: Full-width Usage History */}
-        <Card title="Account Usage History (Last 3 Months)" icon={ICONS.table}>
-            <UsageHistoryTable usage={details.usageHistory} />
-        </Card>
+      <nav className="sticky top-16 z-10 bg-slate-50/80 backdrop-blur-sm border-b border-slate-200 mb-6">
+          <div className="flex items-center justify-center space-x-4">
+              {SECTIONS.map(section => {
+                  const isActive = activeSection === section.id;
+                  return (
+                      <a 
+                          key={section.id} 
+                          href={`#${section.id}`}
+                          className={`flex items-center space-x-2 px-3 py-3 text-sm font-semibold border-b-2 transition-all ${
+                              isActive 
+                              ? 'border-indigo-600 text-indigo-600' 
+                              : 'border-transparent text-slate-500 hover:text-indigo-500 hover:border-slate-300'
+                          }`}
+                      >
+                          <div className="h-5 w-5">{section.icon}</div>
+                          <span className="hidden sm:inline">{section.label}</span>
+                      </a>
+                  );
+              })}
+          </div>
+      </nav>
 
-        {/* Row 2: Two-column section for Support & Historical Opps */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2">
-                <Card title="Account Support Summary" icon={ICONS.ticket}>
-                    <SupportTickets tickets={details.supportTickets} />
-                </Card>
-            </div>
+      <div className="space-y-8">
+        {/* Fix: Changed ref callback to have a void return type to match React's Ref type. */}
+        <div id="usage-history" ref={el => { sectionRefs.current['usage-history'] = el; }} className="scroll-mt-24">
+            <Card title="Account Usage History (Last 3 Months)" icon={ICONS.table}>
+                <UsageHistoryTable usage={details.usageHistory} />
+            </Card>
+        </div>
+
+        {/* Fix: Changed ref callback to have a void return type to match React's Ref type. */}
+        <div id="support-summary" ref={el => { sectionRefs.current['support-summary'] = el; }} className="scroll-mt-24">
+            <Card title="Account Support Summary" icon={ICONS.ticket}>
+                <SupportTickets tickets={details.supportTickets} />
+            </Card>
+        </div>
             
+        {/* Fix: Changed ref callback to have a void return type to match React's Ref type. */}
+        <div id="historical-opps" ref={el => { sectionRefs.current['historical-opps'] = el; }} className="scroll-mt-24">
             <Card title="Historical Opportunities" icon={ICONS.history}>
                 <HistoricalOpportunitiesList opportunities={historicalOpportunities} />
             </Card>
         </div>
 
-        {/* Row 3: Full-width Past Projects */}
-        <Card title="Past Services Projects" icon={ICONS.briefcase}>
-            <ProjectHistoryList projects={details.projectHistory} />
-        </Card>
-      </div>
-      
-      <div className="mt-8">
-        <DispositionForm onSave={onSave} initialDisposition={opportunity.disposition} />
-      </div>
+        {/* Fix: Changed ref callback to have a void return type to match React's Ref type. */}
+        <div id="past-projects" ref={el => { sectionRefs.current['past-projects'] = el; }} className="scroll-mt-24">
+            <Card title="Past Services Projects" icon={ICONS.briefcase}>
+                <ProjectHistoryList projects={details.projectHistory} />
+            </Card>
+        </div>
 
+        {/* Fix: Changed ref callback to have a void return type to match React's Ref type. */}
+        <div id="disposition" ref={el => { sectionRefs.current['disposition'] = el; }} className="scroll-mt-24">
+            <DispositionForm onSave={onSave} initialDisposition={opportunity.disposition} />
+        </div>
+      </div>
     </div>
   );
 };

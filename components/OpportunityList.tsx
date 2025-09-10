@@ -12,6 +12,7 @@ const useResizableColumns = (initialWidths: { [key: string]: number }) => {
 
     const onMouseDown = useCallback((key: string, e: React.MouseEvent<HTMLDivElement>) => {
         e.preventDefault();
+        e.stopPropagation(); // Prevent sort handler on parent from firing
         isResizing.current = key;
         startX.current = e.clientX;
         startWidth.current = columnWidths[key] || 0;
@@ -212,7 +213,7 @@ const OpportunityList: React.FC<OpportunityListProps> = ({
                     </span>
                      <div 
                         onMouseDown={(e) => onMouseDown(key, e)}
-                        className="w-1 h-5 ml-2 cursor-col-resize opacity-0 group-hover:opacity-100 bg-slate-300"
+                        className="w-2 h-5 ml-2 cursor-col-resize opacity-0 group-hover:opacity-100 bg-slate-300"
                      />
                   </div>
                 </th>
