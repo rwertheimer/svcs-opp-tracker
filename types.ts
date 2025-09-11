@@ -157,7 +157,7 @@ export interface ActionItem {
 
 // --- Interfaces for the new Advanced Filter Builder ---
 
-export type FilterField = keyof Opportunity;
+export type FilterField = string;
 
 export type FilterOperator = 
   // Text

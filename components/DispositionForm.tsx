@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Opportunity, ActionItem, Disposition, ActionItemStatus, DispositionStatus, Document } from '../types';
-import { ICONS } from '../constants';
+import { ICONS, FORECAST_CATEGORIES } from '../constants';
 
 const defaultActionItems: Omit<ActionItem, 'id' | 'documents'>[] = [
     { name: 'Initial Scoping Call', status: ActionItemStatus.NotStarted, dueDate: '', notes: '' },
@@ -9,8 +9,6 @@ const defaultActionItems: Omit<ActionItem, 'id' | 'documents'>[] = [
     { name: 'Revise and Finalize Proposal', status: ActionItemStatus.NotStarted, dueDate: '', notes: '' },
     { name: 'Approvals', status: ActionItemStatus.NotStarted, dueDate: '', notes: '' },
 ];
-
-const FORECAST_CATEGORIES = ['Commit', 'Best Case', 'Pipeline', 'Omitted'];
 
 interface DispositionFormProps {
     onSave: (disposition: Disposition) => void;

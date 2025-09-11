@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Opportunity, AccountDetails, Disposition, SavedFilter, TaskWithOpportunityContext, ActionItem, FilterGroup } from './types';
 import { fetchOpportunities, fetchOpportunityDetails } from './services/apiService';
@@ -14,6 +13,11 @@ const initialFilterGroup: FilterGroup = {
     id: 'root',
     combinator: 'AND',
     rules: [],
+};
+
+// Helper to safely access nested property values using a dot-notation string.
+const getNestedValue = (obj: any, path: string): any => {
+  return path.split('.').reduce((acc, part) => acc && acc[part], obj);
 };
 
 const App: React.FC = () => {
@@ -52,7 +56,7 @@ const App: React.FC = () => {
       if ('combinator' in rule) { // It's a nested group
         return evaluateFilterGroup(opp, rule);
       } else { // It's a rule
-        const value = opp[rule.field];
+        const value = getNestedValue(opp, rule.field);
         if (value === null || value === undefined) return false;
         
         const ruleValue = rule.value;
@@ -60,10 +64,10 @@ const App: React.FC = () => {
 
         switch (rule.operator) {
           // Text
-          case 'contains': return oppValue.toString().includes(ruleValue.toLowerCase());
-          case 'not_contains': return !oppValue.toString().includes(ruleValue.toLowerCase());
-          case 'equals': return oppValue === ruleValue.toLowerCase();
-          case 'not_equals': return oppValue !== ruleValue.toLowerCase();
+          case 'contains': return oppValue.toString().toLowerCase().includes(ruleValue.toLowerCase());
+          case 'not_contains': return !oppValue.toString().toLowerCase().includes(ruleValue.toLowerCase());
+          case 'equals': return oppValue.toString().toLowerCase() === ruleValue.toLowerCase();
+          case 'not_equals': return oppValue.toString().toLowerCase() !== ruleValue.toLowerCase();
           // Number
           case 'eq': return oppValue === Number(ruleValue);
           case 'neq': return oppValue !== Number(ruleValue);

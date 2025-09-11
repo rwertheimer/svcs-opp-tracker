@@ -207,10 +207,9 @@ apiRouter.get('/accounts/:accountId/project-history', async (req, res) => {
 });
 
 // Mount the router on the /api path. All routes defined on apiRouter will be prefixed with /api.
-// Fix: The previous combined middleware registration was causing a TypeScript overload error.
-// Splitting them into separate calls resolves the ambiguity for the compiler and is a standard Express practice.
-app.use('/api', express.json());
-app.use('/api', apiRouter);
+// Fix: A previous attempt to fix a TypeScript overload error by splitting middleware registration
+// was not successful. Combining them into a single array of handlers resolves the type ambiguity.
+app.use('/api', [express.json(), apiRouter]);
 
 
 // --- START SERVER ---

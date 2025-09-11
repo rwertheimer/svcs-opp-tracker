@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Opportunity, FilterGroup, FilterRule, FilterField, FilterOperator, FilterCombinator } from '../types';
-import { ICONS } from '../constants';
+import { ICONS, FORECAST_CATEGORIES, DISPOSITION_STATUSES } from '../constants';
 
 interface AdvancedFilterBuilderProps {
     isOpen: boolean;
@@ -9,7 +9,12 @@ interface AdvancedFilterBuilderProps {
     initialFilters: FilterGroup;
 }
 
-const OPPORTUNITY_FIELDS: { value: FilterField; label: string; type: 'text' | 'number' | 'date' | 'select' }[] = [
+const OPPORTUNITY_FIELDS: { 
+    value: FilterField; 
+    label: string; 
+    type: 'text' | 'number' | 'date' | 'select';
+    options?: readonly string[];
+}[] = [
     { value: 'accounts_salesforce_account_name', label: 'Account Name', type: 'text' },
     { value: 'opportunities_name', label: 'Opportunity Name', type: 'text' },
     { value: 'opportunities_owner_name', label: 'Owner Name', type: 'text' },
@@ -19,7 +24,11 @@ const OPPORTUNITY_FIELDS: { value: FilterField; label: string; type: 'text' | 'n
     { value: 'opportunities_incremental_bookings', label: 'Incr. Bookings', type: 'number' },
     { value: 'opportunities_amount_services', label: 'Services Amount', type: 'number' },
     { value: 'opportunities_close_date', label: 'Close Date', type: 'date' },
-    { value: 'opportunities_has_services_flag', label: 'Services Attached', type: 'select' },
+    { value: 'opportunities_has_services_flag', label: 'Services Attached', type: 'select', options: ['Yes', 'No'] },
+    // --- New Filterable Fields ---
+    { value: 'disposition.status', label: 'Disposition Status', type: 'select', options: DISPOSITION_STATUSES },
+    { value: 'opportunities_forecast_category', label: 'SFDC Forecast Category', type: 'select', options: FORECAST_CATEGORIES },
+    { value: 'disposition.forecast_category_override', label: 'SA Forecast Category', type: 'select', options: FORECAST_CATEGORIES },
     // --- Expanded non-visible fields ---
     { value: 'opportunities_manager_of_opp_email', label: 'Manager Email', type: 'text' },
     { value: 'accounts_se_territory_owner_email', label: 'SE Owner Email', type: 'text' },
@@ -75,8 +84,10 @@ const FilterRuleComponent: React.FC<{ rule: FilterRule; onChange: (rule: FilterR
             case 'select':
                 return (
                     <select value={rule.value} onChange={e => onChange({ ...rule, value: e.target.value })} className="w-full p-1 border border-slate-300 rounded-md shadow-sm text-sm bg-white">
-                        <option value="Yes">Yes</option>
-                        <option value="No">No</option>
+                        <option value="">Select...</option>
+                        {selectedField.options?.map(opt => (
+                            <option key={opt} value={opt}>{opt}</option>
+                        ))}
                     </select>
                 );
             default: // text
@@ -86,7 +97,7 @@ const FilterRuleComponent: React.FC<{ rule: FilterRule; onChange: (rule: FilterR
 
     return (
         <div className="flex items-center space-x-2">
-            <select value={rule.field} onChange={e => handleFieldChange(e.target.value as FilterField)} className="w-40 p-1 border border-slate-300 rounded-md shadow-sm text-sm bg-white">
+            <select value={rule.field} onChange={e => handleFieldChange(e.target.value as FilterField)} className="w-48 p-1 border border-slate-300 rounded-md shadow-sm text-sm bg-white">
                 {OPPORTUNITY_FIELDS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
             </select>
             <select value={rule.operator} onChange={e => onChange({ ...rule, operator: e.target.value as FilterOperator })} className="w-32 p-1 border border-slate-300 rounded-md shadow-sm text-sm bg-white">
@@ -177,7 +188,7 @@ const AdvancedFilterBuilder: React.FC<AdvancedFilterBuilderProps> = ({ isOpen, o
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-40 flex justify-center items-start pt-16" onClick={onClose}>
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl m-4 animate-fade-in-up" onClick={e => e.stopPropagation()}>
+            <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl m-4 animate-fade-in-up" onClick={e => e.stopPropagation()}>
                 <div className="p-4 border-b flex justify-between items-center">
                     <h2 className="text-lg font-bold text-slate-800">Advanced Filter Builder</h2>
                     <button onClick={onClose} className="text-slate-400 hover:text-slate-600">{ICONS.xMark}</button>
