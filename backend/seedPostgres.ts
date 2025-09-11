@@ -73,7 +73,7 @@ const OPPORTUNITIES_QUERY = `
         CAST(DATE(opportunities.close_date) AS STRING) AS opportunities_close_date,
         -- Forecasting Fields
         opportunities.primary_forecast_category_c AS opportunities_forecast_category,
-        CAST(opportunities.services_forecast_c AS FLOAT64) AS opportunities_services_forecast_sfdc,
+        SAFE_CAST(opportunities.services_forecast_c AS FLOAT64) AS opportunities_services_forecast_sfdc,
         -- Aggregations
         CAST(COALESCE(SUM(opportunities.incremental_bookings_forecast_c ), 0) AS FLOAT64) AS opportunities_incremental_bookings,
         CAST(COALESCE(SUM(opportunities.amount ), 0) AS FLOAT64) AS opportunities_amount
