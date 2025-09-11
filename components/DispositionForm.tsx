@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ActionItem, Disposition, ActionItemStatus, DispositionStatus, Document } from '../types';
+import { Opportunity, ActionItem, Disposition, ActionItemStatus, DispositionStatus, Document } from '../types';
 import { ICONS } from '../constants';
 
 const defaultActionItems: Omit<ActionItem, 'id' | 'documents'>[] = [
@@ -10,13 +10,15 @@ const defaultActionItems: Omit<ActionItem, 'id' | 'documents'>[] = [
     { name: 'Approvals', status: ActionItemStatus.NotStarted, dueDate: '', notes: '' },
 ];
 
+const FORECAST_CATEGORIES = ['Commit', 'Best Case', 'Pipeline', 'Omitted'];
+
 interface DispositionFormProps {
     onSave: (disposition: Disposition) => void;
-    initialDisposition?: Disposition;
+    opportunity: Opportunity;
 }
 
-const DispositionForm: React.FC<DispositionFormProps> = ({ onSave, initialDisposition }) => {
-  const [disposition, setDisposition] = useState<Disposition>(initialDisposition || {
+const DispositionForm: React.FC<DispositionFormProps> = ({ onSave, opportunity }) => {
+  const [disposition, setDisposition] = useState<Disposition>(opportunity.disposition || {
     status: 'Not Reviewed',
     notes: '',
     actionItems: [],
@@ -26,10 +28,13 @@ const DispositionForm: React.FC<DispositionFormProps> = ({ onSave, initialDispos
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (initialDisposition) {
-      setDisposition(initialDisposition);
-    }
-  }, [initialDisposition]);
+    setDisposition(opportunity.disposition || {
+        status: 'Not Reviewed',
+        notes: '',
+        actionItems: [],
+        reason: ''
+    });
+  }, [opportunity.disposition]);
 
   const handleSetDispositionStatus = (status: DispositionStatus) => {
     setDisposition(prev => {
@@ -41,7 +46,8 @@ const DispositionForm: React.FC<DispositionFormProps> = ({ onSave, initialDispos
             }
         } else {
             newState.actionItems = [];
-            if (status !== 'No Services Opp') {
+             // Clear reason unless it's a "No Action Needed" on an opp without services
+            if (status !== 'No Action Needed' || (status === 'No Action Needed' && opportunity.opportunities_has_services_flag === 'Yes')) {
                 newState.reason = '';
             }
         }
@@ -127,6 +133,8 @@ const DispositionForm: React.FC<DispositionFormProps> = ({ onSave, initialDispos
   const handleSubmit = () => {
     onSave(disposition);
   };
+  
+  const formatCurrency = (amount: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(amount);
 
   return (
     <div className="bg-white rounded-lg shadow-lg">
@@ -143,8 +151,8 @@ const DispositionForm: React.FC<DispositionFormProps> = ({ onSave, initialDispos
                         <button onClick={() => handleSetDispositionStatus('Services Fit')} className={`px-4 py-2 rounded-md text-sm font-semibold flex items-center space-x-2 transition ${disposition.status === 'Services Fit' ? 'bg-green-600 text-white shadow' : 'bg-white text-slate-700 border hover:bg-green-50'}`}>
                             {ICONS.check} <span>Services Fit</span>
                         </button>
-                        <button onClick={() => handleSetDispositionStatus('No Services Opp')} className={`px-4 py-2 rounded-md text-sm font-semibold flex items-center space-x-2 transition ${disposition.status === 'No Services Opp' ? 'bg-red-600 text-white shadow' : 'bg-white text-slate-700 border hover:bg-red-50'}`}>
-                            {ICONS.xMark} <span>No Services Opp</span>
+                        <button onClick={() => handleSetDispositionStatus('No Action Needed')} className={`px-4 py-2 rounded-md text-sm font-semibold flex items-center space-x-2 transition ${disposition.status === 'No Action Needed' ? 'bg-red-600 text-white shadow' : 'bg-white text-slate-700 border hover:bg-red-50'}`}>
+                            {ICONS.xMark} <span>No Action Needed</span>
                         </button>
                          <button onClick={() => handleSetDispositionStatus('Watchlist')} className={`px-4 py-2 rounded-md text-sm font-semibold flex items-center space-x-2 transition ${disposition.status === 'Watchlist' ? 'bg-blue-600 text-white shadow' : 'bg-white text-slate-700 border hover:bg-blue-50'}`}>
                             {ICONS.eye} <span>Watchlist</span>
@@ -152,7 +160,7 @@ const DispositionForm: React.FC<DispositionFormProps> = ({ onSave, initialDispos
                     </div>
                 </div>
 
-                {disposition.status === 'No Services Opp' && (
+                {disposition.status === 'No Action Needed' && opportunity.opportunities_has_services_flag === 'No' && (
                     <div className="animate-fade-in">
                         <label htmlFor="reason" className="block text-sm font-medium text-slate-700 mb-2">Reason for No Services Opp</label>
                         <textarea
@@ -165,12 +173,51 @@ const DispositionForm: React.FC<DispositionFormProps> = ({ onSave, initialDispos
                         />
                     </div>
                 )}
+                
+                {/* --- NEW: Services Forecast Adjustment --- */}
+                {disposition.status === 'Services Fit' && (
+                    <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-lg space-y-4 animate-fade-in">
+                        <h4 className="text-sm font-bold text-slate-800">Services Forecast Adjustment</h4>
+                        <div className="space-y-3">
+                             <div>
+                                <label htmlFor="services-amount-override" className="block text-xs font-medium text-slate-600">SA Adjusted Amount</label>
+                                <div className="mt-1 flex items-center text-sm">
+                                    <span className="text-slate-500 mr-2">SFDC Amount: {formatCurrency(opportunity.opportunities_amount_services)}</span>
+                                    <input
+                                        id="services-amount-override"
+                                        type="number"
+                                        step="1000"
+                                        className="w-full p-1 border border-slate-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+                                        placeholder="Enter override amount"
+                                        value={disposition.services_amount_override ?? ''}
+                                        onChange={e => setDisposition(prev => ({ ...prev, services_amount_override: e.target.value === '' ? undefined : Number(e.target.value) }))}
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <label htmlFor="forecast-category-override" className="block text-xs font-medium text-slate-600">SA Adjusted Category</label>
+                                <div className="mt-1 flex items-center text-sm">
+                                     <span className="text-slate-500 mr-2">SFDC Category: {opportunity.opportunities_forecast_category}</span>
+                                     <select
+                                        id="forecast-category-override"
+                                        className="w-full p-1 bg-white border border-slate-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+                                        value={disposition.forecast_category_override ?? ''}
+                                        onChange={e => setDisposition(prev => ({ ...prev, forecast_category_override: e.target.value === '' ? undefined : e.target.value }))}
+                                     >
+                                        <option value="">Use SFDC Category</option>
+                                        {FORECAST_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                                     </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 <div>
                     <label htmlFor="notes" className="block text-sm font-medium text-slate-700 mb-2">General Notes</label>
                     <textarea
                         id="notes"
-                        rows={disposition.status === 'No Services Opp' ? 6 : 8}
+                        rows={disposition.status === 'No Action Needed' ? 6 : 8}
                         className="w-full p-2 border border-slate-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 transition-all"
                         placeholder="e.g., Customer is planning a major migration from Salesforce Classic to Lightning..."
                         value={disposition.notes}

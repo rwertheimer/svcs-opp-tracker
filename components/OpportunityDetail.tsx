@@ -435,7 +435,7 @@ const OpportunityDetail: React.FC<OpportunityDetailProps> = ({ opportunity, deta
 
         {/* Fix: Changed ref callback to have a void return type to match React's Ref type. */}
         <div id="disposition" ref={el => { sectionRefs.current['disposition'] = el; }} className="scroll-mt-24">
-            <DispositionForm onSave={onSave} initialDisposition={opportunity.disposition} />
+            <DispositionForm onSave={onSave} opportunity={opportunity} />
         </div>
       </div>
     </div>

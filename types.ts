@@ -24,7 +24,7 @@ export enum ActionItemStatus {
     Completed = 'Completed',
 }
 
-export type DispositionStatus = 'Services Fit' | 'No Services Opp' | 'Not Reviewed' | 'Watchlist';
+export type DispositionStatus = 'Services Fit' | 'No Action Needed' | 'Not Reviewed' | 'Watchlist';
 
 /**
  * Based on the "full opportunities table" SQL query.
@@ -57,6 +57,11 @@ export interface Opportunity {
     opportunities_close_date: string; // Added new close date field
     opportunities_incremental_bookings: number;
     opportunities_amount: number;
+
+    // --- New fields for Forecasting ---
+    opportunities_forecast_category: string; // From SFDC, e.g., 'Commit', 'Best Case'
+    opportunities_services_forecast_sfdc: number; // The calculated forecast from SFDC
+
     // App-specific state, not from BigQuery
     disposition?: Disposition;
 }
@@ -130,6 +135,9 @@ export interface Disposition {
     notes: string;
     actionItems: ActionItem[];
     reason?: string;
+    // --- New fields for Forecasting Overrides ---
+    services_amount_override?: number;
+    forecast_category_override?: string;
 }
 
 export interface Document {

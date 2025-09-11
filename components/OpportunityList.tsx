@@ -144,6 +144,23 @@ const OpportunityList: React.FC<OpportunityListProps> = ({
     setNewViewName('');
   }
 
+  const renderServicesAmount = (opp: Opportunity) => {
+    const sfdcAmount = opp.opportunities_amount_services;
+    const overrideAmount = opp.disposition?.services_amount_override;
+
+    if (overrideAmount !== undefined && overrideAmount !== null && overrideAmount !== sfdcAmount) {
+      return (
+        <div className="flex items-center justify-end space-x-2" title={`SA Adjusted Amount. Original SFDC amount was ${formatCurrency(sfdcAmount)}.`}>
+          <span className="font-bold text-indigo-700">{formatCurrency(overrideAmount)}</span>
+          <span className="text-slate-400 line-through text-xs">{formatCurrency(sfdcAmount)}</span>
+          <span className="text-slate-400">{ICONS.pencil}</span>
+        </div>
+      );
+    }
+    
+    return formatCurrency(sfdcAmount);
+  };
+
   return (
     <div className="bg-white rounded-lg shadow-lg overflow-hidden">
         <div className="p-4 border-b flex justify-between items-center">
@@ -250,11 +267,11 @@ const OpportunityList: React.FC<OpportunityListProps> = ({
                     <div className="flex items-center justify-center space-x-2">
                         <Tag status={opp.opportunities_has_services_flag} />
                         {opp.disposition?.status === 'Services Fit' && <span className="text-green-500" title="Disposition: Services Fit">{ICONS.checkCircle}</span>}
-                        {opp.disposition?.status === 'No Services Opp' && <span className="text-red-500" title="Disposition: No Services Opp">{ICONS.xCircle}</span>}
+                        {opp.disposition?.status === 'No Action Needed' && <span className="text-red-500" title="Disposition: No Action Needed">{ICONS.xCircle}</span>}
                         {opp.disposition?.status === 'Watchlist' && <span className="text-blue-500" title="Disposition: Watchlist">{ICONS.eye}</span>}
                    </div>
                 </td>
-                <td className="px-4 py-3 text-right whitespace-nowrap">{formatCurrency(opp.opportunities_amount_services)}</td>
+                <td className="px-4 py-3 text-right whitespace-nowrap">{renderServicesAmount(opp)}</td>
               </tr>
             ))}
           </tbody>

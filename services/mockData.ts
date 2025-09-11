@@ -23,6 +23,7 @@ const MOCK_REPS = ['Alice Johnson', 'Bob Williams', 'Charlie Brown', 'Diana Mill
 const MOCK_REGIONS = ['NA - Enterprise', 'NA - Commercial', 'EMEA', 'APAC'];
 const MOCK_STAGES = Object.values(OpportunityStage).filter(s => s !== OpportunityStage.PreSalesScoping);
 const MOCK_OPP_TYPES = ['Renewal', 'New Business', 'Upsell', 'Expansion', 'Sales'];
+const MOCK_FORECAST_CATEGORIES = ['Commit', 'Best Case', 'Pipeline', 'Omitted'];
 
 // --- Realistic data for the Usage History Table ---
 const MOCK_USAGE_ROWS = [
@@ -136,6 +137,7 @@ const generatePreDispositionedOpp = (): Opportunity => {
         { id: 'task-5', name: 'Approvals', status: ActionItemStatus.NotStarted, dueDate: createFutureDate(21), notes: '', documents: [] },
     ];
     const closeDate = createFutureDate(45);
+    const servicesAmount = 25000;
 
     return {
         opportunities_id: 'demo-fit-opp-123',
@@ -147,7 +149,7 @@ const generatePreDispositionedOpp = (): Opportunity => {
         opportunities_automated_renewal_status: 'Auto-renews',
         accounts_dollars_months_left: 6,
         opportunities_has_services_flag: 'Yes',
-        opportunities_amount_services: 25000,
+        opportunities_amount_services: servicesAmount,
         accounts_outreach_account_link: 'http://example.com',
         accounts_salesforce_account_name: 'Stark Industries',
         accounts_primary_fivetran_account_status: 'Active',
@@ -165,6 +167,8 @@ const generatePreDispositionedOpp = (): Opportunity => {
         opportunities_close_date: closeDate,
         opportunities_incremental_bookings: 150000,
         opportunities_amount: 500000,
+        opportunities_forecast_category: 'Commit',
+        opportunities_services_forecast_sfdc: servicesAmount * 0.9,
         disposition: {
             status: 'Services Fit',
             notes: 'This is a high-priority opportunity. Customer wants to migrate their legacy Oracle DB to Snowflake and needs significant help with the data replication strategy.',
@@ -181,6 +185,8 @@ export const generateOpportunities = (count: number): Opportunity[] => {
 
     for (let i = 0; i < count -1; i++) {
         const accountName = getRandomElement(MOCK_ACCOUNTS);
+        const servicesAmount = Math.floor(Math.random() * 5) * 5000;
+        const forecastCategory = getRandomElement(MOCK_FORECAST_CATEGORIES);
 
         // Ensure some opportunities match the default filter criteria
         const isNAregion = Math.random() > 0.3;
@@ -197,7 +203,7 @@ export const generateOpportunities = (count: number): Opportunity[] => {
             opportunities_automated_renewal_status: getRandomElement(['Auto-renews', 'Does not auto-renew']),
             accounts_dollars_months_left: Math.floor(Math.random() * 12) + 1,
             opportunities_has_services_flag: Math.random() > 0.5 ? 'Yes' : 'No',
-            opportunities_amount_services: Math.floor(Math.random() * 5) * 5000,
+            opportunities_amount_services: servicesAmount,
             accounts_outreach_account_link: 'http://example.com',
             accounts_salesforce_account_name: accountName,
             accounts_primary_fivetran_account_status: 'Active',
@@ -215,6 +221,8 @@ export const generateOpportunities = (count: number): Opportunity[] => {
             opportunities_close_date: closeDate,
             opportunities_incremental_bookings: Math.floor(Math.random() * 50000),
             opportunities_amount: Math.floor(Math.random() * 25 + 5) * 10000,
+            opportunities_forecast_category: forecastCategory,
+            opportunities_services_forecast_sfdc: servicesAmount * (MOCK_FORECAST_CATEGORIES.indexOf(forecastCategory) * 0.25),
             disposition: {
                 status: 'Not Reviewed',
                 notes: '',

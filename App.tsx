@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Opportunity, AccountDetails, Disposition, SavedFilter, TaskWithOpportunityContext, ActionItem, FilterGroup } from './types';
 import { fetchOpportunities, fetchOpportunityDetails } from './services/apiService';
@@ -250,6 +251,9 @@ const App: React.FC = () => {
       opportunities_close_date: new Date().toISOString(),
       opportunities_incremental_bookings: 0,
       opportunities_amount: 0,
+      // FIX: Add missing forecast properties required by the Opportunity type.
+      opportunities_forecast_category: 'N/A',
+      opportunities_services_forecast_sfdc: 0,
       disposition: {
         status: 'Not Reviewed',
         notes: `Initial Contact: ${data.contact}\n\nDescription:\n${data.description}`,
