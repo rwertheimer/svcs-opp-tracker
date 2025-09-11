@@ -66,7 +66,7 @@ const SupportTickets: React.FC<{ tickets: SupportTicket[] }> = ({ tickets }) => 
     }
     
     return (
-        <div className="overflow-x-auto max-h-96">
+        <div className="overflow-auto max-h-96">
             <table className="w-full text-sm text-left">
                 <thead className="text-xs text-slate-600 uppercase bg-slate-50 sticky top-0">
                     <tr>
@@ -177,9 +177,9 @@ const UsageHistoryTable: React.FC<{ usage: UsageData[] }> = ({ usage }) => {
     }
 
     return (
-        <div className="overflow-x-auto">
+        <div className="overflow-auto max-h-96">
             <table className="w-full text-sm text-left">
-                <thead className="text-xs text-slate-600 uppercase bg-slate-50">
+                <thead className="text-xs text-slate-600 uppercase bg-slate-50 sticky top-0">
                     <tr>
                         <th rowSpan={2} className="px-4 py-2 border-b border-slate-300 align-bottom">Table Name</th>
                         <th rowSpan={2} className="px-4 py-2 border-b border-slate-300 align-bottom">Group Name</th>
@@ -249,7 +249,7 @@ const ProjectHistoryList: React.FC<{ projects: ProjectHistory[] }> = ({ projects
     };
 
     return (
-        <div className="overflow-x-auto max-h-72">
+        <div className="overflow-auto max-h-72">
             <table className="w-full text-sm text-left">
                 <thead className="text-xs text-slate-600 uppercase bg-slate-50 sticky top-0">
                     <tr>
@@ -407,21 +407,21 @@ const OpportunityDetail: React.FC<OpportunityDetailProps> = ({ opportunity, deta
       <div className="space-y-8">
         {/* Fix: Changed ref callback to have a void return type to match React's Ref type. */}
         <div id="usage-history" ref={el => { sectionRefs.current['usage-history'] = el; }} className="scroll-mt-24">
-            <Card title="Account Usage History (Last 3 Months)" icon={ICONS.table}>
+            <Card title="Usage History (Last 3 Months)" icon={ICONS.table}>
                 <UsageHistoryTable usage={details.usageHistory} />
             </Card>
         </div>
 
         {/* Fix: Changed ref callback to have a void return type to match React's Ref type. */}
         <div id="support-summary" ref={el => { sectionRefs.current['support-summary'] = el; }} className="scroll-mt-24">
-            <Card title="Account Support Summary" icon={ICONS.ticket}>
+            <Card title="Support Summary" icon={ICONS.ticket}>
                 <SupportTickets tickets={details.supportTickets} />
             </Card>
         </div>
             
         {/* Fix: Changed ref callback to have a void return type to match React's Ref type. */}
         <div id="historical-opps" ref={el => { sectionRefs.current['historical-opps'] = el; }} className="scroll-mt-24">
-            <Card title="Historical Opportunities" icon={ICONS.history}>
+            <Card title="Opportunity History" icon={ICONS.history}>
                 <HistoricalOpportunitiesList opportunities={historicalOpportunities} />
             </Card>
         </div>
