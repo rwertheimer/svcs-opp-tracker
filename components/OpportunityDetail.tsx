@@ -321,11 +321,11 @@ const HistoricalOpportunitiesList: React.FC<{ opportunities: Opportunity[] }> = 
                             <td className="px-4 py-2 text-right font-semibold whitespace-nowrap">{formatCurrency(opp.opportunities_amount)}</td>
                             <td className="px-4 py-2 text-right whitespace-nowrap">{formatCurrency(opp.opportunities_incremental_bookings)}</td>
                             <td className="px-4 py-2 text-center"><Tag status={opp.opportunities_has_services_flag} /></td>
-                            <td className="px-4 py-2">{opp.opportunities_type}</td>
+                            <td className="px-4 py-2 truncate" title={opp.opportunities_type}>{opp.opportunities_type}</td>
                             <td className="px-4 py-2 whitespace-nowrap">{formatDate(opp.opportunities_close_date)}</td>
-                            <td className="px-4 py-2 align-top">{renderMultiValueTags(opp.opportunities_connectors)}</td>
-                            <td className="px-4 py-2 align-top">{renderMultiValueTags(opp.opportunities_connector_tshirt_size_list)}</td>
-                            <td className="px-4 py-2 align-top">{renderMultiValueTags(opp.opportunities_destinations)}</td>
+                            <td className="px-4 py-2">{renderMultiValueTags(opp.opportunities_connectors)}</td>
+                            <td className="px-4 py-2">{renderMultiValueTags(opp.opportunities_connector_tshirt_size_list)}</td>
+                            <td className="px-4 py-2">{renderMultiValueTags(opp.opportunities_destinations)}</td>
                         </tr>
                     ))}
                 </tbody>
@@ -336,110 +336,138 @@ const HistoricalOpportunitiesList: React.FC<{ opportunities: Opportunity[] }> = 
 
 
 const OpportunityDetail: React.FC<OpportunityDetailProps> = ({ opportunity, details, historicalOpportunities, onBack, onSave }) => {
-  const [activeSection, setActiveSection] = useState<string>(SECTIONS[0].id);
-  const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
+    const [activeSection, setActiveSection] = useState('usage-history');
+    const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
 
-  useEffect(() => {
-      const observer = new IntersectionObserver(
-          (entries) => {
-              entries.forEach(entry => {
-                  if (entry.isIntersecting) {
-                      setActiveSection(entry.target.id);
-                  }
-              });
-          },
-          { rootMargin: '-20% 0px -80% 0px' } // Trigger when section is in the middle 20% of the viewport
-      );
+    useEffect(() => {
+        const observer = new IntersectionObserver(
+            (entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        setActiveSection(entry.target.id);
+                    }
+                });
+            },
+            { rootMargin: '-50% 0px -50% 0px', threshold: 0 }
+        );
 
-      Object.values(sectionRefs.current).forEach(ref => {
-          if (ref) observer.observe(ref);
-      });
+        const currentRefs = Object.values(sectionRefs.current);
+        currentRefs.forEach(ref => {
+            if (ref) observer.observe(ref);
+        });
 
-      return () => {
-          Object.values(sectionRefs.current).forEach(ref => {
-              if (ref) observer.unobserve(ref);
-          });
-      };
-  }, []);
+        return () => {
+            currentRefs.forEach(ref => {
+                if (ref) observer.unobserve(ref);
+            });
+        };
+    }, []);
 
-  return (
-    <div className="animate-fade-in">
-      <style>{`
-        html { scroll-behavior: smooth; }
-        .scroll-mt-24 { scroll-margin-top: 6rem; }
-      `}</style>
-      <button onClick={onBack} className="mb-6 flex items-center space-x-2 text-sm font-semibold text-indigo-600 hover:text-indigo-800 transition">
-        {ICONS.arrowLeft}
-        <span>Back to Opportunities</span>
-      </button>
+    const scrollToSection = (id: string) => {
+        sectionRefs.current[id]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    };
+    
+    // FIX: A TypeScript error was present because ref callbacks implicitly returned the element.
+    // Wrapping the assignment in curly braces `{}` ensures a void return type, satisfying React's Ref type.
+    const assignRef = (id: string) => (el: HTMLElement | null) => {
+        sectionRefs.current[id] = el;
+    };
 
-      <header className="mb-4 p-4 bg-white rounded-lg shadow-md">
-        <p className="text-sm text-indigo-600 font-semibold">{opportunity.accounts_salesforce_account_name} / {opportunity.accounts_region_name}</p>
-        <h2 className="text-3xl font-bold text-slate-800 mt-1">{opportunity.opportunities_name}</h2>
-        <div className="mt-2 text-sm text-slate-500 flex items-center space-x-4">
-            <span><strong>Opp Owner:</strong> {opportunity.opportunities_owner_name}</span>
-            <span><strong>Amount:</strong> <span className="font-bold text-green-700">{formatCurrency(opportunity.opportunities_amount)}</span></span>
+
+    return (
+        <div className="animate-fade-in">
+            {/* Header */}
+            <div className="flex justify-between items-start mb-6">
+                <div>
+                    <button onClick={onBack} className="text-sm font-semibold text-indigo-600 hover:text-indigo-800 flex items-center mb-2">
+                        {ICONS.arrowLeft}
+                        <span className="ml-2">Back to List</span>
+                    </button>
+                    <h2 className="text-3xl font-bold text-slate-800">{opportunity.accounts_salesforce_account_name}</h2>
+                    <p className="text-lg text-slate-600 mt-1">{opportunity.opportunities_name}</p>
+                </div>
+                <div className="text-right flex-shrink-0">
+                    <div className="text-3xl font-bold text-green-700">{formatCurrency(opportunity.opportunities_amount)}</div>
+                    <div className="text-sm text-slate-500">Total Opportunity Amount</div>
+                </div>
+            </div>
+
+            {/* Main Content */}
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+                {/* Left Side: Summary Cards */}
+                <div className="lg:col-span-1 space-y-4">
+                     <div className="p-4 bg-white rounded-lg shadow-md space-y-3">
+                        <div className="flex justify-between items-center">
+                            <span className="text-sm font-semibold text-slate-600">Stage</span>
+                            <Tag status={opportunity.opportunities_stage_name} />
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <span className="text-sm font-semibold text-slate-600">Owner</span>
+                            <span className="text-sm text-slate-800">{opportunity.opportunities_owner_name}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <span className="text-sm font-semibold text-slate-600">Close Date</span>
+                            <span className="text-sm text-slate-800">{formatDate(opportunity.opportunities_close_date)}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <span className="text-sm font-semibold text-slate-600">Services Amount</span>
+                            <span className="text-sm font-bold text-indigo-700">{formatCurrency(opportunity.opportunities_amount_services)}</span>
+                        </div>
+                         <div className="flex justify-between items-center">
+                            <span className="text-sm font-semibold text-slate-600">Sub End Date</span>
+                            <span className="text-sm text-slate-800">{formatDate(opportunity.accounts_subscription_end_date)}</span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Right Side: Tabbed Sections */}
+                <div className="lg:col-span-3">
+                    <div className="sticky top-[70px] bg-slate-100 z-10 py-2">
+                         <div className="flex items-center space-x-2 p-1 bg-slate-200 rounded-lg overflow-x-auto">
+                            {SECTIONS.map(section => (
+                                <button
+                                    key={section.id}
+                                    onClick={() => scrollToSection(section.id)}
+                                    className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors flex items-center space-x-2 whitespace-nowrap ${activeSection === section.id ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-600 hover:bg-slate-300'}`}
+                                >
+                                    {section.icon}
+                                    <span>{section.label}</span>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                    <div className="mt-4 space-y-8">
+                        <div id="usage-history" ref={assignRef('usage-history')}>
+                            <Card title="Usage History (Last 3 Months)" icon={ICONS.table}>
+                                <UsageHistoryTable usage={details.usageHistory} />
+                            </Card>
+                        </div>
+                        <div id="support-summary" ref={assignRef('support-summary')}>
+                             <Card title="Support Summary" icon={ICONS.ticket}>
+                                <SupportTickets tickets={details.supportTickets} />
+                            </Card>
+                        </div>
+                        <div id="historical-opps" ref={assignRef('historical-opps')}>
+                             <Card title="Opportunity History" icon={ICONS.history}>
+                                <HistoricalOpportunitiesList opportunities={historicalOpportunities} />
+                            </Card>
+                        </div>
+                        <div id="past-projects" ref={assignRef('past-projects')}>
+                             <Card title="Services History" icon={ICONS.briefcase}>
+                                <ProjectHistoryList projects={details.projectHistory} />
+                            </Card>
+                        </div>
+                         <div id="disposition" ref={assignRef('disposition')}>
+                           <DispositionForm
+                                onSave={onSave}
+                                opportunity={opportunity}
+                            />
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
-      </header>
-
-      <nav className="sticky top-16 z-10 bg-slate-50/80 backdrop-blur-sm border-b border-slate-200 mb-6">
-          <div className="flex items-center justify-center space-x-4">
-              {SECTIONS.map(section => {
-                  const isActive = activeSection === section.id;
-                  return (
-                      <a 
-                          key={section.id} 
-                          href={`#${section.id}`}
-                          className={`flex items-center space-x-2 px-3 py-3 text-sm font-semibold border-b-2 transition-all ${
-                              isActive 
-                              ? 'border-indigo-600 text-indigo-600' 
-                              : 'border-transparent text-slate-500 hover:text-indigo-500 hover:border-slate-300'
-                          }`}
-                      >
-                          <div className="h-5 w-5">{section.icon}</div>
-                          <span className="hidden sm:inline">{section.label}</span>
-                      </a>
-                  );
-              })}
-          </div>
-      </nav>
-
-      <div className="space-y-8">
-        {/* Fix: Changed ref callback to have a void return type to match React's Ref type. */}
-        <div id="usage-history" ref={el => { sectionRefs.current['usage-history'] = el; }} className="scroll-mt-24">
-            <Card title="Usage History (Last 3 Months)" icon={ICONS.table}>
-                <UsageHistoryTable usage={details.usageHistory} />
-            </Card>
-        </div>
-
-        {/* Fix: Changed ref callback to have a void return type to match React's Ref type. */}
-        <div id="support-summary" ref={el => { sectionRefs.current['support-summary'] = el; }} className="scroll-mt-24">
-            <Card title="Support Summary" icon={ICONS.ticket}>
-                <SupportTickets tickets={details.supportTickets} />
-            </Card>
-        </div>
-            
-        {/* Fix: Changed ref callback to have a void return type to match React's Ref type. */}
-        <div id="historical-opps" ref={el => { sectionRefs.current['historical-opps'] = el; }} className="scroll-mt-24">
-            <Card title="Opportunity History" icon={ICONS.history}>
-                <HistoricalOpportunitiesList opportunities={historicalOpportunities} />
-            </Card>
-        </div>
-
-        {/* Fix: Changed ref callback to have a void return type to match React's Ref type. */}
-        <div id="past-projects" ref={el => { sectionRefs.current['past-projects'] = el; }} className="scroll-mt-24">
-            <Card title="Services History" icon={ICONS.briefcase}>
-                <ProjectHistoryList projects={details.projectHistory} />
-            </Card>
-        </div>
-
-        {/* Fix: Changed ref callback to have a void return type to match React's Ref type. */}
-        <div id="disposition" ref={el => { sectionRefs.current['disposition'] = el; }} className="scroll-mt-24">
-            <DispositionForm onSave={onSave} opportunity={opportunity} />
-        </div>
-      </div>
-    </div>
-  );
+    );
 };
 
 export default OpportunityDetail;

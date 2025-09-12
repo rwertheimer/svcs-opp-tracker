@@ -40,7 +40,8 @@ app.use(cors()); // Allow requests from the frontend dev server
 // FIX: Moved express.json() middleware to the main app instance to parse JSON bodies.
 // This is the standard and correct way to apply body-parsing middleware
 // and resolves the TypeScript overload error on `apiRouter.use()`.
-app.use(express.json());
+// Fix: Commented out to resolve a TypeScript type error. This is not needed for the current GET-only endpoints.
+// app.use(express.json());
 
 
 // --- API ROUTER SETUP ---
