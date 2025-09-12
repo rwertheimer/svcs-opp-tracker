@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Opportunity, AccountDetails, Disposition, SavedFilter, TaskWithOpportunityContext, ActionItem, FilterGroup } from './types';
-import { fetchOpportunities, fetchOpportunityDetails } from './services/apiService';
+import { fetchOpportunities, fetchOpportunityDetails, saveDisposition } from './services/apiService';
 import OpportunityList from './components/OpportunityList';
 import OpportunityDetail from './components/OpportunityDetail';
 import Header from './components/Header';
@@ -168,14 +168,18 @@ const App: React.FC = () => {
   const handleSaveDisposition = (disposition: Disposition) => {
     if (!selectedOpportunity) return;
 
+    const updatedOpportunity = { ...selectedOpportunity, disposition };
+    const opportunityId = selectedOpportunity.opportunities_id;
+
+    // Update the disposition in the main opportunities list (in-memory only).
     setOpportunities(prevOpps =>
-      prevOpps.map(opp => {
-        if (opp.opportunities_id === selectedOpportunity.opportunities_id) {
-          return { ...opp, disposition };
-        }
-        return opp;
-      })
+      prevOpps.map(opp =>
+        opp.opportunities_id === opportunityId ? updatedOpportunity : opp
+      )
     );
+    
+    // The disposition is now only saved in the local session state.
+    // Close the detail view and return to the updated list.
     handleGoBack();
   };
   

@@ -9,7 +9,7 @@ declare global {
   }
 }
 
-import type { Opportunity, AccountDetails } from '../types';
+import type { Opportunity, AccountDetails, Disposition } from '../types';
 import { generateOpportunities, generateAccountDetails } from './mockData';
 
 /**
@@ -46,14 +46,15 @@ export const fetchOpportunities = async (): Promise<Opportunity[]> => {
       throw new Error('Failed to fetch opportunities from the backend. Is the server running?');
     }
     const data = await response.json();
-    // The server fetches real data but doesn't have the 'disposition' field.
-    // We add it here to conform to the frontend type.
+    
+    // As persistence is removed, ensure every opportunity has a default,
+    // in-memory disposition object for the frontend to use.
     return data.map((opp: Omit<Opportunity, 'disposition'>) => ({
       ...opp,
       disposition: {
         status: 'Not Reviewed',
         notes: '',
-        actionItems: []
+        actionItems: [],
       }
     }));
   }
@@ -96,4 +97,15 @@ export const fetchOpportunityDetails = async (accountId: string): Promise<Accoun
       throw error; // Re-throw the error to be caught by the calling component
     }
   }
+};
+
+/**
+ * Saves a disposition for a specific opportunity.
+ * NOTE: Persistence has been removed. This is now a no-op that allows the
+ * optimistic UI updates to function without error.
+ */
+export const saveDisposition = async (opportunityId: string, disposition: Disposition): Promise<void> => {
+  console.log(`(In-Memory) Saving disposition for ${opportunityId}`, disposition);
+  // The state is handled optimistically in the UI. No backend call is needed.
+  return Promise.resolve();
 };

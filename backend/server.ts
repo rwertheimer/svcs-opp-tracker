@@ -37,21 +37,25 @@ const bigquery = new BigQuery({ projectId: GCLOUD_PROJECT_ID });
 
 // --- SERVER SETUP ---
 app.use(cors()); // Allow requests from the frontend dev server
+// FIX: Moved express.json() middleware to the main app instance to parse JSON bodies.
+// This is the standard and correct way to apply body-parsing middleware
+// and resolves the TypeScript overload error on `apiRouter.use()`.
+app.use(express.json());
 
 
 // --- API ROUTER SETUP ---
 // Using an Express Router is a best practice for organizing routes.
 const apiRouter = express.Router();
 
-// FIX: Apply express.json() middleware to the router to parse JSON bodies.
-// This resolves a TypeScript type issue that occurred when it was applied globally.
-apiRouter.use(express.json());
-
 // GET /api/opportunities
 // Fetches the main list of opportunities from the PostgreSQL database.
 apiRouter.get('/opportunities', async (req, res) => {
+    const GET_OPPS_QUERY = `
+        SELECT * FROM opportunities 
+        ORDER BY opportunities_amount DESC, opportunities_incremental_bookings DESC;
+    `;
     try {
-        const result = await pgClient.query('SELECT * FROM opportunities ORDER BY opportunities_amount DESC, opportunities_incremental_bookings DESC');
+        const result = await pgClient.query(GET_OPPS_QUERY);
         res.status(200).json(result.rows);
     } catch (error) {
         console.error('Error fetching opportunities:', error);
@@ -111,7 +115,6 @@ apiRouter.get('/accounts/:accountId/usage-history', async (req, res) => {
     console.log(`[Live Endpoint] GET Usage History for account ${accountId}`);
     
     const GET_USAGE_QUERY = `
-        -- Define the date range for the last 3 full months.
         DECLARE start_date DATE DEFAULT DATE_TRUNC(DATE_SUB(CURRENT_DATE('America/Los_Angeles'), INTERVAL 2 MONTH), MONTH);
         DECLARE end_date DATE DEFAULT DATE_TRUNC(DATE_ADD(CURRENT_DATE('America/Los_Angeles'), INTERVAL 1 MONTH), MONTH);
 
@@ -139,8 +142,8 @@ apiRouter.get('/accounts/:accountId/usage-history', async (req, res) => {
             AND connections_timeline.has_volume
         GROUP BY 1, 2, 3, 4, 5;
     `;
-    
-    try {
+
+     try {
         const [rows] = await bigquery.query({
             query: GET_USAGE_QUERY,
             params: { accountId: accountId }
@@ -151,6 +154,7 @@ apiRouter.get('/accounts/:accountId/usage-history', async (req, res) => {
         res.status(500).send('Internal Server Error');
     }
 });
+
 
 // GET /api/accounts/:accountId/project-history
 apiRouter.get('/accounts/:accountId/project-history', async (req, res) => {
@@ -185,7 +189,7 @@ apiRouter.get('/accounts/:accountId/project-history', async (req, res) => {
         HAVING COALESCE(SUM(o.rl_budgeted_hours), 0) > 0
         ORDER BY opportunities_close_date DESC;
     `;
-    
+
     try {
         const [rows] = await bigquery.query({
             query: GET_PROJECTS_QUERY,
@@ -198,36 +202,21 @@ apiRouter.get('/accounts/:accountId/project-history', async (req, res) => {
     }
 });
 
-// Mount the router on the /api path. All routes defined on apiRouter will be prefixed with /api.
-app.use('/api', apiRouter);
-
 
 // --- START SERVER ---
-const startServer = async () => {
-    const requiredEnvVars = ['PG_HOST', 'PG_USER', 'PG_DATABASE', 'PG_PASSWORD', 'PG_PORT'];
-    const missingVars = requiredEnvVars.filter(v => !process.env[v]);
+app.use('/api', apiRouter);
 
-    if (missingVars.length > 0) {
-        console.error('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
-        console.error(`!!! ERROR: Missing required environment variables: ${missingVars.join(', ')}`);
-        console.error('!!! Please create a .env file and fill in the details.');
-        console.error('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
-        return; // Prevent server from starting
-    }
-
+(async () => {
     try {
         await pgClient.connect();
         console.log('Successfully connected to PostgreSQL database.');
         app.listen(PORT, () => {
-            console.log(`Backend server listening on http://localhost:${PORT}`);
+            console.log(`Server is running on http://localhost:${PORT}`);
         });
     } catch (error) {
         console.error('Failed to connect to PostgreSQL database:', error);
         // Fix: Suppress TypeScript error for process.exit, which is valid in Node.js.
-        // This is necessary due to a project-wide type resolution issue.
         // @ts-ignore
         process.exit(1);
     }
-}
-
-startServer();
+})();
