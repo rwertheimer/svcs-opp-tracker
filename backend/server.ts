@@ -29,20 +29,23 @@ const pgClient = new Client({
   },
 });
 
-// Initialize BigQuery client
+// Initialize BigQuery client.
+// Authentication is handled automatically via the GOOGLE_APPLICATION_CREDENTIALS
+// environment variable pointing to a service account key file.
 const bigquery = new BigQuery({ projectId: GCLOUD_PROJECT_ID });
 
 
 // --- SERVER SETUP ---
 app.use(cors()); // Allow requests from the frontend dev server
-// FIX: Apply express.json() middleware globally to parse JSON bodies.
-// This resolves a TypeScript type issue that occurred when it was combined with the router mount.
-app.use(express.json());
 
 
 // --- API ROUTER SETUP ---
 // Using an Express Router is a best practice for organizing routes.
 const apiRouter = express.Router();
+
+// FIX: Apply express.json() middleware to the router to parse JSON bodies.
+// This resolves a TypeScript type issue that occurred when it was applied globally.
+apiRouter.use(express.json());
 
 // GET /api/opportunities
 // Fetches the main list of opportunities from the PostgreSQL database.

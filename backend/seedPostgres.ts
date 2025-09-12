@@ -10,6 +10,8 @@
  * 3. You have created a .env file with your PG_HOST, PG_USER, etc. credentials.
  * 4. You have installed the necessary packages: `npm install`
  * 5. You have authenticated your local machine with GCP: `gcloud auth application-default login`
+ *    OR (recommended) you have created a service account key file and set the
+ *    GOOGLE_APPLICATION_CREDENTIALS environment variable in your .env file.
  *
  * HOW TO RUN:
  * From the root directory of your project, run:
@@ -40,6 +42,8 @@ const POSTGRES_CONFIG = {
 };
 
 // --- INITIALIZE CLIENTS ---
+// Authentication is handled automatically via the GOOGLE_APPLICATION_CREDENTIALS
+// environment variable pointing to a service account key file.
 const bigquery = new BigQuery({ projectId: GCLOUD_PROJECT_ID });
 
 // The exact SQL for the full opportunities list.
