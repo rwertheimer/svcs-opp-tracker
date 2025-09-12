@@ -17,7 +17,7 @@ const SECTIONS = [
     { id: 'usage-history', label: 'Usage', icon: ICONS.table },
     { id: 'support-summary', label: 'Support', icon: ICONS.ticket },
     { id: 'historical-opps', label: 'Opp History', icon: ICONS.history },
-    { id: 'past-projects', label: 'Projects', icon: ICONS.briefcase },
+    { id: 'past-projects', label: 'Services', icon: ICONS.briefcase },
     { id: 'disposition', label: 'Disposition', icon: ICONS.clipboard },
 ];
 
@@ -428,7 +428,7 @@ const OpportunityDetail: React.FC<OpportunityDetailProps> = ({ opportunity, deta
 
         {/* Fix: Changed ref callback to have a void return type to match React's Ref type. */}
         <div id="past-projects" ref={el => { sectionRefs.current['past-projects'] = el; }} className="scroll-mt-24">
-            <Card title="Past Services Projects" icon={ICONS.briefcase}>
+            <Card title="Services History" icon={ICONS.briefcase}>
                 <ProjectHistoryList projects={details.projectHistory} />
             </Card>
         </div>

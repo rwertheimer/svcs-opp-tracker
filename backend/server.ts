@@ -6,6 +6,7 @@ import express from 'express';
 import cors from 'cors';
 import { Client } from 'pg';
 import * as dotenv from 'dotenv';
+import { BigQuery } from '@google-cloud/bigquery';
 
 // Load environment variables from .env file
 dotenv.config();
@@ -14,7 +15,9 @@ const app = express();
 const PORT = process.env.PORT || 8080;
 
 // --- CONFIGURATION ---
-// Database connection details are now loaded securely from environment variables.
+const GCLOUD_PROJECT_ID = 'digital-arbor-400';
+
+// Database connection details are loaded securely from environment variables.
 const pgClient = new Client({
   host: process.env.PG_HOST,
   port: parseInt(process.env.PG_PORT || '5432', 10),
@@ -26,112 +29,20 @@ const pgClient = new Client({
   },
 });
 
-
-// --- MOCK DATA GENERATION for detail endpoints ---
-// This section simulates the on-demand BigQuery calls for the details view.
-const getRandomElement = <T,>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
-const createPastDate = (daysAgo: number) => {
-    const date = new Date();
-    date.setDate(date.getDate() - daysAgo);
-    return date.toISOString().split('T')[0];
-};
-const getRandomId = () => Math.random().toString(36).substring(2, 10);
-
-const generateSupportTickets = (accountId: string) => {
-    return Array.from({ length: 3 }, (_, i) => ({
-        accounts_salesforce_account_id: accountId,
-        accounts_outreach_account_link: 'http://example.com',
-        accounts_salesforce_account_name: 'Mock Account',
-        accounts_owner_name: 'Mock Owner',
-        tickets_ticket_url: 'http://example.com',
-        tickets_ticket_number: 12345 + i,
-        tickets_created_date: createPastDate(i * 10 + 5),
-        tickets_status: 'Open',
-        tickets_subject: `Issue with connector sync #${i+1}`,
-        days_open: i * 10 + 5,
-        tickets_last_response_from_support_at_date: createPastDate(i + 1),
-        tickets_is_escalated: 'No',
-        days_since_last_responce: i + 1,
-        tickets_priority: getRandomElement(['High', 'Medium', 'Low']),
-    }));
-};
-
-const generateUsageHistory = (accountId: string) => {
-    const MOCK_USAGE_ROWS = [
-        { table: 'question_response', group: 'PD_COMMUNICATION_PROD', warehouse: 'snowflake', service: 'qualtrics' },
-        { table: 'survey_embedded_data', group: 'PD_COMMUNICATION_PROD', warehouse: 'snowflake', service: 'qualtrics' },
-        { table: 'RatingFactors', group: 'PD_RATING_RAW', warehouse: 'snowflake', service: 'cosmos' },
-        { table: 'RatingResponses', group: 'PD_RATING_RAW', warehouse: 'snowflake', service: 'cosmos' },
-        { table: 'Interview', group: 'PD_SALES_RAW', warehouse: 'snowflake', service: 'cosmos' },
-        { table: 'Prefill', group: 'PD_SALES_RAW', warehouse: 'snowflake', service: 'cosmos' },
-        { table: 'log', group: 'PD_DATAQUALITY', warehouse: 'snowflake', service: 'fivetran_log' },
-        { table: 'CarrierIntegrationData', group: 'PD_RATING_RAW', warehouse: 'snowflake', service: 'cosmos' },
-        { table: 'log', group: 'PD_COMMUNICATION_PROD', warehouse: 'snowflake', service: 'fivetran_log' },
-        { table: 'user', group: 'PD_COMMUNICATION_PROD', warehouse: 'snowflake', service: 'fivetran_log' },
-        { table: 'survey_response', group: 'PD_COMMUNICATION_PROD', warehouse: 'snowflake', service: 'qualtrics' },
-        { table: 'role_permission', group: 'PD_COMMUNICATION_PROD', warehouse: 'snowflake', service: 'fivetran_log' },
-        { table: 'version', group: 'PD_COMMUNICATION_PROD', warehouse: 'snowflake', service: 'qualtrics' },
-        { table: 'team_membership', group: 'PD_COMMUNICATION_PROD', warehouse: 'snowflake', service: 'fivetran_log' },
-        { table: 'InterviewSummary', group: 'PD_SALES_RAW', warehouse: 'snowflake', service: 'cosmos' },
-    ];
-    const usageHistory: any[] = [];
-    const now = new Date();
-
-    for (const row of MOCK_USAGE_ROWS) {
-        let lastMonthRaw = Math.random() * 2e7;
-        for (let i = 2; i >= 0; i--) { // Loop from 2 down to 0 to generate oldest data first
-            const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
-            
-            const rawFluctuation = (Math.random() - 0.45);
-            const billableRatio = (Math.random() * 0.4 + 0.4);
-            
-            const raw = Math.max(0, lastMonthRaw * (1 + rawFluctuation));
-            const billable = Math.random() > 0.3 ? raw * billableRatio : 0;
-
-            lastMonthRaw = raw;
-
-            usageHistory.push({
-                 accounts_timeline_date_month: `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`,
-                 connections_table_timeline_table_name: row.table,
-                 connections_group_name: row.group,
-                 connections_warehouse_subtype: row.warehouse,
-                 connections_timeline_service_eom: row.service,
-                 connections_table_timeline_raw_volume_updated: Math.round(raw),
-                 connections_table_timeline_total_billable_volume: Math.round(billable),
-            });
-        }
-    }
-    return usageHistory;
-};
-
-const generateProjectHistory = (accountId: string) => {
-    return Array.from({ length: 2 }, (_, i) => ({
-        accounts_salesforce_account_id: accountId,
-        accounts_outreach_account_link: 'http://example.com',
-        accounts_salesforce_account_name: 'Mock Account',
-        opportunities_id: `proj-${getRandomId()}`,
-        opportunities_name: `Historical Project ${i+1}`,
-        opportunities_project_owner_email: 'pm@example.com',
-        opportunities_close_date: createPastDate(i * 180 + 90),
-        opportunities_rl_open_project_new_end_date: createPastDate(i * 180),
-        opportunities_subscription_end_date: createPastDate(i * 180 - 30),
-        opportunities_budgeted_hours: 100 + i * 20,
-        opportunities_billable_hours: 80 + i * 25,
-        opportunities_non_billable_hours: 5 + i * 2,
-        opportunities_remaining_billable_hours: 20 - i * 5,
-    }));
-};
-// --- END MOCK DATA GENERATION ---
+// Initialize BigQuery client
+const bigquery = new BigQuery({ projectId: GCLOUD_PROJECT_ID });
 
 
 // --- SERVER SETUP ---
 app.use(cors()); // Allow requests from the frontend dev server
+// FIX: Apply express.json() middleware globally to parse JSON bodies.
+// This resolves a TypeScript type issue that occurred when it was combined with the router mount.
+app.use(express.json());
 
 
 // --- API ROUTER SETUP ---
 // Using an Express Router is a best practice for organizing routes.
 const apiRouter = express.Router();
-// Apply JSON body parsing middleware specifically to API routes. This was moved to the app.use() call below to fix a TS issue.
 
 // GET /api/opportunities
 // Fetches the main list of opportunities from the PostgreSQL database.
@@ -146,24 +57,47 @@ apiRouter.get('/opportunities', async (req, res) => {
 });
 
 
-// --- ACCOUNT DETAIL ENDPOINTS (now on the router) ---
+// --- ACCOUNT DETAIL ENDPOINTS (Live Data from BigQuery) ---
 
 // GET /api/accounts/:accountId/support-tickets
 apiRouter.get('/accounts/:accountId/support-tickets', async (req, res) => {
     const { accountId } = req.params;
-    console.log(`[Mock Endpoint] GET Support Tickets for account ${accountId}`);
-    /* 
-     * --- SQL BLUEPRINT ---
-     * This is the query to run against your data warehouse (e.g., BigQuery) when ready.
-     * It fetches recent support tickets for the specified account.
-     *
-    const GET_TICKETS_QUERY = `...`
-    */
+    console.log(`[Live Endpoint] GET Support Tickets for account ${accountId}`);
+    
+    const GET_TICKETS_QUERY = `
+        SELECT
+            a.salesforce_account_id AS accounts_salesforce_account_id,
+            a.outreach_account_link AS accounts_outreach_account_link,
+            a.salesforce_account_name AS accounts_salesforce_account_name,
+            a.owner_name AS accounts_owner_name,
+            t.ticket_url AS tickets_ticket_url,
+            t.ticket_number AS tickets_ticket_number,
+            DATE(t.created_date, 'America/Los_Angeles') AS tickets_created_date,
+            t.status AS tickets_status,
+            t.subject AS tickets_subject,
+            DATE_DIFF(CURRENT_DATE('America/Los_Angeles'), DATE(t.created_date, 'America/Los_Angeles'), DAY) AS days_open,
+            DATE(t.last_response_from_support_at, 'America/Los_Angeles') AS tickets_last_response_from_support_at_date,
+            (CASE WHEN t.is_escalated THEN 'Yes' ELSE 'No' END) AS tickets_is_escalated,
+            DATE_DIFF(CURRENT_DATE('America/Los_Angeles'), DATE(t.last_response_from_support_at, 'America/Los_Angeles'), DAY) AS days_since_last_responce,
+            t.priority AS tickets_priority
+        FROM \`digital-arbor-400.transforms_bi.tickets\` AS t
+        LEFT JOIN \`digital-arbor-400.transforms_bi.accounts\` AS a ON t.salesforce_account_id = a.salesforce_account_id
+        WHERE
+            (t.is_duplicate IS NOT TRUE)
+            AND (t.is_support_group IS TRUE)
+            AND UPPER(a.salesforce_account_id) = UPPER(@accountId)
+        ORDER BY
+            tickets_created_date DESC;
+    `;
+    
     try {
-        const mockTickets = generateSupportTickets(accountId);
-        res.status(200).json(mockTickets);
+        const [rows] = await bigquery.query({
+            query: GET_TICKETS_QUERY,
+            params: { accountId: accountId }
+        });
+        res.status(200).json(rows);
     } catch (error) {
-        console.error(`Error generating support tickets for account ${accountId}:`, error);
+        console.error(`Error fetching support tickets for account ${accountId}:`, error);
         res.status(500).send('Internal Server Error');
     }
 });
@@ -171,18 +105,46 @@ apiRouter.get('/accounts/:accountId/support-tickets', async (req, res) => {
 // GET /api/accounts/:accountId/usage-history
 apiRouter.get('/accounts/:accountId/usage-history', async (req, res) => {
     const { accountId } = req.params;
-    console.log(`[Mock Endpoint] GET Usage History for account ${accountId}`);
-    /* 
-     * --- SQL BLUEPRINT ---
-     * This query fetches the last 3 months of usage data for the specified account.
-     *
-    const GET_USAGE_QUERY = `...`
-    */
+    console.log(`[Live Endpoint] GET Usage History for account ${accountId}`);
+    
+    const GET_USAGE_QUERY = `
+        -- Define the date range for the last 3 full months.
+        DECLARE start_date DATE DEFAULT DATE_TRUNC(DATE_SUB(CURRENT_DATE('America/Los_Angeles'), INTERVAL 2 MONTH), MONTH);
+        DECLARE end_date DATE DEFAULT DATE_TRUNC(DATE_ADD(CURRENT_DATE('America/Los_Angeles'), INTERVAL 1 MONTH), MONTH);
+
+        SELECT
+            FORMAT_DATE('%Y-%m', accounts_timeline.date) AS accounts_timeline_date_month,
+            connections_table_timeline.table_name AS connections_table_timeline_table_name,
+            connections.group_name AS connections_group_name,
+            connections.warehouse_subtype AS connections_warehouse_subtype,
+            connections_timeline.service_eom AS connections_timeline_service_eom,
+            COALESCE(SUM(connections_table_timeline.raw_volume_updated), 0) AS connections_table_timeline_raw_volume_updated,
+            COALESCE(SUM(connections_table_timeline.free_volume + connections_table_timeline.free_plan_volume + connections_table_timeline.paid_volume), 0) AS connections_table_timeline_total_billable_volume
+        FROM \`digital-arbor-400.transforms_bi.accounts\` AS accounts
+        LEFT JOIN \`digital-arbor-400.transforms_bi.sf_account_timeline\` AS accounts_timeline
+            ON accounts_timeline.salesforce_account_id = accounts.salesforce_account_id
+        LEFT JOIN \`digital-arbor-400.transforms_bi.connections_timeline\` AS connections_timeline
+            ON accounts_timeline.date = connections_timeline.date AND accounts_timeline.salesforce_account_id = connections_timeline.salesforce_account_id
+        LEFT JOIN \`digital-arbor-400.transforms_bi.connections_table_timeline\` AS connections_table_timeline
+            ON connections_timeline.connector_id = connections_table_timeline.connector_id AND connections_timeline.date = connections_table_timeline.date
+        LEFT JOIN \`digital-arbor-400.transforms_bi.connections\` AS connections
+            ON connections_timeline.connector_id = connections.connector_id
+        WHERE
+            accounts.salesforce_account_id = @accountId
+            AND accounts_timeline.date >= start_date
+            AND accounts_timeline.date < end_date
+            AND connections_timeline.has_volume
+        GROUP BY 1, 2, 3, 4, 5;
+    `;
+    
     try {
-        const mockUsage = generateUsageHistory(accountId);
-        res.status(200).json(mockUsage);
+        const [rows] = await bigquery.query({
+            query: GET_USAGE_QUERY,
+            params: { accountId: accountId }
+        });
+        res.status(200).json(rows);
     } catch (error) {
-        console.error(`Error generating usage history for account ${accountId}:`, error);
+        console.error(`Error fetching usage history for account ${accountId}:`, error);
         res.status(500).send('Internal Server Error');
     }
 });
@@ -190,26 +152,51 @@ apiRouter.get('/accounts/:accountId/usage-history', async (req, res) => {
 // GET /api/accounts/:accountId/project-history
 apiRouter.get('/accounts/:accountId/project-history', async (req, res) => {
     const { accountId } = req.params;
-    console.log(`[Mock Endpoint] GET Project History for account ${accountId}`);
-    /* 
-     * --- SQL BLUEPRINT ---
-     * This query fetches past services projects for the specified account.
-     *
-    const GET_PROJECTS_QUERY = `...`
-    */
+    console.log(`[Live Endpoint] GET Project History for account ${accountId}`);
+    
+    const GET_PROJECTS_QUERY = `
+        SELECT
+            a.salesforce_account_id,
+            a.outreach_account_link,
+            a.salesforce_account_name,
+            o.id AS opportunities_id,
+            o.name AS opportunities_name,
+            o.project_owner_email AS opportunities_project_owner_email,
+            DATE(o.close_date) AS opportunities_close_date,
+            DATE(o.rl_open_project_new_end_date, 'America/Los_Angeles') AS opportunities_rl_open_project_new_end_date,
+            DATE(o.subscription_end_date) AS opportunities_subscription_end_date,
+            COALESCE(SUM(o.rl_budgeted_hours), 0) AS opportunities_budgeted_hours,
+            COALESCE(SUM(o.rl_billable_hours), 0) AS opportunities_billable_hours,
+            COALESCE(SUM(o.rl_non_billable_hours), 0) AS opportunities_non_billable_hours,
+            COALESCE(SUM(o.rl_remaining_billable_hours), 0) AS opportunities_remaining_billable_hours
+        FROM \`digital-arbor-400.transforms_bi.opportunities\` AS o
+        INNER JOIN \`digital-arbor-400.transforms_bi.accounts\` AS a ON o.salesforce_account_id = a.salesforce_account_id
+        WHERE
+            a.salesforce_account_id = @accountId
+            AND (
+                UPPER(o.rl_status_label) != 'IN PROGRESS' 
+                OR UPPER(o.stage_name) LIKE '%WON%'
+            )
+            AND o.has_services_flag = TRUE
+        GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9
+        HAVING COALESCE(SUM(o.rl_budgeted_hours), 0) > 0
+        ORDER BY opportunities_close_date DESC;
+    `;
+    
     try {
-        const mockProjects = generateProjectHistory(accountId);
-        res.status(200).json(mockProjects);
+        const [rows] = await bigquery.query({
+            query: GET_PROJECTS_QUERY,
+            params: { accountId: accountId }
+        });
+        res.status(200).json(rows);
     } catch (error) {
-        console.error(`Error generating project history for account ${accountId}:`, error);
+        console.error(`Error fetching project history for account ${accountId}:`, error);
         res.status(500).send('Internal Server Error');
     }
 });
 
 // Mount the router on the /api path. All routes defined on apiRouter will be prefixed with /api.
-// Fix: A previous attempt to fix a TypeScript overload error by splitting middleware registration
-// was not successful. Combining them into a single array of handlers resolves the type ambiguity.
-app.use('/api', [express.json(), apiRouter]);
+app.use('/api', apiRouter);
 
 
 // --- START SERVER ---
