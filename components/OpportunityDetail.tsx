@@ -287,7 +287,7 @@ const ProjectHistoryList: React.FC<{ projects: ProjectHistory[] }> = ({ projects
             <table className="w-full text-xs text-left">
                 <thead className="text-xs text-slate-600 uppercase bg-slate-50 sticky top-0">
                     <tr>
-                        <th className="px-2 py-1">Opp Name</th>
+                        <th className="px-2 py-1">Project Name</th>
                         <th className="px-2 py-1">Owner</th>
                         <th className="px-2 py-1">Due Date</th>
                         <th className="px-2 py-1 text-center">Budgeted</th>
@@ -300,7 +300,11 @@ const ProjectHistoryList: React.FC<{ projects: ProjectHistory[] }> = ({ projects
                 <tbody className="divide-y divide-slate-200">
                     {projects.map(proj => (
                         <tr key={proj.opportunities_id} className="hover:bg-slate-50">
-                            <td className="px-2 py-1 font-medium text-slate-800" title={proj.opportunities_name}>{proj.opportunities_name}</td>
+                            <td className="px-2 py-1 font-medium" title={proj.opportunities_name}>
+                                <a href={`https://fivetranps.rocketlane.com/projects/${proj.opportunities_id}/overview`} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">
+                                    {proj.opportunities_name}
+                                </a>
+                            </td>
                             <td className="px-2 py-1 text-slate-500 truncate" title={proj.opportunities_project_owner_email}>{proj.opportunities_project_owner_email}</td>
                             <td className="px-2 py-1 whitespace-nowrap">{formatDate(proj.opportunities_rl_open_project_new_end_date)}</td>
                             <td className="px-2 py-1 text-center font-semibold">{formatHours(proj.opportunities_budgeted_hours)}</td>
@@ -349,7 +353,11 @@ const HistoricalOpportunitiesList: React.FC<{ opportunities: Opportunity[] }> = 
                 <tbody className="divide-y divide-slate-200">
                     {sortedOpps.map(opp => (
                         <tr key={opp.opportunities_id} className="hover:bg-slate-50">
-                            <td className="px-2 py-1 font-medium text-slate-800 truncate" title={opp.opportunities_name}>{opp.opportunities_name}</td>
+                            <td className="px-2 py-1 font-medium text-slate-800 truncate" title={opp.opportunities_name}>
+                                <a href={`https://fivetran.lightning.force.com/lightning/r/Opportunity/${opp.opportunities_id}/view`} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">
+                                    {opp.opportunities_name}
+                                </a>
+                            </td>
                             <td className="px-2 py-1 truncate" title={opp.opportunities_owner_name}>{opp.opportunities_owner_name}</td>
                             <td className="px-2 py-1 truncate" title={opp.opportunities_stage_name}><Tag status={opp.opportunities_stage_name} /></td>
                             <td className="px-2 py-1 text-right font-semibold whitespace-nowrap">{formatCurrency(opp.opportunities_amount)}</td>

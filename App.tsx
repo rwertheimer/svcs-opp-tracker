@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Opportunity, AccountDetails, Disposition, SavedFilter, TaskWithOpportunityContext, ActionItem, FilterGroup } from './types';
 import { fetchOpportunities, fetchOpportunityDetails, saveDisposition } from './services/apiService';
@@ -60,28 +61,36 @@ const App: React.FC = () => {
         if (value === null || value === undefined) return false;
         
         const ruleValue = rule.value;
-        const oppValue = typeof value === 'string' ? value.toLowerCase() : value;
+        const oppValue = value;
 
         switch (rule.operator) {
           // Text
-          case 'contains': return oppValue.toString().toLowerCase().includes(ruleValue.toLowerCase());
-          case 'not_contains': return !oppValue.toString().toLowerCase().includes(ruleValue.toLowerCase());
-          case 'equals': return oppValue.toString().toLowerCase() === ruleValue.toLowerCase();
-          case 'not_equals': return oppValue.toString().toLowerCase() !== ruleValue.toLowerCase();
+          case 'contains': return oppValue.toString().toLowerCase().includes(ruleValue.toString().toLowerCase());
+          case 'not_contains': return !oppValue.toString().toLowerCase().includes(ruleValue.toString().toLowerCase());
+          case 'equals': return oppValue.toString().toLowerCase() === ruleValue.toString().toLowerCase();
+          case 'not_equals': return oppValue.toString().toLowerCase() !== ruleValue.toString().toLowerCase();
           // Number
-          case 'eq': return oppValue === Number(ruleValue);
-          case 'neq': return oppValue !== Number(ruleValue);
-          case 'gt': return (oppValue as number) > Number(ruleValue);
-          case 'gte': return (oppValue as number) >= Number(ruleValue);
-          case 'lt': return (oppValue as number) < Number(ruleValue);
-          case 'lte': return (oppValue as number) <= Number(ruleValue);
+          case 'eq': return Number(oppValue) === Number(ruleValue);
+          case 'neq': return Number(oppValue) !== Number(ruleValue);
+          case 'gt': return Number(oppValue) > Number(ruleValue);
+          case 'gte': return Number(oppValue) >= Number(ruleValue);
+          case 'lt': return Number(oppValue) < Number(ruleValue);
+          case 'lte': return Number(oppValue) <= Number(ruleValue);
           // Date
           case 'on': return new Date(oppValue as string).toDateString() === new Date(ruleValue).toDateString();
           case 'before': return new Date(oppValue as string) < new Date(ruleValue);
           case 'after': return new Date(oppValue as string) > new Date(ruleValue);
           // Select
-          case 'is': return oppValue === ruleValue;
-          case 'is_not': return oppValue !== ruleValue;
+          case 'is': 
+              if (typeof oppValue === 'string' && typeof ruleValue === 'string') {
+                  return oppValue.toLowerCase() === ruleValue.toLowerCase();
+              }
+              return oppValue === ruleValue;
+          case 'is_not': 
+              if (typeof oppValue === 'string' && typeof ruleValue === 'string') {
+                  return oppValue.toLowerCase() !== ruleValue.toLowerCase();
+              }
+              return oppValue !== ruleValue;
           default: return false;
         }
       }
