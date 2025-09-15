@@ -58,6 +58,15 @@ const formatDate = (dateInput: unknown) => {
     });
 };
 
+const formatHours = (hours: number): string => {
+    // The SQL query coalesces to 0, so hours should not be null/undefined.
+    if (Number.isInteger(hours)) {
+        return hours.toLocaleString();
+    }
+    return hours.toFixed(1);
+};
+
+
 // --- Helper for rendering multi-value fields as tags ---
 const renderMultiValueTags = (value: string | null | undefined) => {
     if (!value) return <span className="text-slate-400">N/A</span>;
@@ -294,10 +303,10 @@ const ProjectHistoryList: React.FC<{ projects: ProjectHistory[] }> = ({ projects
                             <td className="px-2 py-1 font-medium text-slate-800" title={proj.opportunities_name}>{proj.opportunities_name}</td>
                             <td className="px-2 py-1 text-slate-500 truncate" title={proj.opportunities_project_owner_email}>{proj.opportunities_project_owner_email}</td>
                             <td className="px-2 py-1 whitespace-nowrap">{formatDate(proj.opportunities_rl_open_project_new_end_date)}</td>
-                            <td className="px-2 py-1 text-center font-semibold">{proj.opportunities_budgeted_hours}</td>
-                            <td className="px-2 py-1 text-center">{proj.opportunities_billable_hours}</td>
-                            <td className="px-2 py-1 text-center font-bold text-indigo-700">{proj.opportunities_remaining_billable_hours}</td>
-                            <td className="px-2 py-1 text-center text-red-600">{proj.opportunities_non_billable_hours}</td>
+                            <td className="px-2 py-1 text-center font-semibold">{formatHours(proj.opportunities_budgeted_hours)}</td>
+                            <td className="px-2 py-1 text-center">{formatHours(proj.opportunities_billable_hours)}</td>
+                            <td className="px-2 py-1 text-center font-bold text-indigo-700">{formatHours(proj.opportunities_remaining_billable_hours)}</td>
+                            <td className="px-2 py-1 text-center text-red-600">{formatHours(proj.opportunities_non_billable_hours)}</td>
                             <td className="px-2 py-1">{renderProgressBar(proj)}</td>
                         </tr>
                     ))}
@@ -403,7 +412,7 @@ const OpportunityDetail: React.FC<OpportunityDetailProps> = ({ opportunity, deta
     const usageHistoryTitle = (
         <a href={lookerUrl} target="_blank" rel="noopener noreferrer" className="flex items-center space-x-2 group text-slate-700 hover:text-indigo-600 transition-colors">
             <span>Usage History (Last 3 Months)</span>
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-slate-400 group-hover:text-indigo-600 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <svg xmlns="http://www.w.org/2000/svg" className="h-4 w-4 text-slate-400 group-hover:text-indigo-600 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
             </svg>
         </a>

@@ -102,8 +102,8 @@ const generateProjectHistory = (accountId: string): ProjectHistory[] => {
         opportunities_rl_open_project_new_end_date: createPastDate(i * 180),
         opportunities_subscription_end_date: createPastDate(i * 180 - 30),
         opportunities_budgeted_hours: 100 + i * 20,
-        opportunities_billable_hours: 80 + i * 25,
-        opportunities_non_billable_hours: 5 + i * 2,
+        opportunities_billable_hours: 80.5 + i * 25.2,
+        opportunities_non_billable_hours: 5.1 + i * 2.3,
         opportunities_remaining_billable_hours: 20 - i * 5,
     }));
 };
