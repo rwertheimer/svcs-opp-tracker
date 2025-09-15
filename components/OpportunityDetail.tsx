@@ -146,15 +146,16 @@ const UsageHistoryTable: React.FC<{ usage: UsageData[] }> = ({ usage }) => {
 
         type PivotedRow = {
             service: string;
+            warehouse_subtype: string;
             monthlyData: {
                 [month: string]: { revenue: number; connections: number; }
             }
         };
 
         const groupedData = usage.reduce((acc, item) => {
-            const key = item.service;
+            const key = `${item.service}::${item.warehouse_subtype || 'N/A'}`;
             if (!acc[key]) {
-                acc[key] = { service: key, monthlyData: {} };
+                acc[key] = { service: item.service, warehouse_subtype: item.warehouse_subtype || 'N/A', monthlyData: {} };
             }
             if (monthStrings.includes(item.month)) {
                 acc[key].monthlyData[item.month] = { 
@@ -215,7 +216,8 @@ const UsageHistoryTable: React.FC<{ usage: UsageData[] }> = ({ usage }) => {
             <table className="w-full text-xs text-left">
                 <thead className="text-xs text-slate-600 uppercase bg-slate-50 sticky top-0 z-10">
                     <tr>
-                        <th rowSpan={2} className="px-2 py-2 border-b border-slate-300 align-bottom sticky left-0 bg-slate-50 z-20">Service</th>
+                        <th rowSpan={2} className="px-2 py-2 border-b border-slate-300 align-bottom sticky left-0 bg-slate-50 z-20 w-32">Service</th>
+                        <th rowSpan={2} className="px-2 py-2 border-b border-slate-300 align-bottom sticky left-32 bg-slate-50 z-20 w-32">Warehouse</th>
                         {months.map(month => (
                             <th key={month} colSpan={2} className="px-2 py-1 text-center border-b border-l border-slate-300">
                                 {month}
@@ -233,8 +235,9 @@ const UsageHistoryTable: React.FC<{ usage: UsageData[] }> = ({ usage }) => {
                 </thead>
                 <tbody className="divide-y divide-slate-200">
                     {pivotedData.map(row => (
-                        <tr key={row.service} className="hover:bg-slate-50">
-                            <td className="px-2 py-1 font-medium text-slate-800 truncate sticky left-0 bg-white hover:bg-slate-50" title={row.service}>{row.service}</td>
+                        <tr key={row.service + row.warehouse_subtype} className="hover:bg-slate-50">
+                            <td className="px-2 py-1 font-medium text-slate-800 truncate sticky left-0 bg-white hover:bg-slate-50 w-32" title={row.service}>{row.service}</td>
+                            <td className="px-2 py-1 text-slate-700 truncate sticky left-32 bg-white hover:bg-slate-50 w-32" title={row.warehouse_subtype}>{row.warehouse_subtype}</td>
                              {months.map(month => (
                                 <React.Fragment key={`${month}-${row.service}`}>
                                     <td className="px-2 py-1 text-right border-l font-semibold text-indigo-700">

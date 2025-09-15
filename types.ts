@@ -93,6 +93,7 @@ export interface SupportTicket {
 export interface UsageData {
     month: string;
     service: string;
+    warehouse_subtype: string;
     annualized_revenue: number;
     connections_count: number;
 }

@@ -24,6 +24,7 @@ const MOCK_REGIONS = ['NA - Enterprise', 'NA - Commercial', 'EMEA', 'APAC'];
 const MOCK_STAGES = Object.values(OpportunityStage).filter(s => s !== OpportunityStage.PreSalesScoping);
 const MOCK_OPP_TYPES = ['Renewal', 'New Business', 'Upsell', 'Expansion', 'Sales'];
 const MOCK_FORECAST_CATEGORIES = ['Commit', 'Best Case', 'Pipeline', 'Omitted'];
+const MOCK_WAREHOUSE_SUBTYPES = ['snowflake', 'databricks', 'bigquery', 'redshift'];
 
 // --- Realistic data for the Usage History Table ---
 const MOCK_USAGE_ROWS = [
@@ -81,6 +82,7 @@ const generateUsageHistory = (accountId: string): UsageData[] => {
                 usageHistory.push({
                     month: monthString,
                     service: service,
+                    warehouse_subtype: getRandomElement(MOCK_WAREHOUSE_SUBTYPES),
                     annualized_revenue: Math.round(Math.random() * 50000 + 1000),
                     connections_count: Math.floor(Math.random() * 10) + 1,
                 });
