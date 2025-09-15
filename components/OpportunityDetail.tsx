@@ -67,32 +67,32 @@ const SupportTickets: React.FC<{ tickets: SupportTicket[] }> = ({ tickets }) => 
     
     return (
         <div className="overflow-auto max-h-96">
-            <table className="w-full text-sm text-left">
+            <table className="w-full text-xs text-left">
                 <thead className="text-xs text-slate-600 uppercase bg-slate-50 sticky top-0">
                     <tr>
-                        <th className="px-4 py-2">Created Date</th>
-                        <th className="px-4 py-2">Status</th>
-                        <th className="px-4 py-2">Subject</th>
-                        <th className="px-4 py-2 text-center">Days Open</th>
-                        <th className="px-4 py-2">Priority</th>
-                        <th className="px-4 py-2 text-center">Escalated</th>
-                        <th className="px-4 py-2 text-center">Days Since Response</th>
+                        <th className="px-2 py-1">Created Date</th>
+                        <th className="px-2 py-1">Status</th>
+                        <th className="px-2 py-1">Subject</th>
+                        <th className="px-2 py-1 text-center">Days Open</th>
+                        <th className="px-2 py-1">Priority</th>
+                        <th className="px-2 py-1 text-center">Escalated</th>
+                        <th className="px-2 py-1 text-center">Days Since Response</th>
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
                     {sortedTickets.map(ticket => (
                         <tr key={ticket.tickets_ticket_number} className="hover:bg-slate-50">
-                            <td className="px-4 py-2 whitespace-nowrap">{formatDate(ticket.tickets_created_date)}</td>
-                            <td className="px-4 py-2"><Tag status={ticket.tickets_status} /></td>
-                            <td className="px-4 py-2 font-medium">
+                            <td className="px-2 py-1 whitespace-nowrap">{formatDate(ticket.tickets_created_date)}</td>
+                            <td className="px-2 py-1"><Tag status={ticket.tickets_status} /></td>
+                            <td className="px-2 py-1 font-medium">
                                 <a href={ticket.tickets_ticket_url} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">
                                     {ticket.tickets_subject}
                                 </a>
                             </td>
-                            <td className="px-4 py-2 text-center">{ticket.days_open}</td>
-                            <td className="px-4 py-2"><Tag status={ticket.tickets_priority} /></td>
-                            <td className="px-4 py-2 text-center"><Tag status={ticket.tickets_is_escalated} /></td>
-                            <td className="px-4 py-2 text-center">{ticket.days_since_last_responce}</td>
+                            <td className="px-2 py-1 text-center">{ticket.days_open}</td>
+                            <td className="px-2 py-1"><Tag status={ticket.tickets_priority} /></td>
+                            <td className="px-2 py-1 text-center"><Tag status={ticket.tickets_is_escalated} /></td>
+                            <td className="px-2 py-1 text-center">{ticket.days_since_last_responce}</td>
                         </tr>
                     ))}
                 </tbody>
@@ -108,13 +108,11 @@ const UsageHistoryTable: React.FC<{ usage: UsageData[] }> = ({ usage }) => {
             return { pivotedData: [], months: [] };
         }
 
-        // Get unique months, sort them ascending (chronologically), and take the last 3
         const uniqueMonths = [...new Set(usage.map(u => u.accounts_timeline_date_month))].sort();
-        const monthStrings = uniqueMonths.slice(-3); 
+        const monthStrings = uniqueMonths.slice(-3);
 
         type PivotedRow = {
             key: string;
-            tableName: string;
             groupName: string;
             warehouseType: string;
             service: string;
@@ -125,7 +123,6 @@ const UsageHistoryTable: React.FC<{ usage: UsageData[] }> = ({ usage }) => {
 
         const groupedData = usage.reduce((acc, item) => {
             const key = [
-                item.connections_table_timeline_table_name,
                 item.connections_group_name,
                 item.connections_warehouse_subtype,
                 item.connections_timeline_service_eom
@@ -134,7 +131,6 @@ const UsageHistoryTable: React.FC<{ usage: UsageData[] }> = ({ usage }) => {
             if (!acc[key]) {
                 acc[key] = {
                     key,
-                    tableName: item.connections_table_timeline_table_name,
                     groupName: item.connections_group_name,
                     warehouseType: item.connections_warehouse_subtype,
                     service: item.connections_timeline_service_eom,
@@ -142,7 +138,6 @@ const UsageHistoryTable: React.FC<{ usage: UsageData[] }> = ({ usage }) => {
                 };
             }
             
-            // Only include data for the selected months
             if (monthStrings.includes(item.accounts_timeline_date_month)) {
                 acc[key].monthlyData[item.accounts_timeline_date_month] = {
                     raw: item.connections_table_timeline_raw_volume_updated,
@@ -154,11 +149,17 @@ const UsageHistoryTable: React.FC<{ usage: UsageData[] }> = ({ usage }) => {
         
         const pivotedArray = Object.values(groupedData);
 
-        // Sort descending by the most recent month's raw volume to bring most active to top
-        const mostRecentMonth = monthStrings[monthStrings.length - 1];
+        const now = new Date();
+        const currentMonthString = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}`;
+        
+        let sortMonth = monthStrings[monthStrings.length - 1];
+        if (sortMonth === currentMonthString && monthStrings.length > 1) {
+            sortMonth = monthStrings[monthStrings.length - 2];
+        }
+
         pivotedArray.sort((a, b) => {
-            const rawA = a.monthlyData[mostRecentMonth]?.raw || 0;
-            const rawB = b.monthlyData[mostRecentMonth]?.raw || 0;
+            const rawA = a.monthlyData[sortMonth]?.raw || 0;
+            const rawB = b.monthlyData[sortMonth]?.raw || 0;
             return rawB - rawA;
         });
 
@@ -178,22 +179,21 @@ const UsageHistoryTable: React.FC<{ usage: UsageData[] }> = ({ usage }) => {
 
     return (
         <div className="overflow-auto max-h-96">
-            <table className="w-full text-sm text-left">
+            <table className="w-full text-xs text-left">
                 <thead className="text-xs text-slate-600 uppercase bg-slate-50 sticky top-0">
                     <tr>
-                        <th rowSpan={2} className="px-4 py-2 border-b border-slate-300 align-bottom">Table Name</th>
-                        <th rowSpan={2} className="px-4 py-2 border-b border-slate-300 align-bottom">Group Name</th>
-                        <th rowSpan={2} className="px-4 py-2 border-b border-slate-300 align-bottom">Warehouse Type</th>
-                        <th rowSpan={2} className="px-4 py-2 border-b border-slate-300 align-bottom">Service</th>
+                        <th rowSpan={2} className="px-2 py-1 border-b border-slate-300 align-bottom">Group Name</th>
+                        <th rowSpan={2} className="px-2 py-1 border-b border-slate-300 align-bottom">Warehouse Type</th>
+                        <th rowSpan={2} className="px-2 py-1 border-b border-slate-300 align-bottom">Service</th>
                         {months.map(month => (
-                            <th key={month} colSpan={2} className="px-4 py-2 text-center border-b border-l border-slate-300">{month}</th>
+                            <th key={month} colSpan={2} className="px-2 py-1 text-center border-b border-l border-slate-300">{month}</th>
                         ))}
                     </tr>
                     <tr>
                         {months.map(month => (
                             <React.Fragment key={month + '-sub'}>
-                                <th className="px-4 py-2 text-right border-b border-l border-slate-300 font-normal">Raw Volume</th>
-                                <th className="px-4 py-2 text-right border-b border-slate-300">Total Billable MAR</th>
+                                <th className="px-2 py-1 text-right border-b border-l border-slate-300 font-normal">Raw Volume</th>
+                                <th className="px-2 py-1 text-right border-b border-slate-300">Total Billable MAR</th>
                             </React.Fragment>
                         ))}
                     </tr>
@@ -201,14 +201,13 @@ const UsageHistoryTable: React.FC<{ usage: UsageData[] }> = ({ usage }) => {
                 <tbody className="divide-y divide-slate-200">
                     {pivotedData.map(row => (
                         <tr key={row.key} className="hover:bg-slate-50">
-                            <td className="px-4 py-2 font-medium text-slate-800">{row.tableName}</td>
-                            <td className="px-4 py-2">{row.groupName}</td>
-                            <td className="px-4 py-2"><Tag status={row.warehouseType} /></td>
-                            <td className="px-4 py-2">{row.service}</td>
+                            <td className="px-2 py-1 font-medium text-slate-800 truncate" title={row.groupName}>{row.groupName}</td>
+                            <td className="px-2 py-1"><Tag status={row.warehouseType} /></td>
+                            <td className="px-2 py-1">{row.service}</td>
                              {months.map(month => (
                                 <React.Fragment key={month + '-' + row.key}>
-                                    <td className="px-4 py-2 text-right border-l">{formatVolume(row.monthlyData[month]?.raw)}</td>
-                                    <td className="px-4 py-2 text-right font-semibold text-indigo-700">{formatVolume(row.monthlyData[month]?.billable)}</td>
+                                    <td className="px-2 py-1 text-right border-l">{formatVolume(row.monthlyData[month]?.raw)}</td>
+                                    <td className="px-2 py-1 text-right font-semibold text-indigo-700">{formatVolume(row.monthlyData[month]?.billable)}</td>
                                 </React.Fragment>
                             ))}
                         </tr>
@@ -250,30 +249,30 @@ const ProjectHistoryList: React.FC<{ projects: ProjectHistory[] }> = ({ projects
 
     return (
         <div className="overflow-auto max-h-72">
-            <table className="w-full text-sm text-left">
+            <table className="w-full text-xs text-left">
                 <thead className="text-xs text-slate-600 uppercase bg-slate-50 sticky top-0">
                     <tr>
-                        <th className="px-4 py-2">Opp Name</th>
-                        <th className="px-4 py-2">Owner</th>
-                        <th className="px-4 py-2">Due Date</th>
-                        <th className="px-4 py-2 text-center">Budgeted</th>
-                        <th className="px-4 py-2 text-center">Billable</th>
-                        <th className="px-4 py-2 text-center">Remaining</th>
-                        <th className="px-4 py-2 text-center">Non-Billable</th>
-                        <th className="px-4 py-2 min-w-[120px]">% Hours Remaining</th>
+                        <th className="px-2 py-1">Opp Name</th>
+                        <th className="px-2 py-1">Owner</th>
+                        <th className="px-2 py-1">Due Date</th>
+                        <th className="px-2 py-1 text-center">Budgeted</th>
+                        <th className="px-2 py-1 text-center">Billable</th>
+                        <th className="px-2 py-1 text-center">Remaining</th>
+                        <th className="px-2 py-1 text-center">Non-Billable</th>
+                        <th className="px-2 py-1 min-w-[120px]">% Hours Remaining</th>
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
                     {projects.map(proj => (
                         <tr key={proj.opportunities_id} className="hover:bg-slate-50">
-                            <td className="px-4 py-2 font-medium text-slate-800" title={proj.opportunities_name}>{proj.opportunities_name}</td>
-                            <td className="px-4 py-2 text-xs text-slate-500 truncate" title={proj.opportunities_project_owner_email}>{proj.opportunities_project_owner_email}</td>
-                            <td className="px-4 py-2 whitespace-nowrap">{formatDate(proj.opportunities_rl_open_project_new_end_date)}</td>
-                            <td className="px-4 py-2 text-center font-semibold">{proj.opportunities_budgeted_hours}</td>
-                            <td className="px-4 py-2 text-center">{proj.opportunities_billable_hours}</td>
-                            <td className="px-4 py-2 text-center font-bold text-indigo-700">{proj.opportunities_remaining_billable_hours}</td>
-                            <td className="px-4 py-2 text-center text-red-600">{proj.opportunities_non_billable_hours}</td>
-                            <td className="px-4 py-2">{renderProgressBar(proj)}</td>
+                            <td className="px-2 py-1 font-medium text-slate-800" title={proj.opportunities_name}>{proj.opportunities_name}</td>
+                            <td className="px-2 py-1 text-slate-500 truncate" title={proj.opportunities_project_owner_email}>{proj.opportunities_project_owner_email}</td>
+                            <td className="px-2 py-1 whitespace-nowrap">{formatDate(proj.opportunities_rl_open_project_new_end_date)}</td>
+                            <td className="px-2 py-1 text-center font-semibold">{proj.opportunities_budgeted_hours}</td>
+                            <td className="px-2 py-1 text-center">{proj.opportunities_billable_hours}</td>
+                            <td className="px-2 py-1 text-center font-bold text-indigo-700">{proj.opportunities_remaining_billable_hours}</td>
+                            <td className="px-2 py-1 text-center text-red-600">{proj.opportunities_non_billable_hours}</td>
+                            <td className="px-2 py-1">{renderProgressBar(proj)}</td>
                         </tr>
                     ))}
                 </tbody>
@@ -296,36 +295,36 @@ const HistoricalOpportunitiesList: React.FC<{ opportunities: Opportunity[] }> = 
 
     return (
         <div className="overflow-auto max-h-96">
-            <table className="w-full text-sm text-left table-fixed">
+            <table className="w-full text-xs text-left table-fixed">
                 <thead className="text-xs text-slate-600 uppercase bg-slate-50 sticky top-0">
                     <tr>
-                        <th className="px-4 py-2 w-[20%]">Opp Name</th>
-                        <th className="px-4 py-2 w-[10%]">Owner</th>
-                        <th className="px-4 py-2 w-[12%]">Stage</th>
-                        <th className="px-4 py-2 text-right w-[8%]">Amount</th>
-                        <th className="px-4 py-2 text-right w-[10%]">Incr. Bookings</th>
-                        <th className="px-4 py-2 text-center w-[10%]">Services Attached</th>
-                        <th className="px-4 py-2 w-[8%]">Type</th>
-                        <th className="px-4 py-2 w-[10%]">Close Date</th>
-                        <th className="px-4 py-2 w-[15%]">Connectors</th>
-                        <th className="px-4 py-2 w-[8%]">Sizes</th>
-                        <th className="px-4 py-2 w-[10%]">Destinations</th>
+                        <th className="px-2 py-1 w-[20%]">Opp Name</th>
+                        <th className="px-2 py-1 w-[10%]">Owner</th>
+                        <th className="px-2 py-1 w-[12%]">Stage</th>
+                        <th className="px-2 py-1 text-right w-[8%]">Amount</th>
+                        <th className="px-2 py-1 text-right w-[10%]">Incr. Bookings</th>
+                        <th className="px-2 py-1 text-center w-[10%]">Services Attached</th>
+                        <th className="px-2 py-1 w-[8%]">Type</th>
+                        <th className="px-2 py-1 w-[10%]">Close Date</th>
+                        <th className="px-2 py-1 w-[15%]">Connectors</th>
+                        <th className="px-2 py-1 w-[8%]">Sizes</th>
+                        <th className="px-2 py-1 w-[10%]">Destinations</th>
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
                     {sortedOpps.map(opp => (
                         <tr key={opp.opportunities_id} className="hover:bg-slate-50">
-                            <td className="px-4 py-2 font-medium text-slate-800 truncate" title={opp.opportunities_name}>{opp.opportunities_name}</td>
-                            <td className="px-4 py-2 truncate" title={opp.opportunities_owner_name}>{opp.opportunities_owner_name}</td>
-                            <td className="px-4 py-2 truncate" title={opp.opportunities_stage_name}><Tag status={opp.opportunities_stage_name} /></td>
-                            <td className="px-4 py-2 text-right font-semibold whitespace-nowrap">{formatCurrency(opp.opportunities_amount)}</td>
-                            <td className="px-4 py-2 text-right whitespace-nowrap">{formatCurrency(opp.opportunities_incremental_bookings)}</td>
-                            <td className="px-4 py-2 text-center"><Tag status={opp.opportunities_has_services_flag} /></td>
-                            <td className="px-4 py-2 truncate" title={opp.opportunities_type}>{opp.opportunities_type}</td>
-                            <td className="px-4 py-2 whitespace-nowrap">{formatDate(opp.opportunities_close_date)}</td>
-                            <td className="px-4 py-2">{renderMultiValueTags(opp.opportunities_connectors)}</td>
-                            <td className="px-4 py-2">{renderMultiValueTags(opp.opportunities_connector_tshirt_size_list)}</td>
-                            <td className="px-4 py-2">{renderMultiValueTags(opp.opportunities_destinations)}</td>
+                            <td className="px-2 py-1 font-medium text-slate-800 truncate" title={opp.opportunities_name}>{opp.opportunities_name}</td>
+                            <td className="px-2 py-1 truncate" title={opp.opportunities_owner_name}>{opp.opportunities_owner_name}</td>
+                            <td className="px-2 py-1 truncate" title={opp.opportunities_stage_name}><Tag status={opp.opportunities_stage_name} /></td>
+                            <td className="px-2 py-1 text-right font-semibold whitespace-nowrap">{formatCurrency(opp.opportunities_amount)}</td>
+                            <td className="px-2 py-1 text-right whitespace-nowrap">{formatCurrency(opp.opportunities_incremental_bookings)}</td>
+                            <td className="px-2 py-1 text-center"><Tag status={opp.opportunities_has_services_flag} /></td>
+                            <td className="px-2 py-1 truncate" title={opp.opportunities_type}>{opp.opportunities_type}</td>
+                            <td className="px-2 py-1 whitespace-nowrap">{formatDate(opp.opportunities_close_date)}</td>
+                            <td className="px-2 py-1">{renderMultiValueTags(opp.opportunities_connectors)}</td>
+                            <td className="px-2 py-1">{renderMultiValueTags(opp.opportunities_connector_tshirt_size_list)}</td>
+                            <td className="px-2 py-1">{renderMultiValueTags(opp.opportunities_destinations)}</td>
                         </tr>
                     ))}
                 </tbody>
@@ -377,7 +376,7 @@ const OpportunityDetail: React.FC<OpportunityDetailProps> = ({ opportunity, deta
     return (
         <div className="animate-fade-in">
             {/* Header */}
-            <div className="flex justify-between items-start mb-6">
+            <div className="flex justify-between items-start mb-4">
                 <div>
                     <button onClick={onBack} className="text-sm font-semibold text-indigo-600 hover:text-indigo-800 flex items-center mb-2">
                         {ICONS.arrowLeft}
@@ -392,77 +391,73 @@ const OpportunityDetail: React.FC<OpportunityDetailProps> = ({ opportunity, deta
                 </div>
             </div>
 
+             {/* NEW Details Bar */}
+            <div className="bg-white rounded-lg shadow-md p-4 mb-8 flex flex-wrap items-center justify-start gap-x-8 gap-y-4 text-sm">
+                <div className="flex items-center space-x-2">
+                    <span className="text-slate-500 font-semibold">Stage:</span>
+                    <Tag status={opportunity.opportunities_stage_name} />
+                </div>
+                <div className="flex items-center space-x-2">
+                    <span className="text-slate-500 font-semibold">Owner:</span>
+                    <span className="text-slate-800 font-medium">{opportunity.opportunities_owner_name}</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                    <span className="text-slate-500 font-semibold">Close Date:</span>
+                    <span className="text-slate-800 font-medium">{formatDate(opportunity.opportunities_close_date)}</span>
+                </div>
+                 <div className="flex items-center space-x-2">
+                    <span className="text-slate-500 font-semibold">Sub End Date:</span>
+                    <span className="text-slate-800 font-medium">{formatDate(opportunity.accounts_subscription_end_date)}</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                    <span className="text-slate-500 font-semibold">Services Amount:</span>
+                    <span className="font-bold text-indigo-700">{formatCurrency(opportunity.opportunities_amount_services)}</span>
+                </div>
+            </div>
+
+
             {/* Main Content */}
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-                {/* Left Side: Summary Cards */}
-                <div className="lg:col-span-1 space-y-4">
-                     <div className="p-4 bg-white rounded-lg shadow-md space-y-3">
-                        <div className="flex justify-between items-center">
-                            <span className="text-sm font-semibold text-slate-600">Stage</span>
-                            <Tag status={opportunity.opportunities_stage_name} />
-                        </div>
-                        <div className="flex justify-between items-center">
-                            <span className="text-sm font-semibold text-slate-600">Owner</span>
-                            <span className="text-sm text-slate-800">{opportunity.opportunities_owner_name}</span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                            <span className="text-sm font-semibold text-slate-600">Close Date</span>
-                            <span className="text-sm text-slate-800">{formatDate(opportunity.opportunities_close_date)}</span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                            <span className="text-sm font-semibold text-slate-600">Services Amount</span>
-                            <span className="text-sm font-bold text-indigo-700">{formatCurrency(opportunity.opportunities_amount_services)}</span>
-                        </div>
-                         <div className="flex justify-between items-center">
-                            <span className="text-sm font-semibold text-slate-600">Sub End Date</span>
-                            <span className="text-sm text-slate-800">{formatDate(opportunity.accounts_subscription_end_date)}</span>
-                        </div>
+            <div>
+                <div className="sticky top-[70px] bg-slate-100 z-10 py-2">
+                        <div className="flex items-center space-x-2 p-1 bg-slate-200 rounded-lg overflow-x-auto">
+                        {SECTIONS.map(section => (
+                            <button
+                                key={section.id}
+                                onClick={() => scrollToSection(section.id)}
+                                className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors flex items-center space-x-2 whitespace-nowrap ${activeSection === section.id ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-600 hover:bg-slate-300'}`}
+                            >
+                                {section.icon}
+                                <span>{section.label}</span>
+                            </button>
+                        ))}
                     </div>
                 </div>
-
-                {/* Right Side: Tabbed Sections */}
-                <div className="lg:col-span-3">
-                    <div className="sticky top-[70px] bg-slate-100 z-10 py-2">
-                         <div className="flex items-center space-x-2 p-1 bg-slate-200 rounded-lg overflow-x-auto">
-                            {SECTIONS.map(section => (
-                                <button
-                                    key={section.id}
-                                    onClick={() => scrollToSection(section.id)}
-                                    className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors flex items-center space-x-2 whitespace-nowrap ${activeSection === section.id ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-600 hover:bg-slate-300'}`}
-                                >
-                                    {section.icon}
-                                    <span>{section.label}</span>
-                                </button>
-                            ))}
-                        </div>
+                <div className="mt-4 space-y-8">
+                    <div id="usage-history" ref={assignRef('usage-history')}>
+                        <Card title="Usage History (Last 3 Months)" icon={ICONS.table}>
+                            <UsageHistoryTable usage={details.usageHistory} />
+                        </Card>
                     </div>
-                    <div className="mt-4 space-y-8">
-                        <div id="usage-history" ref={assignRef('usage-history')}>
-                            <Card title="Usage History (Last 3 Months)" icon={ICONS.table}>
-                                <UsageHistoryTable usage={details.usageHistory} />
-                            </Card>
-                        </div>
-                        <div id="support-summary" ref={assignRef('support-summary')}>
-                             <Card title="Support Summary" icon={ICONS.ticket}>
-                                <SupportTickets tickets={details.supportTickets} />
-                            </Card>
-                        </div>
-                        <div id="historical-opps" ref={assignRef('historical-opps')}>
-                             <Card title="Opportunity History" icon={ICONS.history}>
-                                <HistoricalOpportunitiesList opportunities={historicalOpportunities} />
-                            </Card>
-                        </div>
-                        <div id="past-projects" ref={assignRef('past-projects')}>
-                             <Card title="Services History" icon={ICONS.briefcase}>
-                                <ProjectHistoryList projects={details.projectHistory} />
-                            </Card>
-                        </div>
-                         <div id="disposition" ref={assignRef('disposition')}>
-                           <DispositionForm
-                                onSave={onSave}
-                                opportunity={opportunity}
-                            />
-                        </div>
+                    <div id="support-summary" ref={assignRef('support-summary')}>
+                            <Card title="Support Summary" icon={ICONS.ticket}>
+                            <SupportTickets tickets={details.supportTickets} />
+                        </Card>
+                    </div>
+                    <div id="historical-opps" ref={assignRef('historical-opps')}>
+                            <Card title="Opportunity History" icon={ICONS.history}>
+                            <HistoricalOpportunitiesList opportunities={historicalOpportunities} />
+                        </Card>
+                    </div>
+                    <div id="past-projects" ref={assignRef('past-projects')}>
+                            <Card title="Services History" icon={ICONS.briefcase}>
+                            <ProjectHistoryList projects={details.projectHistory} />
+                        </Card>
+                    </div>
+                        <div id="disposition" ref={assignRef('disposition')}>
+                        <DispositionForm
+                            onSave={onSave}
+                            opportunity={opportunity}
+                        />
                     </div>
                 </div>
             </div>

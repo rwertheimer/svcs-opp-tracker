@@ -91,7 +91,6 @@ export interface SupportTicket {
  */
 export interface UsageData {
     accounts_timeline_date_month: string;
-    connections_table_timeline_table_name: string;
     connections_group_name: string;
     connections_warehouse_subtype: string;
     connections_timeline_service_eom: string;

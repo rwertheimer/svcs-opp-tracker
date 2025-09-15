@@ -88,7 +88,7 @@ const generateUsageHistory = (accountId: string): UsageData[] => {
 
             usageHistory.push({
                  accounts_timeline_date_month: `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`,
-                 connections_table_timeline_table_name: row.table,
+                 // FIX: Removed property 'connections_table_timeline_table_name' as it does not exist on type 'UsageData'.
                  connections_group_name: row.group,
                  connections_warehouse_subtype: row.warehouse,
                  connections_timeline_service_eom: row.service,

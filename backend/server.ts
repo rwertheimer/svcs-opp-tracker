@@ -121,7 +121,6 @@ apiRouter.get('/accounts/:accountId/usage-history', async (req, res) => {
 
         SELECT
             FORMAT_DATE('%Y-%m', accounts_timeline.date) AS accounts_timeline_date_month,
-            connections_table_timeline.table_name AS connections_table_timeline_table_name,
             connections.group_name AS connections_group_name,
             connections.warehouse_subtype AS connections_warehouse_subtype,
             connections_timeline.service_eom AS connections_timeline_service_eom,
@@ -141,7 +140,7 @@ apiRouter.get('/accounts/:accountId/usage-history', async (req, res) => {
             AND accounts_timeline.date >= start_date
             AND accounts_timeline.date < end_date
             AND connections_timeline.has_volume
-        GROUP BY 1, 2, 3, 4, 5;
+        GROUP BY 1, 2, 3, 4;
     `;
 
      try {
