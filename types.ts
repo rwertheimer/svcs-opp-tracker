@@ -94,6 +94,7 @@ export interface UsageData {
     accounts_timeline_date_month: string;
     connections_timeline_service_eom: string;
     connections_table_timeline_total_billable_volume: number;
+    connections_table_timeline_total_raw_volume: number;
     connections_count: number;
 }
 

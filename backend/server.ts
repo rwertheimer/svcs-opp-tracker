@@ -123,6 +123,7 @@ apiRouter.get('/accounts/:accountId/usage-history', async (req, res) => {
             FORMAT_DATE('%Y-%m', accounts_timeline.date) AS accounts_timeline_date_month,
             connections_timeline.service_eom AS connections_timeline_service_eom,
             COALESCE(SUM(connections_table_timeline.free_volume + connections_table_timeline.free_plan_volume + connections_table_timeline.paid_volume), 0) AS connections_table_timeline_total_billable_volume,
+            COALESCE(SUM(connections_table_timeline.total_volume), 0) AS connections_table_timeline_total_raw_volume,
             COUNT(DISTINCT CASE WHEN connections_timeline.connection_observed AND connections_timeline.group_id IS NOT NULL THEN connections_timeline.connector_id ELSE NULL END) AS connections_count
         FROM \`digital-arbor-400.transforms_bi.accounts\` AS accounts
         LEFT JOIN \`digital-arbor-400.transforms_bi.sf_account_timeline\` AS accounts_timeline

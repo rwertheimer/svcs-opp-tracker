@@ -84,12 +84,14 @@ const generateUsageHistory = (accountId: string): UsageData[] => {
 
         for (const [service, count] of Object.entries(services)) {
             const billable = Math.random() * 1e7 * count * (i + 1); // Scale usage by connection count and add some monthly variance
+            const rawVolume = billable * (Math.random() * 0.2 + 1.05); // Raw volume is slightly higher than billable
             const connections_count = Math.max(1, Math.round(count * (Math.random() * 0.4 + 0.8))); // Fluctuate connection count slightly
 
             usageHistory.push({
                  accounts_timeline_date_month: monthString,
                  connections_timeline_service_eom: service,
                  connections_table_timeline_total_billable_volume: Math.round(billable),
+                 connections_table_timeline_total_raw_volume: Math.round(rawVolume),
                  connections_count,
             });
         }

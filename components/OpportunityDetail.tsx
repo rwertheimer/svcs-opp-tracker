@@ -115,7 +115,7 @@ const UsageHistoryTable: React.FC<{ usage: UsageData[] }> = ({ usage }) => {
         type PivotedRow = {
             service: string;
             monthlyData: {
-                [month: string]: { billable: number; connections: number; }
+                [month: string]: { billable: number; raw: number; connections: number; }
             }
         };
 
@@ -132,6 +132,7 @@ const UsageHistoryTable: React.FC<{ usage: UsageData[] }> = ({ usage }) => {
             if (monthStrings.includes(item.accounts_timeline_date_month)) {
                 acc[key].monthlyData[item.accounts_timeline_date_month] = {
                     billable: item.connections_table_timeline_total_billable_volume,
+                    raw: item.connections_table_timeline_total_raw_volume,
                     connections: item.connections_count
                 };
             }
@@ -176,12 +177,13 @@ const UsageHistoryTable: React.FC<{ usage: UsageData[] }> = ({ usage }) => {
                     <tr>
                         <th rowSpan={2} className="px-2 py-1 border-b border-slate-300 align-bottom">Service</th>
                         {months.map(month => (
-                            <th key={month} colSpan={2} className="px-2 py-1 text-center border-b border-l border-slate-300">{month}</th>
+                            <th key={month} colSpan={3} className="px-2 py-1 text-center border-b border-l border-slate-300">{month}</th>
                         ))}
                     </tr>
                     <tr>
                         {months.map(month => (
                             <React.Fragment key={month + '-sub'}>
+                                <th className="px-2 py-1 text-right border-b border-l border-slate-300 font-normal">Total Raw MAR</th>
                                 <th className="px-2 py-1 text-right border-b border-l border-slate-300 font-normal">Total Billable MAR</th>
                                 <th className="px-2 py-1 text-right border-b border-slate-300">Connections</th>
                             </React.Fragment>
@@ -194,6 +196,7 @@ const UsageHistoryTable: React.FC<{ usage: UsageData[] }> = ({ usage }) => {
                             <td className="px-2 py-1 font-medium text-slate-800 truncate" title={row.service}>{row.service}</td>
                              {months.map(month => (
                                 <React.Fragment key={month + '-' + row.service}>
+                                    <td className="px-2 py-1 text-right border-l text-slate-600">{formatVolume(row.monthlyData[month]?.raw)}</td>
                                     <td className="px-2 py-1 text-right border-l font-semibold text-indigo-700">{formatVolume(row.monthlyData[month]?.billable)}</td>
                                     <td className="px-2 py-1 text-right">{formatVolume(row.monthlyData[month]?.connections)}</td>
                                 </React.Fragment>
