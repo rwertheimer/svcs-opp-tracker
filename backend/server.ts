@@ -116,30 +116,54 @@ apiRouter.get('/accounts/:accountId/usage-history', async (req, res) => {
     console.log(`[Live Endpoint] GET Usage History for account ${accountId}`);
     
     const GET_USAGE_QUERY = `
-        DECLARE start_date DATE DEFAULT DATE_TRUNC(DATE_SUB(CURRENT_DATE('America/Los_Angeles'), INTERVAL 3 MONTH), MONTH);
+        DECLARE start_date DATE DEFAULT DATE_TRUNC(DATE_SUB(CURRENT_DATE('America/Los_Angeles'), INTERVAL 2 MONTH), MONTH);
 
+        WITH
+        -- This CTE de-duplicates revenue at the individual connector-month level before aggregation.
+        -- This prevents the "fan-out" issue where joining timelines causes the same revenue to be
+        -- counted multiple times, leading to inflated results.
+        DeduplicatedRevenue AS (
+            SELECT DISTINCT
+                FORMAT_DATE('%Y-%m', connections_timeline.date) AS month,
+                connections_timeline.service_eom AS service,
+                connections_timeline.connector_id,
+                connections_timeline.distributed_connection_proj_model_arr AS revenue
+            FROM \`digital-arbor-400.transforms_bi.connections_timeline\` AS connections_timeline
+            WHERE connections_timeline.salesforce_account_id = @accountId
+              AND connections_timeline.date >= start_date
+              AND connections_timeline.has_volume
+              AND connections_timeline.show_month
+        ),
+        -- This CTE calculates the distinct count of active connections per service, per month.
+        ConnectionCounts AS (
+            SELECT
+                FORMAT_DATE('%Y-%m', connections_timeline.date) AS month,
+                connections_timeline.service_eom AS service,
+                COUNT(DISTINCT IF(connections_timeline.connection_observed AND connections_timeline.group_id IS NOT NULL, connections_timeline.connector_id, NULL)) AS connections_count
+            FROM \`digital-arbor-400.transforms_bi.connections_timeline\` AS connections_timeline
+            WHERE connections_timeline.salesforce_account_id = @accountId
+              AND connections_timeline.date >= start_date
+            GROUP BY 1, 2
+        ),
+        -- This CTE sums the de-duplicated revenue by service and month.
+        AggregatedRevenue AS (
+            SELECT
+                month,
+                service,
+                SUM(revenue) AS annualized_revenue
+            FROM DeduplicatedRevenue
+            GROUP BY 1, 2
+        )
+        -- Finally, join the aggregated revenue with connection counts. A FULL OUTER JOIN handles
+        -- cases where a service might have connections but zero revenue, or vice-versa.
         SELECT
-            FORMAT_DATE('%Y-%m', accounts_timeline.date) AS month,
-            connections_timeline.service_eom AS service,
-            -- Simplified revenue calculation from the user's provided query.
-            -- This captures the core logic of summing the projected model ARR.
-            COALESCE(SUM(connections_timeline.distributed_connection_proj_model_arr), 0) AS annualized_revenue,
-            -- Add count of observed connections with a group_id
-            COUNT(DISTINCT IF(connections_timeline.connection_observed AND connections_timeline.group_id IS NOT NULL, connections_timeline.connector_id, NULL)) AS connections_count
-        FROM \`digital-arbor-400.transforms_bi.accounts\` AS accounts
-        LEFT JOIN \`digital-arbor-400.transforms_bi.sf_account_timeline\` AS accounts_timeline
-            ON accounts_timeline.salesforce_account_id = accounts.salesforce_account_id
-        LEFT JOIN \`digital-arbor-400.transforms_bi.connections_timeline\` AS connections_timeline
-            ON accounts_timeline.date = connections_timeline.date
-            AND accounts_timeline.salesforce_account_id = connections_timeline.salesforce_account_id
-        WHERE
-            accounts.salesforce_account_id = @accountId
-            AND accounts_timeline.date >= start_date
-            -- Look at complete months up to the beginning of the current month.
-            AND accounts_timeline.date < DATE_TRUNC(CURRENT_DATE('America/Los_Angeles'), MONTH)
-            AND connections_timeline.has_volume
-            AND connections_timeline.show_month
-        GROUP BY 1, 2;
+            COALESCE(ar.month, cc.month) as month,
+            COALESCE(ar.service, cc.service) as service,
+            COALESCE(ar.annualized_revenue, 0) as annualized_revenue,
+            COALESCE(cc.connections_count, 0) as connections_count
+        FROM AggregatedRevenue ar
+        FULL OUTER JOIN ConnectionCounts cc
+          ON ar.month = cc.month AND ar.service = cc.service;
     `;
 
      try {

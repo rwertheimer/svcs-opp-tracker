@@ -134,8 +134,22 @@ const UsageHistoryTable: React.FC<{ usage: UsageData[] }> = ({ usage }) => {
         
         const pivotedArray = Object.values(groupedData);
 
-        // Sort by the latest complete month's revenue
-        const sortMonth = monthStrings[monthStrings.length - 1];
+        // Sort by the ARR in the most recent month with full data.
+        const currentMonthStr = new Date().toISOString().slice(0, 7);
+        let sortMonth: string | undefined;
+
+        if (monthStrings.length > 0) {
+            const latestMonth = monthStrings[monthStrings.length - 1];
+            if (latestMonth === currentMonthStr && monthStrings.length > 1) {
+                // If the latest month is the current (partial) month, use the previous one for sorting.
+                sortMonth = monthStrings[monthStrings.length - 2];
+            } else {
+                // Otherwise, use the latest available month. This covers cases where the latest month
+                // is a full month, or if it's the only month of data available.
+                sortMonth = latestMonth;
+            }
+        }
+        
         if (sortMonth) {
             pivotedArray.sort((a, b) => {
                 const revenueA = a.monthlyData[sortMonth]?.revenue || 0;

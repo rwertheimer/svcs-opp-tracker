@@ -70,8 +70,8 @@ const generateUsageHistory = (accountId: string): UsageData[] => {
     const now = new Date();
     const services = [...new Set(MOCK_USAGE_ROWS.map(r => r.service))];
 
-    // Generate data for the last 3 complete months
-    for (let i = 3; i >= 1; i--) {
+    // Generate data for the current month and the previous two months
+    for (let i = 2; i >= 0; i--) {
         const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
         const monthString = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`;
 
