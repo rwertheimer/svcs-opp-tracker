@@ -62,6 +62,50 @@ const useResizableColumns = (initialWidths: { [key: string]: number }) => {
 };
 
 
+// --- NEW: Forecast Summary Component ---
+const ForecastSummary: React.FC<{ opportunities: Opportunity[] }> = ({ opportunities }) => {
+    const forecast = useMemo(() => {
+        const initialTotals: { [key: string]: number } = {
+            'Commit': 0,
+            'Best Case': 0,
+            'Pipeline': 0,
+            'Omitted': 0,
+        };
+
+        return opportunities.reduce((totals, opp) => {
+            const category = opp.disposition?.forecast_category_override || opp.opportunities_forecast_category;
+            const amount = opp.disposition?.services_amount_override ?? opp.opportunities_amount_services;
+
+            if (category in totals) {
+                totals[category] += amount;
+            }
+            
+            return totals;
+        }, initialTotals);
+
+    }, [opportunities]);
+
+    const formatCurrency = (amount: number) => {
+        if (!amount || amount === 0) return '$0';
+        return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(amount);
+    };
+
+    return (
+        <div className="p-4 border-b bg-white">
+            <h3 className="text-sm font-bold text-slate-600 uppercase tracking-wider mb-3">Services Forecast (Current View)</h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                {Object.entries(forecast).map(([category, total]) => (
+                    <div key={category} className="bg-slate-50 p-3 rounded-md shadow-sm border border-slate-200">
+                        <p className="text-xs text-slate-500 font-semibold">{category}</p>
+                        <p className="text-xl font-bold text-indigo-700 mt-1">{formatCurrency(total)}</p>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+
 // --- Main Component ---
 interface OpportunityListProps {
   opportunities: Opportunity[];
@@ -174,6 +218,8 @@ const OpportunityList: React.FC<OpportunityListProps> = ({
             </button>
         </div>
         
+        <ForecastSummary opportunities={displayedOpportunities} />
+
         {/* Saved Views and Filters Panel */}
         <div className="p-4 bg-slate-50 border-b space-y-4">
              <div className="relative">
