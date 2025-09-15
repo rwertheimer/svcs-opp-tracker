@@ -69,31 +69,28 @@ const generateUsageHistory = (accountId: string): UsageData[] => {
     const usageHistory: UsageData[] = [];
     const now = new Date();
 
+    const services = MOCK_USAGE_ROWS.reduce((acc, row) => {
+        if (!acc[row.service]) {
+            acc[row.service] = 0;
+        }
+        acc[row.service]++;
+        return acc;
+    }, {} as Record<string, number>);
+
     // Generate data for the last 3 months
-    for (const row of MOCK_USAGE_ROWS) {
-        let lastMonthRaw = Math.random() * 2e7;
-        let lastMonthBillable = lastMonthRaw * (Math.random() * 0.4 + 0.4);
+    for (let i = 2; i >= 0; i--) { // Loop from 2 down to 0 to generate oldest data first
+        const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const monthString = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`;
 
-        for (let i = 2; i >= 0; i--) { // Loop from 2 down to 0 to generate oldest data first
-            const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
-            
-            const rawFluctuation = (Math.random() - 0.45); // Fluctuate up or down
-            const billableRatio = (Math.random() * 0.4 + 0.4); // Billable is 40-80% of raw
-            
-            const raw = Math.max(0, lastMonthRaw * (1 + rawFluctuation));
-            // Some rows have 0 billable MAR as per screenshot
-            const billable = Math.random() > 0.3 ? raw * billableRatio : 0;
-
-            lastMonthRaw = raw;
+        for (const [service, count] of Object.entries(services)) {
+            const billable = Math.random() * 1e7 * count * (i + 1); // Scale usage by connection count and add some monthly variance
+            const connections_count = Math.max(1, Math.round(count * (Math.random() * 0.4 + 0.8))); // Fluctuate connection count slightly
 
             usageHistory.push({
-                 accounts_timeline_date_month: `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`,
-                 // FIX: Removed property 'connections_table_timeline_table_name' as it does not exist on type 'UsageData'.
-                 connections_group_name: row.group,
-                 connections_warehouse_subtype: row.warehouse,
-                 connections_timeline_service_eom: row.service,
-                 connections_table_timeline_raw_volume_updated: Math.round(raw),
+                 accounts_timeline_date_month: monthString,
+                 connections_timeline_service_eom: service,
                  connections_table_timeline_total_billable_volume: Math.round(billable),
+                 connections_count,
             });
         }
     }

@@ -121,11 +121,9 @@ apiRouter.get('/accounts/:accountId/usage-history', async (req, res) => {
 
         SELECT
             FORMAT_DATE('%Y-%m', accounts_timeline.date) AS accounts_timeline_date_month,
-            connections.group_name AS connections_group_name,
-            connections.warehouse_subtype AS connections_warehouse_subtype,
             connections_timeline.service_eom AS connections_timeline_service_eom,
-            COALESCE(SUM(connections_table_timeline.raw_volume_updated), 0) AS connections_table_timeline_raw_volume_updated,
-            COALESCE(SUM(connections_table_timeline.free_volume + connections_table_timeline.free_plan_volume + connections_table_timeline.paid_volume), 0) AS connections_table_timeline_total_billable_volume
+            COALESCE(SUM(connections_table_timeline.free_volume + connections_table_timeline.free_plan_volume + connections_table_timeline.paid_volume), 0) AS connections_table_timeline_total_billable_volume,
+            COUNT(DISTINCT CASE WHEN connections_timeline.connection_observed AND connections_timeline.group_id IS NOT NULL THEN connections_timeline.connector_id ELSE NULL END) AS connections_count
         FROM \`digital-arbor-400.transforms_bi.accounts\` AS accounts
         LEFT JOIN \`digital-arbor-400.transforms_bi.sf_account_timeline\` AS accounts_timeline
             ON accounts_timeline.salesforce_account_id = accounts.salesforce_account_id
@@ -133,14 +131,12 @@ apiRouter.get('/accounts/:accountId/usage-history', async (req, res) => {
             ON accounts_timeline.date = connections_timeline.date AND accounts_timeline.salesforce_account_id = connections_timeline.salesforce_account_id
         LEFT JOIN \`digital-arbor-400.transforms_bi.connections_table_timeline\` AS connections_table_timeline
             ON connections_timeline.connector_id = connections_table_timeline.connector_id AND connections_timeline.date = connections_table_timeline.date
-        LEFT JOIN \`digital-arbor-400.transforms_bi.connections\` AS connections
-            ON connections_timeline.connector_id = connections.connector_id
         WHERE
             accounts.salesforce_account_id = @accountId
             AND accounts_timeline.date >= start_date
             AND accounts_timeline.date < end_date
             AND connections_timeline.has_volume
-        GROUP BY 1, 2, 3, 4;
+        GROUP BY 1, 2;
     `;
 
      try {

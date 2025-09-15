@@ -2,7 +2,7 @@
 import React from 'react';
 
 interface CardProps {
-  title: string;
+  title: React.ReactNode;
   children: React.ReactNode;
   icon?: React.ReactNode;
 }

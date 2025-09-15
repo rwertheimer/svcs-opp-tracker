@@ -1,3 +1,4 @@
+
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import type { Opportunity, AccountDetails, SupportTicket, UsageData, ProjectHistory, Disposition } from '../types';
 import Card from './Card';
@@ -112,36 +113,26 @@ const UsageHistoryTable: React.FC<{ usage: UsageData[] }> = ({ usage }) => {
         const monthStrings = uniqueMonths.slice(-3);
 
         type PivotedRow = {
-            key: string;
-            groupName: string;
-            warehouseType: string;
             service: string;
             monthlyData: {
-                [month: string]: { raw: number; billable: number; }
+                [month: string]: { billable: number; connections: number; }
             }
         };
 
         const groupedData = usage.reduce((acc, item) => {
-            const key = [
-                item.connections_group_name,
-                item.connections_warehouse_subtype,
-                item.connections_timeline_service_eom
-            ].join('|');
+            const key = item.connections_timeline_service_eom;
 
             if (!acc[key]) {
                 acc[key] = {
-                    key,
-                    groupName: item.connections_group_name,
-                    warehouseType: item.connections_warehouse_subtype,
-                    service: item.connections_timeline_service_eom,
+                    service: key,
                     monthlyData: {}
                 };
             }
             
             if (monthStrings.includes(item.accounts_timeline_date_month)) {
                 acc[key].monthlyData[item.accounts_timeline_date_month] = {
-                    raw: item.connections_table_timeline_raw_volume_updated,
-                    billable: item.connections_table_timeline_total_billable_volume
+                    billable: item.connections_table_timeline_total_billable_volume,
+                    connections: item.connections_count
                 };
             }
             return acc;
@@ -152,15 +143,16 @@ const UsageHistoryTable: React.FC<{ usage: UsageData[] }> = ({ usage }) => {
         const now = new Date();
         const currentMonthString = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}`;
         
+        // Sort by the latest *complete* month's billable volume
         let sortMonth = monthStrings[monthStrings.length - 1];
         if (sortMonth === currentMonthString && monthStrings.length > 1) {
             sortMonth = monthStrings[monthStrings.length - 2];
         }
 
         pivotedArray.sort((a, b) => {
-            const rawA = a.monthlyData[sortMonth]?.raw || 0;
-            const rawB = b.monthlyData[sortMonth]?.raw || 0;
-            return rawB - rawA;
+            const billableA = a.monthlyData[sortMonth]?.billable || 0;
+            const billableB = b.monthlyData[sortMonth]?.billable || 0;
+            return billableB - billableA;
         });
 
         return { pivotedData: pivotedArray, months: monthStrings };
@@ -182,8 +174,6 @@ const UsageHistoryTable: React.FC<{ usage: UsageData[] }> = ({ usage }) => {
             <table className="w-full text-xs text-left">
                 <thead className="text-xs text-slate-600 uppercase bg-slate-50 sticky top-0">
                     <tr>
-                        <th rowSpan={2} className="px-2 py-1 border-b border-slate-300 align-bottom">Group Name</th>
-                        <th rowSpan={2} className="px-2 py-1 border-b border-slate-300 align-bottom">Warehouse Type</th>
                         <th rowSpan={2} className="px-2 py-1 border-b border-slate-300 align-bottom">Service</th>
                         {months.map(month => (
                             <th key={month} colSpan={2} className="px-2 py-1 text-center border-b border-l border-slate-300">{month}</th>
@@ -192,22 +182,20 @@ const UsageHistoryTable: React.FC<{ usage: UsageData[] }> = ({ usage }) => {
                     <tr>
                         {months.map(month => (
                             <React.Fragment key={month + '-sub'}>
-                                <th className="px-2 py-1 text-right border-b border-l border-slate-300 font-normal">Raw Volume</th>
-                                <th className="px-2 py-1 text-right border-b border-slate-300">Total Billable MAR</th>
+                                <th className="px-2 py-1 text-right border-b border-l border-slate-300 font-normal">Total Billable MAR</th>
+                                <th className="px-2 py-1 text-right border-b border-slate-300">Connections</th>
                             </React.Fragment>
                         ))}
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
                     {pivotedData.map(row => (
-                        <tr key={row.key} className="hover:bg-slate-50">
-                            <td className="px-2 py-1 font-medium text-slate-800 truncate" title={row.groupName}>{row.groupName}</td>
-                            <td className="px-2 py-1"><Tag status={row.warehouseType} /></td>
-                            <td className="px-2 py-1">{row.service}</td>
+                        <tr key={row.service} className="hover:bg-slate-50">
+                            <td className="px-2 py-1 font-medium text-slate-800 truncate" title={row.service}>{row.service}</td>
                              {months.map(month => (
-                                <React.Fragment key={month + '-' + row.key}>
-                                    <td className="px-2 py-1 text-right border-l">{formatVolume(row.monthlyData[month]?.raw)}</td>
-                                    <td className="px-2 py-1 text-right font-semibold text-indigo-700">{formatVolume(row.monthlyData[month]?.billable)}</td>
+                                <React.Fragment key={month + '-' + row.service}>
+                                    <td className="px-2 py-1 text-right border-l font-semibold text-indigo-700">{formatVolume(row.monthlyData[month]?.billable)}</td>
+                                    <td className="px-2 py-1 text-right">{formatVolume(row.monthlyData[month]?.connections)}</td>
                                 </React.Fragment>
                             ))}
                         </tr>
@@ -372,6 +360,17 @@ const OpportunityDetail: React.FC<OpportunityDetailProps> = ({ opportunity, deta
         sectionRefs.current[id] = el;
     };
 
+    const lookerUrl = `https://fivetran.looker.com/dashboards/1328?Salesforce+Account+Name=&Salesforce+Account+ID=${opportunity.accounts_salesforce_account_id}&Fivetran+Account+ID=`;
+
+    const usageHistoryTitle = (
+        <a href={lookerUrl} target="_blank" rel="noopener noreferrer" className="flex items-center space-x-2 group text-slate-700 hover:text-indigo-600 transition-colors">
+            <span>Usage History (Last 3 Months)</span>
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-slate-400 group-hover:text-indigo-600 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
+        </a>
+    );
+
 
     return (
         <div className="animate-fade-in">
@@ -434,7 +433,7 @@ const OpportunityDetail: React.FC<OpportunityDetailProps> = ({ opportunity, deta
                 </div>
                 <div className="mt-4 space-y-8">
                     <div id="usage-history" ref={assignRef('usage-history')}>
-                        <Card title="Usage History (Last 3 Months)" icon={ICONS.table}>
+                        <Card title={usageHistoryTitle} icon={ICONS.table}>
                             <UsageHistoryTable usage={details.usageHistory} />
                         </Card>
                     </div>
