@@ -82,7 +82,7 @@ export interface SupportTicket {
     days_open: number;
     tickets_last_response_from_support_at_date: string;
     tickets_is_escalated: 'Yes' | 'No';
-    days_since_last_responce: number;
+    days_since_last_response: number;
     tickets_priority: string;
     tickets_new_csat_numeric: number | null;
     tickets_engineering_issue_links_c: string | null;

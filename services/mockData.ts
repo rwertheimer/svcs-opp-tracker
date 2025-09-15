@@ -61,7 +61,8 @@ const generateSupportTickets = (accountId: string): SupportTicket[] => {
         days_open: i * 10 + 5,
         tickets_last_response_from_support_at_date: createPastDate(i + 1),
         tickets_is_escalated: i % 3 === 0 ? 'Yes' : 'No',
-        days_since_last_responce: i + 1,
+        // FIX: Corrected typo from `days_since_last_responce` to `days_since_last_response` to match the SupportTicket type.
+        days_since_last_response: i + 1,
         tickets_priority: getRandomElement(['High', 'Medium', 'Low']),
         tickets_new_csat_numeric: i % 2 === 0 ? getRandomElement([3, 4, 5]) : null,
         tickets_engineering_issue_links_c: i === 0 

@@ -86,7 +86,7 @@ apiRouter.get('/accounts/:accountId/support-tickets', async (req, res) => {
             DATE_DIFF(CURRENT_DATE('America/Los_Angeles'), DATE(t.created_date, 'America/Los_Angeles'), DAY) AS days_open,
             DATE(t.last_response_from_support_at, 'America/Los_Angeles') AS tickets_last_response_from_support_at_date,
             (CASE WHEN t.is_escalated THEN 'Yes' ELSE 'No' END) AS tickets_is_escalated,
-            DATE_DIFF(CURRENT_DATE('America/Los_Angeles'), DATE(t.last_response_from_support_at, 'America/Los_Angeles'), DAY) AS days_since_last_responce,
+            DATE_DIFF(CURRENT_DATE('America/Los_Angeles'), DATE(t.last_response_from_support_at, 'America/Los_Angeles'), DAY) AS days_since_last_response,
             t.priority AS tickets_priority,
             t.new_csat_numeric AS tickets_new_csat_numeric,
             t.engineering_issue_links_c AS tickets_engineering_issue_links_c

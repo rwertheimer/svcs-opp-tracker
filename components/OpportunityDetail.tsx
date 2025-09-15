@@ -171,7 +171,7 @@ const SupportTickets: React.FC<{ tickets: SupportTicket[] }> = ({ tickets }) => 
                             <td className="px-2 py-1 text-center">{ticket.days_open}</td>
                             <td className="px-2 py-1"><Tag status={ticket.tickets_priority} /></td>
                             <td className="px-2 py-1 text-center"><Tag status={ticket.tickets_is_escalated} /></td>
-                            <td className="px-2 py-1 text-center">{ticket.days_since_last_responce}</td>
+                            <td className="px-2 py-1 text-center">{ticket.days_since_last_response}</td>
                             <td className="px-2 py-1">{renderEngineeringLinks(ticket.tickets_engineering_issue_links_c)}</td>
                         </tr>
                     ))}
