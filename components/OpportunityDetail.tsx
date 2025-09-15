@@ -26,12 +26,27 @@ const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(amount);
 };
 
-const formatDate = (dateString: string) => {
-    if (!dateString) return 'N/A';
-    // Replace hyphens with slashes to ensure the date is parsed in the browser's local timezone.
-    // This avoids the common issue where 'YYYY-MM-DD' is treated as UTC midnight and can
-    // roll back to the previous day when displayed in timezones west of UTC.
-    // .split('T')[0] handles full ISO strings as well.
+const formatDate = (dateInput: unknown) => {
+    if (!dateInput) return 'N/A';
+
+    // Handle BigQuery's date object format which is { value: 'YYYY-MM-DD' }
+    if (typeof dateInput === 'object' && dateInput !== null && 'value' in dateInput) {
+        dateInput = (dateInput as {value: unknown}).value;
+    }
+    
+    // Handle if it's already a Date object
+    if (dateInput instanceof Date) {
+        if (isNaN(dateInput.getTime())) {
+             return 'Invalid Date';
+        }
+        return dateInput.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    }
+
+    // By now it should be a string or something that can be converted to a string
+    const dateString = String(dateInput);
+
+    // This logic handles 'YYYY-MM-DD' strings by parsing them as local time, not UTC,
+    // which prevents the date from rolling back a day in certain timezones.
     const localDate = new Date(dateString.split('T')[0].replace(/-/g, '/'));
     if (isNaN(localDate.getTime())) {
         return 'Invalid Date';
