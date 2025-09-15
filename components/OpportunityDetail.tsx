@@ -408,11 +408,12 @@ const OpportunityDetail: React.FC<OpportunityDetailProps> = ({ opportunity, deta
     };
 
     const lookerUrl = `https://fivetran.looker.com/dashboards/1328?Salesforce+Account+Name=&Salesforce+Account+ID=${opportunity.accounts_salesforce_account_id}&Fivetran+Account+ID=`;
+    const sePovUrl = `https://pov-app.fivetran-internal-sales.com/opportunity/${opportunity.opportunities_id}`;
 
     const usageHistoryTitle = (
         <a href={lookerUrl} target="_blank" rel="noopener noreferrer" className="flex items-center space-x-2 group text-slate-700 hover:text-indigo-600 transition-colors">
             <span>Usage History (Last 3 Months)</span>
-            <svg xmlns="http://www.w.org/2000/svg" className="h-4 w-4 text-slate-400 group-hover:text-indigo-600 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-slate-400 group-hover:text-indigo-600 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
             </svg>
         </a>
@@ -459,6 +460,22 @@ const OpportunityDetail: React.FC<OpportunityDetailProps> = ({ opportunity, deta
                     <span className="text-slate-500 font-semibold">Services Amount:</span>
                     <span className="font-bold text-indigo-700">{formatCurrency(opportunity.opportunities_amount_services)}</span>
                 </div>
+                 <div className="flex items-center space-x-2">
+                    <span className="text-slate-500 font-semibold">Fivetran Status:</span>
+                    <Tag status={opportunity.accounts_primary_fivetran_account_status} />
+                </div>
+                <div className="flex items-center space-x-2">
+                    <span className="text-slate-500 font-semibold">Quoted Products:</span>
+                    <span className="text-slate-800 font-medium">{opportunity.opportunities_quoted_products || 'N/A'}</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                    <span className="text-slate-500 font-semibold">Pitched Products:</span>
+                    <span className="text-slate-800 font-medium">{opportunity.opportunities_product_being_pitched || 'N/A'}</span>
+                </div>
+                <a href={sePovUrl} target="_blank" rel="noopener noreferrer" className="flex items-center space-x-1.5 text-indigo-600 hover:text-indigo-800 font-semibold transition-colors">
+                    {ICONS.link}
+                    <span>SE POV App</span>
+                </a>
             </div>
 
 

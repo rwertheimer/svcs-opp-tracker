@@ -3,11 +3,10 @@ import { Opportunity, ActionItem, Disposition, ActionItemStatus, DispositionStat
 import { ICONS, FORECAST_CATEGORIES } from '../constants';
 
 const defaultActionItems: Omit<ActionItem, 'id' | 'documents'>[] = [
-    { name: 'Initial Scoping Call', status: ActionItemStatus.NotStarted, dueDate: '', notes: '' },
-    { name: 'Develop Initial Proposal', status: ActionItemStatus.NotStarted, dueDate: '', notes: '' },
-    { name: 'Share Initial Proposal', status: ActionItemStatus.NotStarted, dueDate: '', notes: '' },
-    { name: 'Revise and Finalize Proposal', status: ActionItemStatus.NotStarted, dueDate: '', notes: '' },
-    { name: 'Approvals', status: ActionItemStatus.NotStarted, dueDate: '', notes: '' },
+    { name: 'Contact Opp Owner', status: ActionItemStatus.NotStarted, dueDate: '', notes: '' },
+    { name: 'Scope and develop proposal', status: ActionItemStatus.NotStarted, dueDate: '', notes: '' },
+    { name: 'Share proposal', status: ActionItemStatus.NotStarted, dueDate: '', notes: '' },
+    { name: 'Finalize proposal', status: ActionItemStatus.NotStarted, dueDate: '', notes: '' },
 ];
 
 interface DispositionFormProps {

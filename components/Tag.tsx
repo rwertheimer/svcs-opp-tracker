@@ -20,6 +20,9 @@ const statusColorMap: { [key: string]: string } = {
   'Yes': 'bg-green-100 text-green-800',
   'No': 'bg-red-100 text-red-800',
   
+  // Account Statuses
+  'Active': 'bg-green-100 text-green-800',
+  
   // Ticket Statuses
   'Open': 'bg-green-100 text-green-800',
   'In Progress': 'bg-yellow-100 text-yellow-800',
