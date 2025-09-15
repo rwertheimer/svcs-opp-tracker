@@ -23,15 +23,24 @@ const SECTIONS = [
 
 const formatCurrency = (amount: number) => {
     if (!amount) return '$0';
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(amount);
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(amount);
 };
 
 const formatDate = (dateString: string) => {
     if (!dateString) return 'N/A';
-    const date = new Date(dateString);
-    // Adjust for timezone to prevent date from shifting
-    const utcDate = new Date(date.getTime() + date.getTimezoneOffset() * 60000);
-    return utcDate.toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    // Replace hyphens with slashes to ensure the date is parsed in the browser's local timezone.
+    // This avoids the common issue where 'YYYY-MM-DD' is treated as UTC midnight and can
+    // roll back to the previous day when displayed in timezones west of UTC.
+    // .split('T')[0] handles full ISO strings as well.
+    const localDate = new Date(dateString.split('T')[0].replace(/-/g, '/'));
+    if (isNaN(localDate.getTime())) {
+        return 'Invalid Date';
+    }
+    return localDate.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+    });
 };
 
 // --- Helper for rendering multi-value fields as tags ---
@@ -192,7 +201,7 @@ const UsageHistoryTable: React.FC<{ usage: UsageData[] }> = ({ usage }) => {
                     <tr>
                         {months.map(month => (
                             <React.Fragment key={`${month}-sub`}>
-                                <th className="px-2 py-1 text-right font-normal normal-case border-b border-l border-slate-300">Annualized Revenue</th>
+                                <th className="px-2 py-1 text-right font-normal normal-case border-b border-l border-slate-300">Model ARR</th>
                                 <th className="px-2 py-1 text-center font-normal normal-case border-b border-l border-slate-300">Connections</th>
                             </React.Fragment>
                         ))}
