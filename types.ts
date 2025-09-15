@@ -39,7 +39,7 @@ export interface Opportunity {
     opportunities_automated_renewal_status: string;
     accounts_dollars_months_left: number | null;
     opportunities_has_services_flag: 'Yes' | 'No';
-    opportunities_amount_services: number;
+    opportunities_amount_services: number | null;
     accounts_outreach_account_link: string;
     accounts_salesforce_account_name: string;
     accounts_primary_fivetran_account_status: string;

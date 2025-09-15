@@ -77,7 +77,7 @@ const ForecastSummary: React.FC<{ opportunities: Opportunity[] }> = ({ opportuni
             const amount = opp.disposition?.services_amount_override ?? opp.opportunities_amount_services;
 
             if (category in totals) {
-                totals[category] += amount;
+                totals[category] += (amount || 0);
             }
             
             return totals;
@@ -85,7 +85,7 @@ const ForecastSummary: React.FC<{ opportunities: Opportunity[] }> = ({ opportuni
 
     }, [opportunities]);
 
-    const formatCurrency = (amount: number) => {
+    const formatCurrency = (amount: number | null) => {
         if (!amount || amount === 0) return '$0';
         return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(amount);
     };
@@ -171,7 +171,7 @@ const OpportunityList: React.FC<OpportunityListProps> = ({
     return filteredItems;
   }, [opportunities, searchTerm]);
 
-  const formatCurrency = (amount: number) => {
+  const formatCurrency = (amount: number | null) => {
     if (!amount || amount === 0) return '-';
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(amount);
   };

@@ -21,7 +21,7 @@ const SECTIONS = [
     { id: 'disposition', label: 'Disposition', icon: ICONS.clipboard },
 ];
 
-const formatCurrency = (amount: number) => {
+const formatCurrency = (amount: number | null) => {
     if (!amount) return '$0';
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(amount);
 };
@@ -517,6 +517,18 @@ const OpportunityDetail: React.FC<OpportunityDetailProps> = ({ opportunity, deta
                 <div className="flex items-center space-x-2">
                     <span className="text-slate-500 font-semibold">Services Amount:</span>
                     <span className="font-bold text-indigo-700">{formatCurrency(opportunity.opportunities_amount_services)}</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                    <span className="text-slate-500 font-semibold">Forecast Category:</span>
+                    {opportunity.disposition?.forecast_category_override && opportunity.disposition.forecast_category_override !== opportunity.opportunities_forecast_category ? (
+                         <div className="flex items-center space-x-1.5" title={`SA Adjusted Category. Original SFDC category was ${opportunity.opportunities_forecast_category}.`}>
+                            <span className="font-semibold text-indigo-700">{opportunity.disposition.forecast_category_override}</span>
+                            <span className="text-slate-400 line-through text-xs">{opportunity.opportunities_forecast_category}</span>
+                            <span className="text-slate-400">{ICONS.pencil}</span>
+                        </div>
+                    ) : (
+                        <span className="text-slate-800 font-medium">{opportunity.opportunities_forecast_category || 'N/A'}</span>
+                    )}
                 </div>
                  <div className="flex items-center space-x-2">
                     <span className="text-slate-500 font-semibold">Fivetran Status:</span>
