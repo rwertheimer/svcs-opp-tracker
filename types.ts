@@ -84,6 +84,8 @@ export interface SupportTicket {
     tickets_is_escalated: 'Yes' | 'No';
     days_since_last_responce: number;
     tickets_priority: string;
+    tickets_new_csat_numeric: number | null;
+    tickets_engineering_issue_links_c: string | null;
 }
 
 /**

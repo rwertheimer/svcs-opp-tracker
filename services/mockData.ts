@@ -48,7 +48,7 @@ const MOCK_USAGE_ROWS = [
 // --- MOCK DATA GENERATION for detail endpoints (restored from backend/server.ts) ---
 
 const generateSupportTickets = (accountId: string): SupportTicket[] => {
-    return Array.from({ length: 3 }, (_, i) => ({
+    return Array.from({ length: 4 }, (_, i) => ({
         accounts_salesforce_account_id: accountId,
         accounts_outreach_account_link: 'http://example.com',
         accounts_salesforce_account_name: 'Mock Account',
@@ -56,13 +56,17 @@ const generateSupportTickets = (accountId: string): SupportTicket[] => {
         tickets_ticket_url: 'http://example.com',
         tickets_ticket_number: 12345 + i,
         tickets_created_date: createPastDate(i * 10 + 5),
-        tickets_status: 'Open',
+        tickets_status: getRandomElement(['Open', 'Closed', 'In Progress']),
         tickets_subject: `Issue with connector sync #${i+1}`,
         days_open: i * 10 + 5,
         tickets_last_response_from_support_at_date: createPastDate(i + 1),
-        tickets_is_escalated: 'No',
+        tickets_is_escalated: i % 3 === 0 ? 'Yes' : 'No',
         days_since_last_responce: i + 1,
         tickets_priority: getRandomElement(['High', 'Medium', 'Low']),
+        tickets_new_csat_numeric: i % 2 === 0 ? getRandomElement([3, 4, 5]) : null,
+        tickets_engineering_issue_links_c: i === 0 
+            ? `https://fivetran.atlassian.net/browse/PROD-12345, https://fivetran.atlassian.net/browse/ENG-67890` 
+            : (i === 2 ? `https://fivetran.atlassian.net/browse/DEV-54321` : null),
     }));
 };
 

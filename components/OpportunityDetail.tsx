@@ -86,6 +86,38 @@ const renderMultiValueTags = (value: string | null | undefined) => {
     );
 };
 
+const renderEngineeringLinks = (links: string | null | undefined) => {
+    if (!links) {
+        return <span className="text-slate-500">N/A</span>;
+    }
+
+    const linkItems = links.split(/[,;]/).map(link => link.trim()).filter(Boolean);
+
+    if (linkItems.length === 0) {
+        return <span className="text-slate-500">N/A</span>;
+    }
+
+    return (
+        <div className="flex flex-col items-start space-y-1">
+            {linkItems.map((link, index) => {
+                const ticketId = link.substring(link.lastIndexOf('/') + 1);
+                return (
+                    <a
+                        key={index}
+                        href={link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-indigo-600 hover:underline text-xs font-semibold"
+                        title={link}
+                    >
+                        {ticketId || link}
+                    </a>
+                );
+            })}
+        </div>
+    );
+};
+
 
 // --- Sub-components defined outside the main component for performance ---
 
@@ -98,6 +130,17 @@ const SupportTickets: React.FC<{ tickets: SupportTicket[] }> = ({ tickets }) => 
         return <p className="text-slate-500 text-sm">No open support tickets.</p>;
     }
     
+    const renderCsatScore = (score: number | null | undefined) => {
+        if (score === null || score === undefined) return <span className="text-slate-400">-</span>;
+        
+        let color = 'text-slate-700';
+        if (score <= 2) color = 'text-red-600';
+        else if (score === 3) color = 'text-yellow-600';
+        else if (score >= 4) color = 'text-green-600';
+
+        return <span className={`font-bold text-center block ${color}`}>{score}/5</span>;
+    };
+
     return (
         <div className="overflow-auto max-h-96">
             <table className="w-full text-xs text-left">
@@ -105,11 +148,13 @@ const SupportTickets: React.FC<{ tickets: SupportTicket[] }> = ({ tickets }) => 
                     <tr>
                         <th className="px-2 py-1">Created Date</th>
                         <th className="px-2 py-1">Status</th>
+                        <th className="px-2 py-1 text-center">CSAT</th>
                         <th className="px-2 py-1">Subject</th>
                         <th className="px-2 py-1 text-center">Days Open</th>
                         <th className="px-2 py-1">Priority</th>
                         <th className="px-2 py-1 text-center">Escalated</th>
                         <th className="px-2 py-1 text-center">Days Since Response</th>
+                        <th className="px-2 py-1">Engineering Links</th>
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
@@ -117,6 +162,7 @@ const SupportTickets: React.FC<{ tickets: SupportTicket[] }> = ({ tickets }) => 
                         <tr key={ticket.tickets_ticket_number} className="hover:bg-slate-50">
                             <td className="px-2 py-1 whitespace-nowrap">{formatDate(ticket.tickets_created_date)}</td>
                             <td className="px-2 py-1"><Tag status={ticket.tickets_status} /></td>
+                            <td className="px-2 py-1 text-center">{renderCsatScore(ticket.tickets_new_csat_numeric)}</td>
                             <td className="px-2 py-1 font-medium">
                                 <a href={ticket.tickets_ticket_url} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">
                                     {ticket.tickets_subject}
@@ -126,6 +172,7 @@ const SupportTickets: React.FC<{ tickets: SupportTicket[] }> = ({ tickets }) => 
                             <td className="px-2 py-1"><Tag status={ticket.tickets_priority} /></td>
                             <td className="px-2 py-1 text-center"><Tag status={ticket.tickets_is_escalated} /></td>
                             <td className="px-2 py-1 text-center">{ticket.days_since_last_responce}</td>
+                            <td className="px-2 py-1">{renderEngineeringLinks(ticket.tickets_engineering_issue_links_c)}</td>
                         </tr>
                     ))}
                 </tbody>

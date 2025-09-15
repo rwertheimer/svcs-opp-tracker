@@ -87,7 +87,9 @@ apiRouter.get('/accounts/:accountId/support-tickets', async (req, res) => {
             DATE(t.last_response_from_support_at, 'America/Los_Angeles') AS tickets_last_response_from_support_at_date,
             (CASE WHEN t.is_escalated THEN 'Yes' ELSE 'No' END) AS tickets_is_escalated,
             DATE_DIFF(CURRENT_DATE('America/Los_Angeles'), DATE(t.last_response_from_support_at, 'America/Los_Angeles'), DAY) AS days_since_last_responce,
-            t.priority AS tickets_priority
+            t.priority AS tickets_priority,
+            t.new_csat_numeric AS tickets_new_csat_numeric,
+            t.engineering_issue_links_c AS tickets_engineering_issue_links_c
         FROM \`digital-arbor-400.transforms_bi.tickets\` AS t
         LEFT JOIN \`digital-arbor-400.transforms_bi.accounts\` AS a ON t.salesforce_account_id = a.salesforce_account_id
         WHERE
@@ -121,26 +123,28 @@ apiRouter.get('/accounts/:accountId/usage-history', async (req, res) => {
         WITH
         DeduplicatedRevenue AS (
             SELECT DISTINCT
-                FORMAT_DATE('%Y-%m', connections_timeline.date) AS month,
-                connections_timeline.service_eom AS service,
-                connections_timeline.warehouse_subtype,
-                connections_timeline.connector_id,
-                connections_timeline.distributed_connection_proj_model_arr AS revenue
-            FROM \`digital-arbor-400.transforms_bi.connections_timeline\` AS connections_timeline
-            WHERE connections_timeline.salesforce_account_id = @accountId
-              AND connections_timeline.date >= start_date
-              AND connections_timeline.has_volume
-              AND connections_timeline.show_month
+                FORMAT_DATE('%Y-%m', ct.date) AS month,
+                ct.service_eom AS service,
+                c.warehouse_subtype,
+                ct.connector_id,
+                ct.distributed_connection_proj_model_arr AS revenue
+            FROM \`digital-arbor-400.transforms_bi.connections_timeline\` AS ct
+            LEFT JOIN \`digital-arbor-400.transforms_bi.connections\` AS c ON ct.connector_id = c.connector_id
+            WHERE ct.salesforce_account_id = @accountId
+              AND ct.date >= start_date
+              AND ct.has_volume
+              AND ct.show_month
         ),
         ConnectionCounts AS (
             SELECT
-                FORMAT_DATE('%Y-%m', connections_timeline.date) AS month,
-                connections_timeline.service_eom AS service,
-                connections_timeline.warehouse_subtype,
-                COUNT(DISTINCT IF(connections_timeline.connection_observed AND connections_timeline.group_id IS NOT NULL, connections_timeline.connector_id, NULL)) AS connections_count
-            FROM \`digital-arbor-400.transforms_bi.connections_timeline\` AS connections_timeline
-            WHERE connections_timeline.salesforce_account_id = @accountId
-              AND connections_timeline.date >= start_date
+                FORMAT_DATE('%Y-%m', ct.date) AS month,
+                ct.service_eom AS service,
+                c.warehouse_subtype,
+                COUNT(DISTINCT IF(ct.connection_observed AND ct.group_id IS NOT NULL, ct.connector_id, NULL)) AS connections_count
+            FROM \`digital-arbor-400.transforms_bi.connections_timeline\` AS ct
+            LEFT JOIN \`digital-arbor-400.transforms_bi.connections\` AS c ON ct.connector_id = c.connector_id
+            WHERE ct.salesforce_account_id = @accountId
+              AND ct.date >= start_date
             GROUP BY 1, 2, 3
         ),
         AggregatedRevenue AS (
@@ -162,7 +166,7 @@ apiRouter.get('/accounts/:accountId/usage-history', async (req, res) => {
         FULL OUTER JOIN ConnectionCounts cc
           ON ar.month = cc.month 
           AND ar.service = cc.service 
-          AND ar.warehouse_subtype = cc.warehouse_subtype;
+          AND COALESCE(ar.warehouse_subtype, '___NULL___') = COALESCE(cc.warehouse_subtype, '___NULL___');
     `;
 
      try {
