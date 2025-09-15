@@ -88,13 +88,12 @@ export interface SupportTicket {
 
 /**
  * Based on the "Account-level usage history table" SQL query.
- * This has been simplified to group by service.
+ * This has been simplified to show annualized revenue by service.
  */
 export interface UsageData {
-    accounts_timeline_date_month: string;
-    connections_timeline_service_eom: string;
-    connections_table_timeline_total_billable_volume: number;
-    connections_table_timeline_total_raw_volume: number;
+    month: string;
+    service: string;
+    annualized_revenue: number;
     connections_count: number;
 }
 

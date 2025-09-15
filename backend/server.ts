@@ -116,27 +116,29 @@ apiRouter.get('/accounts/:accountId/usage-history', async (req, res) => {
     console.log(`[Live Endpoint] GET Usage History for account ${accountId}`);
     
     const GET_USAGE_QUERY = `
-        DECLARE start_date DATE DEFAULT DATE_TRUNC(DATE_SUB(CURRENT_DATE('America/Los_Angeles'), INTERVAL 2 MONTH), MONTH);
-        DECLARE end_date DATE DEFAULT DATE_TRUNC(DATE_ADD(CURRENT_DATE('America/Los_Angeles'), INTERVAL 1 MONTH), MONTH);
+        DECLARE start_date DATE DEFAULT DATE_TRUNC(DATE_SUB(CURRENT_DATE('America/Los_Angeles'), INTERVAL 3 MONTH), MONTH);
 
         SELECT
-            FORMAT_DATE('%Y-%m', accounts_timeline.date) AS accounts_timeline_date_month,
-            connections_timeline.service_eom AS connections_timeline_service_eom,
-            COALESCE(SUM(connections_table_timeline.free_volume + connections_table_timeline.free_plan_volume + connections_table_timeline.paid_volume), 0) AS connections_table_timeline_total_billable_volume,
-            COALESCE(SUM(connections_table_timeline.total_volume), 0) AS connections_table_timeline_total_raw_volume,
-            COUNT(DISTINCT CASE WHEN connections_timeline.connection_observed AND connections_timeline.group_id IS NOT NULL THEN connections_timeline.connector_id ELSE NULL END) AS connections_count
+            FORMAT_DATE('%Y-%m', accounts_timeline.date) AS month,
+            connections_timeline.service_eom AS service,
+            -- Simplified revenue calculation from the user's provided query.
+            -- This captures the core logic of summing the projected model ARR.
+            COALESCE(SUM(connections_timeline.distributed_connection_proj_model_arr), 0) AS annualized_revenue,
+            -- Add count of observed connections with a group_id
+            COUNT(DISTINCT IF(connections_timeline.connection_observed AND connections_timeline.group_id IS NOT NULL, connections_timeline.connector_id, NULL)) AS connections_count
         FROM \`digital-arbor-400.transforms_bi.accounts\` AS accounts
         LEFT JOIN \`digital-arbor-400.transforms_bi.sf_account_timeline\` AS accounts_timeline
             ON accounts_timeline.salesforce_account_id = accounts.salesforce_account_id
         LEFT JOIN \`digital-arbor-400.transforms_bi.connections_timeline\` AS connections_timeline
-            ON accounts_timeline.date = connections_timeline.date AND accounts_timeline.salesforce_account_id = connections_timeline.salesforce_account_id
-        LEFT JOIN \`digital-arbor-400.transforms_bi.connections_table_timeline\` AS connections_table_timeline
-            ON connections_timeline.connector_id = connections_table_timeline.connector_id AND connections_timeline.date = connections_table_timeline.date
+            ON accounts_timeline.date = connections_timeline.date
+            AND accounts_timeline.salesforce_account_id = connections_timeline.salesforce_account_id
         WHERE
             accounts.salesforce_account_id = @accountId
             AND accounts_timeline.date >= start_date
-            AND accounts_timeline.date < end_date
+            -- Look at complete months up to the beginning of the current month.
+            AND accounts_timeline.date < DATE_TRUNC(CURRENT_DATE('America/Los_Angeles'), MONTH)
             AND connections_timeline.has_volume
+            AND connections_timeline.show_month
         GROUP BY 1, 2;
     `;
 

@@ -1,4 +1,3 @@
-
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import type { Opportunity, AccountDetails, SupportTicket, UsageData, ProjectHistory, Disposition } from '../types';
 import Card from './Card';
@@ -109,31 +108,25 @@ const UsageHistoryTable: React.FC<{ usage: UsageData[] }> = ({ usage }) => {
             return { pivotedData: [], months: [] };
         }
 
-        const uniqueMonths = [...new Set(usage.map(u => u.accounts_timeline_date_month))].sort();
+        const uniqueMonths = [...new Set(usage.map(u => u.month))].sort();
         const monthStrings = uniqueMonths.slice(-3);
 
         type PivotedRow = {
             service: string;
             monthlyData: {
-                [month: string]: { billable: number; raw: number; connections: number; }
+                [month: string]: { revenue: number; connections: number; }
             }
         };
 
         const groupedData = usage.reduce((acc, item) => {
-            const key = item.connections_timeline_service_eom;
-
+            const key = item.service;
             if (!acc[key]) {
-                acc[key] = {
-                    service: key,
-                    monthlyData: {}
-                };
+                acc[key] = { service: key, monthlyData: {} };
             }
-            
-            if (monthStrings.includes(item.accounts_timeline_date_month)) {
-                acc[key].monthlyData[item.accounts_timeline_date_month] = {
-                    billable: item.connections_table_timeline_total_billable_volume,
-                    raw: item.connections_table_timeline_total_raw_volume,
-                    connections: item.connections_count
+            if (monthStrings.includes(item.month)) {
+                acc[key].monthlyData[item.month] = { 
+                    revenue: item.annualized_revenue,
+                    connections: item.connections_count,
                 };
             }
             return acc;
@@ -141,30 +134,30 @@ const UsageHistoryTable: React.FC<{ usage: UsageData[] }> = ({ usage }) => {
         
         const pivotedArray = Object.values(groupedData);
 
-        const now = new Date();
-        const currentMonthString = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}`;
-        
-        // Sort by the latest *complete* month's billable volume
-        let sortMonth = monthStrings[monthStrings.length - 1];
-        if (sortMonth === currentMonthString && monthStrings.length > 1) {
-            sortMonth = monthStrings[monthStrings.length - 2];
+        // Sort by the latest complete month's revenue
+        const sortMonth = monthStrings[monthStrings.length - 1];
+        if (sortMonth) {
+            pivotedArray.sort((a, b) => {
+                const revenueA = a.monthlyData[sortMonth]?.revenue || 0;
+                const revenueB = b.monthlyData[sortMonth]?.revenue || 0;
+                return revenueB - revenueA;
+            });
         }
-
-        pivotedArray.sort((a, b) => {
-            const billableA = a.monthlyData[sortMonth]?.billable || 0;
-            const billableB = b.monthlyData[sortMonth]?.billable || 0;
-            return billableB - billableA;
-        });
-
+        
         return { pivotedData: pivotedArray, months: monthStrings };
 
     }, [usage]);
 
-    const formatVolume = (volume: number) => {
-        if (volume === 0) return '0';
-        if (!volume) return '-';
-        return volume.toLocaleString('en-US');
-    }
+    const formatRevenue = (revenue?: number) => {
+        if (revenue === undefined || revenue === null) return '-';
+        return formatCurrency(revenue);
+    };
+
+    const formatConnections = (connections?: number) => {
+        if (connections === undefined || connections === null || connections === 0) return '-';
+        return connections.toLocaleString();
+    };
+
 
     if (pivotedData.length === 0) {
         return <p className="text-slate-500 text-sm">No usage history available for this period.</p>;
@@ -173,19 +166,20 @@ const UsageHistoryTable: React.FC<{ usage: UsageData[] }> = ({ usage }) => {
     return (
         <div className="overflow-auto max-h-96">
             <table className="w-full text-xs text-left">
-                <thead className="text-xs text-slate-600 uppercase bg-slate-50 sticky top-0">
+                <thead className="text-xs text-slate-600 uppercase bg-slate-50 sticky top-0 z-10">
                     <tr>
-                        <th rowSpan={2} className="px-2 py-1 border-b border-slate-300 align-bottom">Service</th>
+                        <th rowSpan={2} className="px-2 py-2 border-b border-slate-300 align-bottom sticky left-0 bg-slate-50 z-20">Service</th>
                         {months.map(month => (
-                            <th key={month} colSpan={3} className="px-2 py-1 text-center border-b border-l border-slate-300">{month}</th>
+                            <th key={month} colSpan={2} className="px-2 py-1 text-center border-b border-l border-slate-300">
+                                {month}
+                            </th>
                         ))}
                     </tr>
                     <tr>
                         {months.map(month => (
-                            <React.Fragment key={month + '-sub'}>
-                                <th className="px-2 py-1 text-right border-b border-l border-slate-300 font-normal">Total Raw MAR</th>
-                                <th className="px-2 py-1 text-right border-b border-l border-slate-300 font-normal">Total Billable MAR</th>
-                                <th className="px-2 py-1 text-right border-b border-slate-300">Connections</th>
+                            <React.Fragment key={`${month}-sub`}>
+                                <th className="px-2 py-1 text-right font-normal normal-case border-b border-l border-slate-300">Annualized Revenue</th>
+                                <th className="px-2 py-1 text-center font-normal normal-case border-b border-l border-slate-300">Connections</th>
                             </React.Fragment>
                         ))}
                     </tr>
@@ -193,12 +187,15 @@ const UsageHistoryTable: React.FC<{ usage: UsageData[] }> = ({ usage }) => {
                 <tbody className="divide-y divide-slate-200">
                     {pivotedData.map(row => (
                         <tr key={row.service} className="hover:bg-slate-50">
-                            <td className="px-2 py-1 font-medium text-slate-800 truncate" title={row.service}>{row.service}</td>
+                            <td className="px-2 py-1 font-medium text-slate-800 truncate sticky left-0 bg-white hover:bg-slate-50" title={row.service}>{row.service}</td>
                              {months.map(month => (
-                                <React.Fragment key={month + '-' + row.service}>
-                                    <td className="px-2 py-1 text-right border-l text-slate-600">{formatVolume(row.monthlyData[month]?.raw)}</td>
-                                    <td className="px-2 py-1 text-right border-l font-semibold text-indigo-700">{formatVolume(row.monthlyData[month]?.billable)}</td>
-                                    <td className="px-2 py-1 text-right">{formatVolume(row.monthlyData[month]?.connections)}</td>
+                                <React.Fragment key={`${month}-${row.service}`}>
+                                    <td className="px-2 py-1 text-right border-l font-semibold text-indigo-700">
+                                        {formatRevenue(row.monthlyData[month]?.revenue)}
+                                    </td>
+                                    <td className="px-2 py-1 text-center border-l font-semibold text-slate-700">
+                                        {formatConnections(row.monthlyData[month]?.connections)}
+                                    </td>
                                 </React.Fragment>
                             ))}
                         </tr>

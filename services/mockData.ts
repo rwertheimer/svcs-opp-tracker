@@ -68,32 +68,23 @@ const generateSupportTickets = (accountId: string): SupportTicket[] => {
 const generateUsageHistory = (accountId: string): UsageData[] => {
     const usageHistory: UsageData[] = [];
     const now = new Date();
+    const services = [...new Set(MOCK_USAGE_ROWS.map(r => r.service))];
 
-    const services = MOCK_USAGE_ROWS.reduce((acc, row) => {
-        if (!acc[row.service]) {
-            acc[row.service] = 0;
-        }
-        acc[row.service]++;
-        return acc;
-    }, {} as Record<string, number>);
-
-    // Generate data for the last 3 months
-    for (let i = 2; i >= 0; i--) { // Loop from 2 down to 0 to generate oldest data first
+    // Generate data for the last 3 complete months
+    for (let i = 3; i >= 1; i--) {
         const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
         const monthString = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}`;
 
-        for (const [service, count] of Object.entries(services)) {
-            const billable = Math.random() * 1e7 * count * (i + 1); // Scale usage by connection count and add some monthly variance
-            const rawVolume = billable * (Math.random() * 0.2 + 1.05); // Raw volume is slightly higher than billable
-            const connections_count = Math.max(1, Math.round(count * (Math.random() * 0.4 + 0.8))); // Fluctuate connection count slightly
-
-            usageHistory.push({
-                 accounts_timeline_date_month: monthString,
-                 connections_timeline_service_eom: service,
-                 connections_table_timeline_total_billable_volume: Math.round(billable),
-                 connections_table_timeline_total_raw_volume: Math.round(rawVolume),
-                 connections_count,
-            });
+        for (const service of services) {
+            // Simulate some services not having revenue every month
+            if (Math.random() > 0.1) {
+                usageHistory.push({
+                    month: monthString,
+                    service: service,
+                    annualized_revenue: Math.round(Math.random() * 50000 + 1000),
+                    connections_count: Math.floor(Math.random() * 10) + 1,
+                });
+            }
         }
     }
     return usageHistory;
