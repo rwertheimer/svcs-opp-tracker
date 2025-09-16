@@ -65,32 +65,36 @@ const useResizableColumns = (initialWidths: { [key: string]: number }) => {
 // --- NEW: Forecast Summary Component ---
 const ForecastSummary: React.FC<{ opportunities: Opportunity[] }> = ({ opportunities }) => {
     const forecast = useMemo(() => {
-        const initialTotals: { [key: string]: number } = {
+        const initialTotals = {
             'Commit': 0,
-            'Best Case': 0,
-            'Pipeline': 0,
+            'Most Likely': 0,
+            'Upside': 0,
             'Omitted': 0,
         };
 
         const mapCategoryToLabel = (dbCategory: string | null | undefined): keyof typeof initialTotals => {
             if (!dbCategory) {
-                return 'Pipeline';
+                return 'Upside'; // A reasonable default for un-categorized items
             }
             const category = dbCategory.trim();
 
             // Handle direct matches from overrides or clean data first
             if (category === 'Commit') return 'Commit';
-            if (category === 'Best Case') return 'Best Case';
-            if (category === 'Pipeline') return 'Pipeline';
+            if (category === 'Most Likely') return 'Most Likely';
+            if (category === 'Upside') return 'Upside';
             if (category === 'Omitted') return 'Omitted';
-
-            // Handle SFDC-prefixed database values from Postgres
-            if (category.includes('Commit')) return 'Commit'; // e.g., "3 - Commit"
-            if (category.includes('Most Likely') || category.includes('Upside')) return 'Best Case'; // e.g., "2 - Most Likely", "1 - Upside"
-            if (category.includes('Omitted')) return 'Omitted'; // e.g., "0 - Omitted"
             
-            // Default any other unexpected values to Pipeline
-            return 'Pipeline';
+            // Handle SFDC/Postgres values
+            if (category.includes('Commit')) return 'Commit'; // "3 - Commit"
+            if (category.includes('Most Likely')) return 'Most Likely'; // "2 - Most Likely"
+            if (category.includes('Upside')) return 'Upside'; // "1 - Upside"
+            if (category.includes('Omitted')) return 'Omitted'; // "0 - Omitted"
+
+            // Handle legacy 'Pipeline' or 'Best Case' categories from SFDC and map them to Most Likely.
+            if (category.includes('Pipeline') || category.includes('Best Case')) return 'Most Likely';
+            
+            // Default any other unexpected values to a non-committal category.
+            return 'Upside';
         };
 
         return opportunities.reduce((totals, opp) => {

@@ -23,7 +23,7 @@ const MOCK_REPS = ['Alice Johnson', 'Bob Williams', 'Charlie Brown', 'Diana Mill
 const MOCK_REGIONS = ['NA - Enterprise', 'NA - Commercial', 'EMEA', 'APAC'];
 const MOCK_STAGES = Object.values(OpportunityStage).filter(s => s !== OpportunityStage.PreSalesScoping);
 const MOCK_OPP_TYPES = ['Renewal', 'New Business', 'Upsell', 'Expansion', 'Sales'];
-const MOCK_FORECAST_CATEGORIES = ['Commit', 'Best Case', 'Pipeline', 'Omitted'];
+const MOCK_FORECAST_CATEGORIES = ['Commit', 'Most Likely', 'Upside', 'Omitted'];
 const MOCK_WAREHOUSE_SUBTYPES = ['snowflake', 'databricks', 'bigquery', 'redshift'];
 
 // --- Realistic data for the Usage History Table ---
