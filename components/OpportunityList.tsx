@@ -72,21 +72,40 @@ const ForecastSummary: React.FC<{ opportunities: Opportunity[] }> = ({ opportuni
             'Omitted': 0,
         };
 
-        return opportunities.reduce((totals, opp) => {
-            let category = opp.disposition?.forecast_category_override || opp.opportunities_forecast_category;
-            const rawAmount = opp.disposition?.services_amount_override ?? opp.opportunities_amount_services;
-
-            // FIX: This logic is now robust. It correctly handles numbers, strings containing
-            // numbers (which can come from the DB API), nulls, and NaN values.
-            // It parses the value first, then checks if the result is a valid number.
-            const parsedAmount = parseFloat(rawAmount as any);
-            const amount = !isNaN(parsedAmount) ? parsedAmount : 0;
-
-            if (!category || !(category in totals)) {
-                category = 'Pipeline';
+        const mapCategoryToLabel = (dbCategory: string | null | undefined): keyof typeof initialTotals => {
+            if (!dbCategory) {
+                return 'Pipeline';
             }
+            const category = dbCategory.trim();
+
+            // Handle direct matches from overrides or clean data first
+            if (category === 'Commit') return 'Commit';
+            if (category === 'Best Case') return 'Best Case';
+            if (category === 'Pipeline') return 'Pipeline';
+            if (category === 'Omitted') return 'Omitted';
+
+            // Handle SFDC-prefixed database values from Postgres
+            if (category.includes('Commit')) return 'Commit'; // e.g., "3 - Commit"
+            if (category.includes('Most Likely') || category.includes('Upside')) return 'Best Case'; // e.g., "2 - Most Likely", "1 - Upside"
+            if (category.includes('Omitted')) return 'Omitted'; // e.g., "0 - Omitted"
             
-            totals[category] += amount;
+            // Default any other unexpected values to Pipeline
+            return 'Pipeline';
+        };
+
+        return opportunities.reduce((totals, opp) => {
+            // Use override if available, otherwise use the value from SFDC
+            const rawCategory = opp.disposition?.forecast_category_override || opp.opportunities_forecast_category;
+            
+            // Map the raw DB/override value to one of our standard labels
+            const targetCategory = mapCategoryToLabel(rawCategory);
+
+            // Use override amount if available, otherwise use SFDC amount. Coalesce null/undefined to 0.
+            const rawAmount = opp.disposition?.services_amount_override ?? opp.opportunities_amount_services;
+            const amount = Number(rawAmount) || 0;
+
+            // Add the amount to the correct bucket.
+            totals[targetCategory] += amount;
             
             return totals;
         }, initialTotals);
@@ -95,7 +114,7 @@ const ForecastSummary: React.FC<{ opportunities: Opportunity[] }> = ({ opportuni
 
     const formatCurrency = (amount: number | null) => {
         if (amount === null || amount === undefined || isNaN(amount)) return '$0';
-        return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(amount);
+        return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(amount);
     };
 
     return (
