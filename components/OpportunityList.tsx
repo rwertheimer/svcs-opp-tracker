@@ -147,6 +147,7 @@ interface OpportunityListProps {
   onClearFilters: () => void;
   onAddScoping: () => void;
   onOpenFilterBuilder: () => void;
+  onOpenOrgChart: () => void;
   activeFilterCount: number;
 }
 
@@ -159,6 +160,7 @@ const OpportunityList: React.FC<OpportunityListProps> = ({
     onClearFilters, 
     onAddScoping,
     onOpenFilterBuilder,
+    onOpenOrgChart,
     activeFilterCount
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -243,10 +245,16 @@ const OpportunityList: React.FC<OpportunityListProps> = ({
                 <h2 className="text-xl font-bold text-slate-800">Professional Services Opportunities</h2>
                 <p className="text-sm text-slate-500 mt-1">Default view shows active NA opportunities closing in the next 90 days. Use filters to refine.</p>
             </div>
-            <button onClick={onAddScoping} className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 font-semibold text-sm flex items-center space-x-2 whitespace-nowrap">
-                {ICONS.add}
-                <span>Add Scoping Activity</span>
-            </button>
+            <div className="flex items-center space-x-2">
+                <button onClick={onAddScoping} className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 font-semibold text-sm flex items-center space-x-2 whitespace-nowrap">
+                    {ICONS.add}
+                    <span>Add Scoping Activity</span>
+                </button>
+                 <button onClick={onOpenOrgChart} className="px-4 py-2 bg-white text-slate-700 border border-slate-300 rounded-md hover:bg-slate-100 font-semibold text-sm flex items-center space-x-2 whitespace-nowrap">
+                    {ICONS.users}
+                    <span>View Org Chart</span>
+                </button>
+            </div>
         </div>
         
         <ForecastSummary opportunities={displayedOpportunities} />

@@ -9,6 +9,7 @@ import LoadingSpinner from './components/LoadingSpinner';
 import TaskCockpit from './components/TaskCockpit';
 import AddScopingModal from './components/AddScopingModal';
 import AdvancedFilterBuilder from './components/AdvancedFilterBuilder';
+import SalesOrgChart from './components/SalesOrgChart';
 
 const initialFilterGroup: FilterGroup = {
     id: 'root',
@@ -32,6 +33,7 @@ const App: React.FC = () => {
   const [activeView, setActiveView] = useState<'opportunities' | 'tasks'>('opportunities');
   const [isScopingModalOpen, setIsScopingModalOpen] = useState(false);
   const [isFilterBuilderOpen, setIsFilterBuilderOpen] = useState(false);
+  const [isOrgChartModalOpen, setIsOrgChartModalOpen] = useState(false);
 
 
   const loadOpportunities = useCallback(async () => {
@@ -338,6 +340,7 @@ const App: React.FC = () => {
         onClearFilters={handleClearFilters}
         onAddScoping={() => setIsScopingModalOpen(true)}
         onOpenFilterBuilder={() => setIsFilterBuilderOpen(true)}
+        onOpenOrgChart={() => setIsOrgChartModalOpen(true)}
         activeFilterCount={filters.rules.length}
       />
     );
@@ -354,6 +357,11 @@ const App: React.FC = () => {
         isOpen={isScopingModalOpen}
         onClose={() => setIsScopingModalOpen(false)}
         onSave={handleSaveScopingActivity}
+      />
+      <SalesOrgChart
+        isOpen={isOrgChartModalOpen}
+        onClose={() => setIsOrgChartModalOpen(false)}
+        opportunities={opportunities}
       />
       {isFilterBuilderOpen && (
          <AdvancedFilterBuilder
