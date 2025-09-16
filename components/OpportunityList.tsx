@@ -76,11 +76,11 @@ const ForecastSummary: React.FC<{ opportunities: Opportunity[] }> = ({ opportuni
             let category = opp.disposition?.forecast_category_override || opp.opportunities_forecast_category;
             const rawAmount = opp.disposition?.services_amount_override ?? opp.opportunities_amount_services;
 
-            // FIX: Robustly ensure the amount is a valid number. This explicitly checks for
-            // null, undefined, and NaN, coercing them all to 0. This prevents a single bad
-            // data point (e.g., from a user typing "abc" into the amount override) from
-            // causing the entire forecast calculation to result in NaN.
-            const amount = (typeof rawAmount === 'number' && !isNaN(rawAmount)) ? rawAmount : 0;
+            // FIX: This logic is now robust. It correctly handles numbers, strings containing
+            // numbers (which can come from the DB API), nulls, and NaN values.
+            // It parses the value first, then checks if the result is a valid number.
+            const parsedAmount = parseFloat(rawAmount as any);
+            const amount = !isNaN(parsedAmount) ? parsedAmount : 0;
 
             if (!category || !(category in totals)) {
                 category = 'Pipeline';
