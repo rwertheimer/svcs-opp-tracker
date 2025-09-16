@@ -73,12 +73,18 @@ const ForecastSummary: React.FC<{ opportunities: Opportunity[] }> = ({ opportuni
         };
 
         return opportunities.reduce((totals, opp) => {
-            const category = opp.disposition?.forecast_category_override || opp.opportunities_forecast_category;
+            let category = opp.disposition?.forecast_category_override || opp.opportunities_forecast_category;
             const amount = opp.disposition?.services_amount_override ?? opp.opportunities_amount_services;
 
-            if (category in totals) {
-                totals[category] += (amount || 0);
+            // If the category from the data is null, undefined, or not a valid forecast key,
+            // we default it to 'Pipeline'. This is a safe default for open opportunities and
+            // ensures that no opportunity's service amount is silently excluded from the forecast.
+            if (!category || !(category in totals)) {
+                category = 'Pipeline';
             }
+            
+            // Add the amount (treating null as 0) to the correct category.
+            totals[category] += (amount || 0);
             
             return totals;
         }, initialTotals);
@@ -86,7 +92,7 @@ const ForecastSummary: React.FC<{ opportunities: Opportunity[] }> = ({ opportuni
     }, [opportunities]);
 
     const formatCurrency = (amount: number | null) => {
-        if (!amount || amount === 0) return '$0';
+        if (amount === null || amount === undefined) return '$0';
         return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(amount);
     };
 
@@ -163,8 +169,8 @@ const OpportunityList: React.FC<OpportunityListProps> = ({
     
     // Apply default sort logic
     filteredItems.sort((a, b) => {
-        if (a.opportunities_amount !== b.opportunities_amount) return b.opportunities_amount - a.opportunities_amount;
-        if (a.opportunities_incremental_bookings !== b.opportunities_incremental_bookings) return b.opportunities_incremental_bookings - a.opportunities_incremental_bookings;
+        if (a.opportunities_amount !== b.opportunities_amount) return (b.opportunities_amount || 0) - (a.opportunities_amount || 0);
+        if (a.opportunities_incremental_bookings !== b.opportunities_incremental_bookings) return (b.opportunities_incremental_bookings || 0) - (a.opportunities_incremental_bookings || 0);
         return new Date(a.opportunities_close_date).getTime() - new Date(b.opportunities_close_date).getTime();
     });
 
@@ -172,7 +178,7 @@ const OpportunityList: React.FC<OpportunityListProps> = ({
   }, [opportunities, searchTerm]);
 
   const formatCurrency = (amount: number | null) => {
-    if (!amount || amount === 0) return '-';
+    if (amount === null || amount === undefined || amount === 0) return '-';
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(amount);
   };
   
