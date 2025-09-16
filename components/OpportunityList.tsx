@@ -74,17 +74,19 @@ const ForecastSummary: React.FC<{ opportunities: Opportunity[] }> = ({ opportuni
 
         return opportunities.reduce((totals, opp) => {
             let category = opp.disposition?.forecast_category_override || opp.opportunities_forecast_category;
-            const amount = opp.disposition?.services_amount_override ?? opp.opportunities_amount_services;
+            const rawAmount = opp.disposition?.services_amount_override ?? opp.opportunities_amount_services;
 
-            // If the category from the data is null, undefined, or not a valid forecast key,
-            // we default it to 'Pipeline'. This is a safe default for open opportunities and
-            // ensures that no opportunity's service amount is silently excluded from the forecast.
+            // FIX: Robustly ensure the amount is a valid number. This explicitly checks for
+            // null, undefined, and NaN, coercing them all to 0. This prevents a single bad
+            // data point (e.g., from a user typing "abc" into the amount override) from
+            // causing the entire forecast calculation to result in NaN.
+            const amount = (typeof rawAmount === 'number' && !isNaN(rawAmount)) ? rawAmount : 0;
+
             if (!category || !(category in totals)) {
                 category = 'Pipeline';
             }
             
-            // Add the amount (treating null as 0) to the correct category.
-            totals[category] += (amount || 0);
+            totals[category] += amount;
             
             return totals;
         }, initialTotals);
@@ -92,7 +94,7 @@ const ForecastSummary: React.FC<{ opportunities: Opportunity[] }> = ({ opportuni
     }, [opportunities]);
 
     const formatCurrency = (amount: number | null) => {
-        if (amount === null || amount === undefined) return '$0';
+        if (amount === null || amount === undefined || isNaN(amount)) return '$0';
         return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(amount);
     };
 
