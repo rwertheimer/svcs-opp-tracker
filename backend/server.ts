@@ -30,8 +30,9 @@ app.use(express.json());
 // --- MIDDLEWARE to simulate getting a user from a request header ---
 const userMiddleware = (req: Request, res: Response, next: NextFunction) => {
     // In a real app, this would come from a JWT or session cookie.
-    // FIX: Use req.headers['...'] instead of req.get('...'), which resolves the typing error.
-    const userId = req.headers['x-user-id'];
+    // FIX: Use req.get() which is the correct method on the Express Request type to get a header.
+    // This resolves a type error where `req.headers` was not found.
+    const userId = req.get('x-user-id');
     if (userId) {
         (req as any).userId = userId;
     }

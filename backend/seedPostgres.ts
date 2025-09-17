@@ -135,21 +135,19 @@ const MOCK_USERS = [
 
 async function seedDatabase() {
   const pool = new Pool(POSTGRES_CONFIG);
-  // NEW: Declare a variable for the client connection
   let client: PoolClient | null = null;
   console.log('--- Starting PostgreSQL Database Seeding ---');
 
   try {
-    // NEW: Get a single client from the pool for the entire script
+    console.log('[DEBUG] Attempting to get client from pool...');
     client = await pool.connect();
-    console.log('Step 1: PostgreSQL client connected.');
+    console.log('[DEBUG] Client connected successfully.');
 
     console.log('Step 2: Creating new multi-user schema...');
-    // Use the single client for all operations
     await client.query(CREATE_SCHEMA_SQL);
     console.log('\t> Tables created: users, opportunities, action_items, disposition_history.');
     
-    // NEW: Start a transaction
+    console.log('[DEBUG] Attempting to start transaction...');
     await client.query('BEGIN');
     console.log('Step 3: Database transaction started.');
 
@@ -207,38 +205,37 @@ async function seedDatabase() {
     }
     console.log(`\t> Successfully queued ${rows.length} opportunities for insertion.`);
     
-    // NEW: Commit the transaction
+    console.log('[DEBUG] Attempting to commit transaction...');
     await client.query('COMMIT');
-    console.log('Step 7: Database transaction committed.');
+    console.log('Step 7: Database transaction committed successfully.');
     console.log('--- Database Seeding Complete ---');
 
   } catch (error) {
-    // NEW: Rollback the transaction on error
     if (client) {
-        console.error('--- An error occurred, rolling back transaction... ---');
+        console.error('--- An error occurred, attempting to roll back transaction... ---');
         await client.query('ROLLBACK');
+        console.error('[DEBUG] Transaction rolled back.');
     }
-    // Re-throw the error to be caught by the final catch block
     throw error;
   } finally {
-    // NEW: Release the client back to the pool
     if (client) {
+        console.log('[DEBUG] Attempting to release client...');
         client.release();
-        console.log('PostgreSQL client has been released.');
+        console.log('[DEBUG] PostgreSQL client has been released.');
     }
-    // Close all connections in the pool
+    console.log('[DEBUG] Attempting to end pool...');
     await pool.end();
-    console.log('PostgreSQL pool has been closed.');
+    console.log('[DEBUG] PostgreSQL pool has been closed.');
   }
 }
 
 seedDatabase()
   .then(() => {
-    console.log('Script finished successfully.');
+    console.log('Script finished successfully in .then() block.');
     process.exit(0);
   })
   .catch((error) => {
-    console.error('\n--- A FATAL ERROR OCCURRED ---');
+    console.error('\n--- A FATAL ERROR OCCURRED in .catch() block ---');
     console.error(error);
     process.exit(1);
   });
