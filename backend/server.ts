@@ -2,7 +2,8 @@
 // This resolves type conflicts with Express and allows globals like `process` to be recognized.
 /// <reference types="node" />
 
-import express from 'express';
+// Fix: Use a named import for `json` to resolve a TypeScript overload error on `app.use`.
+import express, { json } from 'express';
 import cors from 'cors';
 import { Client } from 'pg';
 import * as dotenv from 'dotenv';
@@ -37,11 +38,8 @@ const bigquery = new BigQuery({ projectId: GCLOUD_PROJECT_ID });
 
 // --- SERVER SETUP ---
 app.use(cors()); // Allow requests from the frontend dev server
-// FIX: Moved express.json() middleware to the main app instance to parse JSON bodies.
-// This is the standard and correct way to apply body-parsing middleware
-// and resolves the TypeScript overload error on `apiRouter.use()`.
-// Fix: Commented out to resolve a TypeScript type error. This is not needed for the current GET-only endpoints.
-// app.use(express.json());
+// Fix: Replaced `express.json()` with `json()` from the named import to resolve the TypeScript overload error.
+app.use(json()); // Add middleware to parse JSON request bodies
 
 
 // --- API ROUTER SETUP ---
@@ -52,8 +50,11 @@ const apiRouter = express.Router();
 // Fetches the main list of opportunities from the PostgreSQL database.
 apiRouter.get('/opportunities', async (req, res) => {
     const GET_OPPS_QUERY = `
-        SELECT * FROM opportunities 
-        ORDER BY opportunities_amount DESC, opportunities_incremental_bookings DESC;
+        SELECT 
+            o.*,
+            COALESCE(o.disposition, '{"status": "Not Reviewed", "notes": "", "actionItems": []}'::jsonb) AS disposition
+        FROM opportunities o
+        ORDER BY o.opportunities_amount DESC, o.opportunities_incremental_bookings DESC;
     `;
     try {
         const result = await pgClient.query(GET_OPPS_QUERY);
@@ -61,6 +62,34 @@ apiRouter.get('/opportunities', async (req, res) => {
     } catch (error) {
         console.error('Error fetching opportunities:', error);
         res.status(500).send('Internal Server Error. Could not connect to the database.');
+    }
+});
+
+// POST /api/opportunities/:opportunityId/disposition
+// Saves the disposition for a specific opportunity.
+apiRouter.post('/opportunities/:opportunityId/disposition', async (req, res) => {
+    const { opportunityId } = req.params;
+    const { disposition } = req.body;
+
+    if (!disposition) {
+        return res.status(400).send('Disposition data is missing from the request body.');
+    }
+
+    const SAVE_DISPOSITION_QUERY = `
+        UPDATE opportunities
+        SET disposition = $1
+        WHERE opportunities_id = $2;
+    `;
+    
+    try {
+        const result = await pgClient.query(SAVE_DISPOSITION_QUERY, [disposition, opportunityId]);
+        if (result.rowCount === 0) {
+            return res.status(404).send(`Opportunity with ID ${opportunityId} not found.`);
+        }
+        res.status(200).json({ message: 'Disposition saved successfully.' });
+    } catch (error) {
+        console.error(`Error saving disposition for opportunity ${opportunityId}:`, error);
+        res.status(500).send('Internal Server Error. Could not save disposition.');
     }
 });
 

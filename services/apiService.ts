@@ -1,3 +1,4 @@
+
 // Fix: The /// <reference types="vite/client" /> directive was causing a "Cannot find type definition file" error.
 // To resolve this and the subsequent error on `import.meta.env`, we provide a minimal global
 // type definition for `import.meta.env` to satisfy TypeScript.
@@ -45,18 +46,8 @@ export const fetchOpportunities = async (): Promise<Opportunity[]> => {
     if (!response.ok) {
       throw new Error('Failed to fetch opportunities from the backend. Is the server running?');
     }
-    const data = await response.json();
-    
-    // As persistence is removed, ensure every opportunity has a default,
-    // in-memory disposition object for the frontend to use.
-    return data.map((opp: Omit<Opportunity, 'disposition'>) => ({
-      ...opp,
-      disposition: {
-        status: 'Not Reviewed',
-        notes: '',
-        actionItems: [],
-      }
-    }));
+    // Backend now provides the disposition object, including defaults for null records.
+    return response.json();
   }
 };
 
@@ -101,11 +92,29 @@ export const fetchOpportunityDetails = async (accountId: string): Promise<Accoun
 
 /**
  * Saves a disposition for a specific opportunity.
- * NOTE: Persistence has been removed. This is now a no-op that allows the
- * optimistic UI updates to function without error.
+ * In mock mode, this is a no-op that resolves successfully.
+ * In live mode, it sends the data to the backend.
  */
 export const saveDisposition = async (opportunityId: string, disposition: Disposition): Promise<void> => {
-  console.log(`(In-Memory) Saving disposition for ${opportunityId}`, disposition);
-  // The state is handled optimistically in the UI. No backend call is needed.
-  return Promise.resolve();
+  if (USE_MOCK_DATA) {
+    console.log(`(In-Memory) Saving disposition for ${opportunityId}`, disposition);
+    // In mock mode, this is a no-op as state is handled optimistically in the UI.
+    return Promise.resolve();
+  } else {
+    console.log(`Saving real disposition for ${opportunityId} to POST ${API_BASE_URL}/opportunities/${opportunityId}/disposition...`);
+    
+    const response = await fetch(`${API_BASE_URL}/opportunities/${opportunityId}/disposition`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ disposition }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to save disposition: ${response.status} ${errorText}`);
+    }
+    // A successful 2xx response is sufficient.
+  }
 };

@@ -1,3 +1,4 @@
+
 /**
  * backend/seedPostgres.ts
  *
@@ -119,7 +120,8 @@ const CREATE_TABLE_SQL = `
         opportunities_forecast_category VARCHAR(255),
         opportunities_services_forecast_sfdc NUMERIC,
         opportunities_incremental_bookings NUMERIC,
-        opportunities_amount NUMERIC
+        opportunities_amount NUMERIC,
+        disposition JSONB
     );
 `;
 

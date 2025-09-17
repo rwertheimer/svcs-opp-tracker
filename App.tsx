@@ -107,23 +107,32 @@ const App: React.FC = () => {
 
 
   const filteredOpportunities = useMemo(() => {
-    const ninetyDaysFromNow = new Date();
-    ninetyDaysFromNow.setDate(ninetyDaysFromNow.getDate() + 90);
+    const oneHundredTwentyDaysFromNow = new Date();
+    oneHundredTwentyDaysFromNow.setDate(oneHundredTwentyDaysFromNow.getDate() + 120);
 
-    // Apply the base filter first as per requirements
+    // Apply the base filter. An opportunity is included if it's either a
+    // standard triage candidate OR if it has been previously engaged with by the user.
     const baseFilteredOpps = opportunities.filter(opp => {
+      // Common criteria for any opportunity to be considered
       const allowedTypes = ['Renewal', 'New Business', 'Upsell', 'Expansion'];
       const typeMatch = allowedTypes.includes(opp.opportunities_type);
       const regionMatch = opp.accounts_region_name === 'NA - Enterprise' || opp.accounts_region_name === 'NA - Commercial';
-      
-      const closeDate = new Date(opp.opportunities_close_date);
-      const subscriptionEndDate = new Date(opp.accounts_subscription_end_date);
-      const dateMatch = (closeDate <= ninetyDaysFromNow) || (subscriptionEndDate <= ninetyDaysFromNow);
-
       const stageNameLower = opp.opportunities_stage_name.toLowerCase();
       const stageMatch = !stageNameLower.includes('closed') && !stageNameLower.includes('won') && !stageNameLower.includes('lost');
 
-      return typeMatch && regionMatch && dateMatch && stageMatch;
+      if (!typeMatch || !regionMatch || !stageMatch) {
+          return false;
+      }
+
+      // Condition 1: Is this a standard triage candidate within the date window?
+      const closeDate = new Date(opp.opportunities_close_date);
+      const subscriptionEndDate = new Date(opp.accounts_subscription_end_date);
+      const dateMatch = (closeDate <= oneHundredTwentyDaysFromNow) || (subscriptionEndDate <= oneHundredTwentyDaysFromNow);
+
+      // Condition 2: Is this an "Engaged" opportunity that the user has worked on?
+      const isEngaged = opp.disposition?.status !== 'Not Reviewed';
+      
+      return dateMatch || isEngaged;
     });
 
     // Then apply the user's advanced filters
@@ -176,22 +185,37 @@ const App: React.FC = () => {
     setSelectedOpportunityDetails(null);
   };
   
-  const handleSaveDisposition = (disposition: Disposition) => {
+  const handleSaveDisposition = async (disposition: Disposition) => {
     if (!selectedOpportunity) return;
 
+    const originalOpportunity = { ...selectedOpportunity };
     const updatedOpportunity = { ...selectedOpportunity, disposition };
     const opportunityId = selectedOpportunity.opportunities_id;
 
-    // Update the disposition in the main opportunities list (in-memory only).
+    // Optimistic UI Update: Update the disposition in the main opportunities list.
     setOpportunities(prevOpps =>
       prevOpps.map(opp =>
         opp.opportunities_id === opportunityId ? updatedOpportunity : opp
       )
     );
     
-    // The disposition is now only saved in the local session state.
     // Close the detail view and return to the updated list.
     handleGoBack();
+
+    try {
+      await saveDisposition(opportunityId, disposition);
+      // On success, the optimistic update stands. We could add a success notification here.
+    } catch (err) {
+      console.error("Failed to save disposition:", err);
+      setError(`Failed to save disposition for ${originalOpportunity.opportunities_name}. Your changes have been reverted.`);
+      
+      // Revert the optimistic update on failure.
+      setOpportunities(prevOpps =>
+        prevOpps.map(opp =>
+          opp.opportunities_id === opportunityId ? originalOpportunity : opp
+        )
+      );
+    }
   };
   
   const handleTaskUpdate = (taskId: string, opportunityId: string, updates: Partial<ActionItem>) => {
