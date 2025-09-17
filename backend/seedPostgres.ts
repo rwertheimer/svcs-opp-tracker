@@ -60,7 +60,6 @@ const OPPORTUNITIES_QUERY = `
     ORDER BY 29 DESC, 28 DESC
 `;
 
-// --- NEW SCHEMA CREATION SQL ---
 const CREATE_SCHEMA_SQL = `
     DROP TABLE IF EXISTS disposition_history, action_items, users, opportunities CASCADE;
 
@@ -134,16 +133,15 @@ const MOCK_USERS = [
 
 async function seedDatabase() {
   const pgClient = new Client(POSTGRES_CONFIG);
+  let exitCode = 0;
   console.log('--- Starting PostgreSQL Database Seeding ---');
 
   try {
     await pgClient.connect();
     console.log('Step 1: Connected to PostgreSQL.');
 
-    // DEBUGGING: Set a statement timeout to prevent infinite hangs on locks.
-    // This will cause a query to error out if it takes longer than 15 seconds.
-    await pgClient.query("SET statement_timeout = '15s'");
-    console.log('\t> Set statement_timeout to 15 seconds.');
+    await pgClient.query("SET statement_timeout = '30s'");
+    console.log('\t> Set statement_timeout to 30 seconds.');
 
     console.log('Step 2: Creating new multi-user schema...');
     await pgClient.query(CREATE_SCHEMA_SQL);
@@ -161,7 +159,10 @@ async function seedDatabase() {
     const [rows] = await bigquery.query({ query: OPPORTUNITIES_QUERY });
     console.log(`\t> Found ${rows.length} opportunities.`);
 
-    if (rows.length === 0) return;
+    if (rows.length === 0) {
+      console.log('No opportunities found, seeding complete.');
+      return;
+    }
 
     console.log('Step 5: Inserting opportunities and action items...');
     for (const [index, row] of rows.entries()) {
@@ -170,7 +171,7 @@ async function seedDatabase() {
             notes: '',
             reason: '',
             version: 1,
-            last_updated_by_user_id: insertedUsers[0].user_id, // Default to first user
+            last_updated_by_user_id: insertedUsers[0].user_id,
         };
         
         const columns = Object.keys(row);
@@ -181,7 +182,6 @@ async function seedDatabase() {
             [...values, defaultDisposition]
         );
 
-        // For the first opportunity, create some sample action items
         if (index === 0) {
             console.log(`\t> Adding sample action items for opp: ${row.opportunities_name}`);
             const actionItems = [
@@ -190,7 +190,6 @@ async function seedDatabase() {
                 { name: 'Share Initial Proposal', status: 'Not Started', created_by: insertedUsers[1].user_id, assigned_to: insertedUsers[1].user_id },
             ];
             for (const item of actionItems) {
-                // DEBUGGING: Log before each individual insert.
                 console.log(`\t\t> Inserting action item: "${item.name}"`);
                 await pgClient.query(
                     'INSERT INTO action_items (opportunity_id, name, status, created_by_user_id, assigned_to_user_id) VALUES ($1, $2, $3, $4, $5)',
@@ -204,9 +203,12 @@ async function seedDatabase() {
 
   } catch (error) {
     console.error('An error occurred during seeding:', error);
+    exitCode = 1;
   } finally {
     await pgClient.end();
     console.log('PostgreSQL connection closed.');
+    // Forcefully exit the process to prevent hanging from open gRPC handles.
+    process.exit(exitCode);
   }
 }
 
