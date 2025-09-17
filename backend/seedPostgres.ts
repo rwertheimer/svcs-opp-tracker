@@ -5,8 +5,7 @@
  */
 
 import { BigQuery } from '@google-cloud/bigquery';
-// NEW: Import Pool instead of Client
-import { Pool } from 'pg';
+import { Pool, PoolClient } from 'pg'; // Import PoolClient for typing
 import * as dotenv from 'dotenv';
 
 dotenv.config();
@@ -19,8 +18,7 @@ const POSTGRES_CONFIG = {
   password: process.env.PG_PASSWORD,
   port: parseInt(process.env.PG_PORT || '5432', 10),
   ssl: { rejectUnauthorized: false },
-  // Pool-specific settings
-  max: 10, // max number of clients in the pool
+  max: 10,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 20000,
 };
@@ -135,39 +133,45 @@ const MOCK_USERS = [
     { name: 'Diana Miller', email: 'diana.miller@fivetran.com' }
 ];
 
-
 async function seedDatabase() {
-  // NEW: Initialize a Pool instead of a Client
   const pool = new Pool(POSTGRES_CONFIG);
+  // NEW: Declare a variable for the client connection
+  let client: PoolClient | null = null;
   console.log('--- Starting PostgreSQL Database Seeding ---');
 
   try {
-    // A pool doesn't need an explicit connect() call. It connects on the first query.
-    console.log('Step 1: PostgreSQL Pool initialized.');
+    // NEW: Get a single client from the pool for the entire script
+    client = await pool.connect();
+    console.log('Step 1: PostgreSQL client connected.');
 
     console.log('Step 2: Creating new multi-user schema...');
-    // Use pool.query for all database operations
-    await pool.query(CREATE_SCHEMA_SQL);
+    // Use the single client for all operations
+    await client.query(CREATE_SCHEMA_SQL);
     console.log('\t> Tables created: users, opportunities, action_items, disposition_history.');
+    
+    // NEW: Start a transaction
+    await client.query('BEGIN');
+    console.log('Step 3: Database transaction started.');
 
-    console.log('Step 3: Inserting mock users...');
+    console.log('Step 4: Inserting mock users...');
     const userInsertPromises = MOCK_USERS.map(user => 
-        pool.query('INSERT INTO users (name, email) VALUES ($1, $2)', [user.name, user.email])
+        client!.query('INSERT INTO users (name, email) VALUES ($1, $2)', [user.name, user.email])
     );
     await Promise.all(userInsertPromises);
-    const { rows: insertedUsers } = await pool.query('SELECT * FROM users');
+    const { rows: insertedUsers } = await client.query('SELECT * FROM users');
     console.log(`\t> Inserted ${insertedUsers.length} users.`);
 
-    console.log('Step 4: Fetching opportunities from BigQuery...');
+    console.log('Step 5: Fetching opportunities from BigQuery...');
     const [rows] = await bigquery.query({ query: OPPORTUNITIES_QUERY });
     console.log(`\t> Found ${rows.length} opportunities.`);
 
     if (rows.length === 0) {
-      console.log('No opportunities found, seeding complete.');
+      console.log('No opportunities found, committing transaction.');
+      await client.query('COMMIT');
       return;
     }
 
-    console.log('Step 5: Inserting opportunities and action items...');
+    console.log('Step 6: Inserting opportunities and action items...');
     for (const [index, row] of rows.entries()) {
         const defaultDisposition = {
             status: 'Not Reviewed',
@@ -180,7 +184,7 @@ async function seedDatabase() {
         const columns = Object.keys(row);
         const values = columns.map(col => row[col] === undefined ? null : row[col]);
         
-        await pool.query(
+        await client.query(
             `INSERT INTO opportunities (${columns.join(', ')}, disposition) VALUES (${columns.map((_, i) => `$${i+1}`).join(', ')}, $${columns.length + 1})`,
             [...values, defaultDisposition]
         );
@@ -194,18 +198,35 @@ async function seedDatabase() {
             ];
             for (const item of actionItems) {
                 console.log(`\t\t> Inserting action item: "${item.name}"`);
-                await pool.query(
+                await client.query(
                     'INSERT INTO action_items (opportunity_id, name, status, created_by_user_id, assigned_to_user_id) VALUES ($1, $2, $3, $4, $5)',
                     [row.opportunities_id, item.name, item.status, item.created_by, item.assigned_to]
                 );
             }
         }
     }
-    console.log(`\t> Successfully inserted ${rows.length} opportunities.`);
+    console.log(`\t> Successfully queued ${rows.length} opportunities for insertion.`);
+    
+    // NEW: Commit the transaction
+    await client.query('COMMIT');
+    console.log('Step 7: Database transaction committed.');
     console.log('--- Database Seeding Complete ---');
 
+  } catch (error) {
+    // NEW: Rollback the transaction on error
+    if (client) {
+        console.error('--- An error occurred, rolling back transaction... ---');
+        await client.query('ROLLBACK');
+    }
+    // Re-throw the error to be caught by the final catch block
+    throw error;
   } finally {
-    // NEW: Use pool.end() to close all connections in the pool
+    // NEW: Release the client back to the pool
+    if (client) {
+        client.release();
+        console.log('PostgreSQL client has been released.');
+    }
+    // Close all connections in the pool
     await pool.end();
     console.log('PostgreSQL pool has been closed.');
   }

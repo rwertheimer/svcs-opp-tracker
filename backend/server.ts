@@ -2,7 +2,8 @@
 
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
-import { Client } from 'pg';
+// FIX: Use Pool instead of Client for connection pooling, which is appropriate for a web server.
+import { Pool } from 'pg';
 import * as dotenv from 'dotenv';
 import { BigQuery } from '@google-cloud/bigquery';
 
@@ -12,7 +13,8 @@ const app = express();
 const PORT = process.env.PORT || 8080;
 
 const GCLOUD_PROJECT_ID = 'digital-arbor-400';
-const pgClient = new Client({
+// FIX: Instantiate a Pool instead of a single Client.
+const pgClient = new Pool({
   host: process.env.PG_HOST,
   port: parseInt(process.env.PG_PORT || '5432', 10),
   user: process.env.PG_USER,
@@ -26,14 +28,10 @@ app.use(cors());
 app.use(express.json());
 
 // --- MIDDLEWARE to simulate getting a user from a request header ---
-// FIX: Corrected middleware to properly read 'x-user-id' header.
-// The previous use of `req.get()` was causing a TypeScript error. Accessing the header via
-// `req.headers` is a more direct and type-safe approach. Also handles cases where the header might be an array.
 const userMiddleware = (req: Request, res: Response, next: NextFunction) => {
     // In a real app, this would come from a JWT or session cookie.
-    // For this prototype, we'll pass it in the header for simplicity.
-    const userIdHeader = req.headers['x-user-id'];
-    const userId = Array.isArray(userIdHeader) ? userIdHeader[0] : userIdHeader;
+    // FIX: Use req.headers['...'] instead of req.get('...'), which resolves the typing error.
+    const userId = req.headers['x-user-id'];
     if (userId) {
         (req as any).userId = userId;
     }
@@ -81,7 +79,6 @@ apiRouter.get('/opportunities', async (req, res) => {
 
 
 // --- REWRITTEN Disposition Endpoint with Optimistic Locking ---
-// FIX: Refactored to use the single pgClient for transactions, as `pgClient.connect()` returns void and is not a connection pool.
 apiRouter.post('/opportunities/:opportunityId/disposition', async (req, res) => {
     const { opportunityId } = req.params;
     const { disposition, userId } = req.body;
@@ -89,14 +86,17 @@ apiRouter.post('/opportunities/:opportunityId/disposition', async (req, res) => 
     if (!disposition || !userId || !disposition.version) {
         return res.status(400).send('Disposition, user ID, and version are required.');
     }
+    
+    // FIX: pgClient is now a Pool, so .connect() correctly checks out a client for the transaction.
+    const client = await pgClient.connect();
 
     try {
-        await pgClient.query('BEGIN');
+        await client.query('BEGIN');
 
         // 1. Get current version from DB
-        const { rows } = await pgClient.query('SELECT disposition FROM opportunities WHERE opportunities_id = $1 FOR UPDATE', [opportunityId]);
+        const { rows } = await client.query('SELECT disposition FROM opportunities WHERE opportunities_id = $1 FOR UPDATE', [opportunityId]);
         if (rows.length === 0) {
-            await pgClient.query('ROLLBACK');
+            await client.query('ROLLBACK');
             return res.status(404).send('Opportunity not found.');
         }
 
@@ -104,7 +104,7 @@ apiRouter.post('/opportunities/:opportunityId/disposition', async (req, res) => 
 
         // 2. Compare versions (Optimistic Lock)
         if (currentVersion !== disposition.version) {
-            await pgClient.query('ROLLBACK');
+            await client.query('ROLLBACK');
             return res.status(409).send('Conflict: This opportunity has been updated by another user.');
         }
 
@@ -117,7 +117,7 @@ apiRouter.post('/opportunities/:opportunityId/disposition', async (req, res) => 
             last_updated_at: new Date().toISOString()
         };
 
-        const updateResult = await pgClient.query(
+        await client.query(
             'UPDATE opportunities SET disposition = $1 WHERE opportunities_id = $2',
             [updatedDisposition, opportunityId]
         );
@@ -126,20 +126,21 @@ apiRouter.post('/opportunities/:opportunityId/disposition', async (req, res) => 
         const changeDetails = {
             status: updatedDisposition.status,
             notes: updatedDisposition.notes,
-            // Add other changed fields as needed
         };
-        await pgClient.query(
+        await client.query(
             'INSERT INTO disposition_history (opportunity_id, updated_by_user_id, change_details) VALUES ($1, $2, $3)',
             [opportunityId, userId, changeDetails]
         );
         
-        await pgClient.query('COMMIT');
+        await client.query('COMMIT');
         res.status(200).json(updatedDisposition);
 
     } catch (error) {
-        await pgClient.query('ROLLBACK');
+        await client.query('ROLLBACK');
         console.error(`Error saving disposition for opp ${opportunityId}:`, error);
         res.status(500).send('Internal Server Error');
+    } finally {
+        client.release();
     }
 });
 
@@ -161,9 +162,8 @@ apiRouter.post('/action-items', async (req, res) => {
 
 apiRouter.put('/action-items/:itemId', async (req, res) => {
     const { itemId } = req.params;
-    // Build the update query dynamically based on provided fields
     const fields = Object.keys(req.body);
-    const setClause = fields.map((field, index) => `${field} = $${index + 1}`).join(', ');
+    const setClause = fields.map((field, index) => `"${field}" = $${index + 1}`).join(', ');
     const values = Object.values(req.body);
 
     if (fields.length === 0) return res.status(400).send('No update fields provided.');
@@ -186,7 +186,7 @@ apiRouter.delete('/action-items/:itemId', async (req, res) => {
     try {
         const result = await pgClient.query('DELETE FROM action_items WHERE action_item_id = $1', [itemId]);
         if (result.rowCount === 0) return res.status(404).send('Action item not found.');
-        res.status(204).send(); // No Content
+        res.status(204).send();
     } catch (error) {
         console.error(`Error deleting action item ${itemId}:`, error);
         res.status(500).send('Internal Server Error');
@@ -205,14 +205,14 @@ app.use('/api', apiRouter);
 
 (async () => {
     try {
-        await pgClient.connect();
+        // FIX: Test connection using pool.query to avoid leaking clients.
+        await pgClient.query('SELECT NOW()');
         console.log('Successfully connected to PostgreSQL database.');
         app.listen(PORT, () => {
             console.log(`Server is running on http://localhost:${PORT}`);
         });
     } catch (error) {
         console.error('Failed to connect to PostgreSQL database:', error);
-        // @ts-ignore
         process.exit(1);
     }
 })();
