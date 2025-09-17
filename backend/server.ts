@@ -26,13 +26,10 @@ app.use(cors());
 app.use(express.json());
 
 // --- MIDDLEWARE to simulate getting a user from a request header ---
-// FIX: The original req.get() call was causing a type error because the property did not exist on the Request type.
-// Replaced with req.headers[] to correctly and safely read the header value. This also resolves the
-// cascading type inference error for the middleware function passed to app.use().
 const userMiddleware = (req: Request, res: Response, next: NextFunction) => {
     // In a real app, this would come from a JWT or session cookie.
-    const userIdFromHeader = req.headers['x-user-id'];
-    const userId = Array.isArray(userIdFromHeader) ? userIdFromHeader[0] : userIdFromHeader;
+    // FIX: Replaced req.get() with req.header() to resolve a typing issue where the 'get' method was not found on the Request object.
+    const userId = req.header('x-user-id');
     if (userId) {
         (req as any).userId = userId;
     }
@@ -62,12 +59,12 @@ apiRouter.get('/opportunities', async (req, res) => {
             o.*,
             -- Subquery to aggregate action items for each opportunity
             (
-                SELECT COALESCE(jsonb_agg(ai.*), '[]'::jsonb)
+                SELECT COALESCE(jsonb_agg(ai.* ORDER BY ai.due_date ASC NULLS LAST), '[]'::jsonb)
                 FROM action_items ai
                 WHERE ai.opportunity_id = o.opportunities_id
             ) as "actionItems"
         FROM opportunities o
-        ORDER BY o.opportunities_amount DESC, o.opportunities_incremental_bookings DESC;
+        ORDER BY o.opportunities_close_date ASC;
     `;
     try {
         const result = await pgPool.query(GET_OPPS_QUERY);
@@ -205,8 +202,11 @@ app.use('/api', apiRouter);
 
 (async () => {
     try {
-        await pgPool.query('SELECT NOW()');
+        // Test the connection
+        const client = await pgPool.connect();
         console.log('Successfully connected to PostgreSQL database.');
+        client.release();
+
         app.listen(PORT, () => {
             console.log(`Server is running on http://localhost:${PORT}`);
         });

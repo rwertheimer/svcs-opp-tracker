@@ -180,12 +180,24 @@ async function seedDatabase() {
         };
         
         const columns = Object.keys(row);
-        const values = columns.map(col => row[col] === undefined ? null : row[col]);
+        const values = columns.map(col => {
+            const value = row[col];
+            // Handle BigQuery date/datetime objects
+            if (value && typeof value === 'object' && 'value' in value) {
+                return value.value;
+            }
+            return value === undefined ? null : value;
+        });
         
+        console.log(`[DEBUG] --- PREPARING TO INSERT ROW ${index + 1} ---`);
+        console.log(JSON.stringify(row, null, 2));
+
+        console.log(`[DEBUG] Attempting INSERT for opp: ${row.opportunities_name}`);
         await client.query(
             `INSERT INTO opportunities (${columns.join(', ')}, disposition) VALUES (${columns.map((_, i) => `$${i+1}`).join(', ')}, $${columns.length + 1})`,
             [...values, defaultDisposition]
         );
+        console.log(`[DEBUG] Success INSERT for opp: ${row.opportunities_name}`);
 
         if (index === 0) {
             console.log(`\t> Inserting sample action items for opp: ${row.opportunities_name}`);
@@ -195,11 +207,12 @@ async function seedDatabase() {
                 { name: 'Share Initial Proposal', status: 'Not Started', created_by: insertedUsers[1].user_id, assigned_to: insertedUsers[1].user_id },
             ];
             for (const item of actionItems) {
-                console.log(`\t\t> Inserting action item: "${item.name}"`);
+                console.log(`\t\t> [DEBUG] Attempting INSERT for action item: "${item.name}"`);
                 await client.query(
                     'INSERT INTO action_items (opportunity_id, name, status, created_by_user_id, assigned_to_user_id) VALUES ($1, $2, $3, $4, $5)',
                     [row.opportunities_id, item.name, item.status, item.created_by, item.assigned_to]
                 );
+                console.log(`\t\t> [DEBUG] Success INSERT for action item: "${item.name}"`);
             }
         }
     }
