@@ -5,7 +5,8 @@
  */
 
 import { BigQuery } from '@google-cloud/bigquery';
-import { Client } from 'pg';
+// NEW: Import Pool instead of Client
+import { Pool } from 'pg';
 import * as dotenv from 'dotenv';
 
 dotenv.config();
@@ -18,8 +19,10 @@ const POSTGRES_CONFIG = {
   password: process.env.PG_PASSWORD,
   port: parseInt(process.env.PG_PORT || '5432', 10),
   ssl: { rejectUnauthorized: false },
-  // NEW: Add a client-side query timeout to prevent hangs on individual queries
-  query_timeout: 30000, // 30 seconds
+  // Pool-specific settings
+  max: 10, // max number of clients in the pool
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 20000,
 };
 
 const bigquery = new BigQuery({ projectId: GCLOUD_PROJECT_ID });
@@ -134,23 +137,25 @@ const MOCK_USERS = [
 
 
 async function seedDatabase() {
-  const pgClient = new Client(POSTGRES_CONFIG);
+  // NEW: Initialize a Pool instead of a Client
+  const pool = new Pool(POSTGRES_CONFIG);
   console.log('--- Starting PostgreSQL Database Seeding ---');
 
   try {
-    await pgClient.connect();
-    console.log('Step 1: Connected to PostgreSQL.');
+    // A pool doesn't need an explicit connect() call. It connects on the first query.
+    console.log('Step 1: PostgreSQL Pool initialized.');
 
     console.log('Step 2: Creating new multi-user schema...');
-    await pgClient.query(CREATE_SCHEMA_SQL);
+    // Use pool.query for all database operations
+    await pool.query(CREATE_SCHEMA_SQL);
     console.log('\t> Tables created: users, opportunities, action_items, disposition_history.');
 
     console.log('Step 3: Inserting mock users...');
     const userInsertPromises = MOCK_USERS.map(user => 
-        pgClient.query('INSERT INTO users (name, email) VALUES ($1, $2)', [user.name, user.email])
+        pool.query('INSERT INTO users (name, email) VALUES ($1, $2)', [user.name, user.email])
     );
     await Promise.all(userInsertPromises);
-    const { rows: insertedUsers } = await pgClient.query('SELECT * FROM users');
+    const { rows: insertedUsers } = await pool.query('SELECT * FROM users');
     console.log(`\t> Inserted ${insertedUsers.length} users.`);
 
     console.log('Step 4: Fetching opportunities from BigQuery...');
@@ -175,7 +180,7 @@ async function seedDatabase() {
         const columns = Object.keys(row);
         const values = columns.map(col => row[col] === undefined ? null : row[col]);
         
-        await pgClient.query(
+        await pool.query(
             `INSERT INTO opportunities (${columns.join(', ')}, disposition) VALUES (${columns.map((_, i) => `$${i+1}`).join(', ')}, $${columns.length + 1})`,
             [...values, defaultDisposition]
         );
@@ -189,7 +194,7 @@ async function seedDatabase() {
             ];
             for (const item of actionItems) {
                 console.log(`\t\t> Inserting action item: "${item.name}"`);
-                await pgClient.query(
+                await pool.query(
                     'INSERT INTO action_items (opportunity_id, name, status, created_by_user_id, assigned_to_user_id) VALUES ($1, $2, $3, $4, $5)',
                     [row.opportunities_id, item.name, item.status, item.created_by, item.assigned_to]
                 );
@@ -200,31 +205,19 @@ async function seedDatabase() {
     console.log('--- Database Seeding Complete ---');
 
   } finally {
-    await pgClient.end();
-    console.log('PostgreSQL connection closed.');
+    // NEW: Use pool.end() to close all connections in the pool
+    await pool.end();
+    console.log('PostgreSQL pool has been closed.');
   }
 }
 
-// NEW: Master timeout "dead man's switch" to guarantee termination
-const masterTimeout = new Promise((_, reject) => 
-  setTimeout(() => {
-    reject(new Error(
-      'Script timed out after 90 seconds. This is likely due to a database deadlock from a previously failed script run. ' +
-      'Please check your PostgreSQL server for any "idle in transaction" sessions and terminate them.'
-    ));
-  }, 90000)
-);
-
-Promise.race([
-    seedDatabase(),
-    masterTimeout
-])
-.then(() => {
+seedDatabase()
+  .then(() => {
     console.log('Script finished successfully.');
     process.exit(0);
-})
-.catch((error) => {
+  })
+  .catch((error) => {
     console.error('\n--- A FATAL ERROR OCCURRED ---');
     console.error(error);
     process.exit(1);
-});
+  });

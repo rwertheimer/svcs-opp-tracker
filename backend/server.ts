@@ -26,13 +26,14 @@ app.use(cors());
 app.use(express.json());
 
 // --- MIDDLEWARE to simulate getting a user from a request header ---
-// FIX: Removed async as the function doesn't perform any await operations.
+// FIX: Corrected middleware to properly read 'x-user-id' header.
+// The previous use of `req.get()` was causing a TypeScript error. Accessing the header via
+// `req.headers` is a more direct and type-safe approach. Also handles cases where the header might be an array.
 const userMiddleware = (req: Request, res: Response, next: NextFunction) => {
     // In a real app, this would come from a JWT or session cookie.
     // For this prototype, we'll pass it in the header for simplicity.
-    // FIX: Switched to req.header() to resolve typing issues with req.headers.
-    // FIX: `req.header()` does not exist on the Request type. Use `req.get()` which is the correct method to retrieve a request header.
-    const userId = req.get('x-user-id');
+    const userIdHeader = req.headers['x-user-id'];
+    const userId = Array.isArray(userIdHeader) ? userIdHeader[0] : userIdHeader;
     if (userId) {
         (req as any).userId = userId;
     }
