@@ -1,8 +1,10 @@
+// DO NOT MODIFY THIS FILE UNTIL FURTHER NOTICE. THE TYPE MISMATCH ISSUE IS STILL UNDER INVESTIGATION.
+
 /// <reference types="node" />
 
-// FIX: Consolidating express imports to resolve type issues. Using aliases for Request,
-// Response, and NextFunction avoids conflicts with global DOM types.
-import express, { Request as ExpressRequest, Response as ExpressResponse, NextFunction as ExpressNextFunction } from 'express';
+// FIX: Using namespace import for express to avoid conflicts with global DOM types for Request and Response.
+// This resolves issues where properties like .status, .body, .params were not found on aliased types.
+import * as express from 'express';
 import cors from 'cors';
 import { Pool } from 'pg';
 import * as dotenv from 'dotenv';
@@ -30,8 +32,8 @@ app.use(cors());
 app.use(express.json());
 
 // --- MIDDLEWARE to simulate getting a user from a request header ---
-// NOTE: Aliased express types are used to resolve conflicts with other global types (e.g., from DOM).
-const userMiddleware = (req: ExpressRequest, res: ExpressResponse, next: ExpressNextFunction) => {
+// NOTE: Explicit express types are used to resolve conflicts with other global types (e.g., from DOM).
+const userMiddleware = (req: express.Request, res: express.Response, next: express.NextFunction) => {
     // In a real app, this would come from a JWT or session cookie.
     const userIdHeader = req.headers['x-user-id'];
     if (userIdHeader) {
@@ -46,7 +48,7 @@ app.use(userMiddleware);
 const apiRouter = express.Router();
 
 // --- NEW User Endpoint ---
-apiRouter.get('/users', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.get('/users', async (req: express.Request, res: express.Response) => {
     try {
         const result = await pgPool.query<User>('SELECT user_id, name, email FROM users ORDER BY name');
         res.status(200).json(result.rows);
@@ -58,7 +60,7 @@ apiRouter.get('/users', async (req: ExpressRequest, res: ExpressResponse) => {
 
 
 // --- Opportunity Endpoint ---
-apiRouter.get('/opportunities', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.get('/opportunities', async (req: express.Request, res: express.Response) => {
     const GET_OPPS_QUERY = `
         SELECT 
             o.*,
@@ -82,7 +84,7 @@ apiRouter.get('/opportunities', async (req: ExpressRequest, res: ExpressResponse
 
 
 // --- REWRITTEN Disposition Endpoint with Optimistic Locking ---
-apiRouter.post('/opportunities/:opportunityId/disposition', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.post('/opportunities/:opportunityId/disposition', async (req: express.Request, res: express.Response) => {
     const { opportunityId } = req.params;
     const { disposition, userId } = req.body;
 
@@ -148,7 +150,7 @@ apiRouter.post('/opportunities/:opportunityId/disposition', async (req: ExpressR
 
 
 // --- NEW Action Item CRUD Endpoints ---
-apiRouter.post('/action-items', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.post('/action-items', async (req: express.Request, res: express.Response) => {
     const { opportunity_id, name, status, due_date, notes, documents, created_by_user_id, assigned_to_user_id } = req.body;
     try {
         const result = await pgPool.query<ActionItem>(
@@ -162,7 +164,7 @@ apiRouter.post('/action-items', async (req: ExpressRequest, res: ExpressResponse
     }
 });
 
-apiRouter.put('/action-items/:itemId', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.put('/action-items/:itemId', async (req: express.Request, res: express.Response) => {
     const { itemId } = req.params;
     const fields = Object.keys(req.body);
     const setClause = fields.map((field, index) => `"${field}" = $${index + 1}`).join(', ');
@@ -183,7 +185,7 @@ apiRouter.put('/action-items/:itemId', async (req: ExpressRequest, res: ExpressR
     }
 });
 
-apiRouter.delete('/action-items/:itemId', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.delete('/action-items/:itemId', async (req: express.Request, res: express.Response) => {
     const { itemId } = req.params;
     try {
         const result = await pgPool.query('DELETE FROM action_items WHERE action_item_id = $1', [itemId]);
@@ -197,7 +199,7 @@ apiRouter.delete('/action-items/:itemId', async (req: ExpressRequest, res: Expre
 
 
 // --- Account Detail Endpoints ---
-apiRouter.get('/accounts/:accountId/support-tickets', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.get('/accounts/:accountId/support-tickets', async (req: express.Request, res: express.Response) => {
     const { accountId } = req.params;
     const query = `
         SELECT
@@ -231,7 +233,7 @@ apiRouter.get('/accounts/:accountId/support-tickets', async (req: ExpressRequest
     }
 });
 
-apiRouter.get('/accounts/:accountId/usage-history', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.get('/accounts/:accountId/usage-history', async (req: express.Request, res: express.Response) => {
     const { accountId } = req.params;
     const query = `
         SELECT
@@ -253,7 +255,7 @@ apiRouter.get('/accounts/:accountId/usage-history', async (req: ExpressRequest, 
     }
 });
 
-apiRouter.get('/accounts/:accountId/project-history', async (req: ExpressRequest, res: ExpressResponse) => {
+apiRouter.get('/accounts/:accountId/project-history', async (req: express.Request, res: express.Response) => {
     const { accountId } = req.params;
     const query = `
         SELECT
