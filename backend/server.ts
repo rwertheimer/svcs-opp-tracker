@@ -1,7 +1,9 @@
 /// <reference types="node" />
 
+// FIX: The previously merged express import was causing type resolution issues.
+// It has been split into a value import for the express function and a type-only
+// import for Express's request/response types to ensure correctness and avoid DOM conflicts.
 import express from 'express';
-// FIX: Separated express value and type imports and used `import type` to resolve type conflicts with global DOM types.
 import type { Request as ExpressRequest, Response as ExpressResponse, NextFunction as ExpressNextFunction } from 'express';
 import cors from 'cors';
 import { Pool } from 'pg';

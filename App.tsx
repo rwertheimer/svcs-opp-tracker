@@ -38,6 +38,10 @@ const App: React.FC = () => {
   // --- NEW: User Management State ---
   const [users, setUsers] = useState<User[]>([]);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  
+  // --- NEW: Debugging/View State ---
+  const [showAllOpportunities, setShowAllOpportunities] = useState(false);
+
 
   const loadInitialData = useCallback(async () => {
     try {
@@ -116,17 +120,22 @@ const App: React.FC = () => {
 
       if (!typeMatch || !regionMatch || !stageMatch) return false;
 
+      // The toggle bypasses the 120-day date filter.
+      if (showAllOpportunities) {
+          return true;
+      }
+      
       const closeDate = new Date(opp.opportunities_close_date);
       const subscriptionEndDate = new Date(opp.accounts_subscription_end_date);
       const dateMatch = (closeDate <= oneHundredTwentyDaysFromNow) || (subscriptionEndDate <= oneHundredTwentyDaysFromNow);
-      const isEngaged = opp.disposition?.status !== 'Not Reviewed';
       
-      return dateMatch || isEngaged;
+      // The base filter no longer considers disposition status. Users can filter this manually.
+      return dateMatch;
     });
 
     if (filters.rules.length === 0) return baseFilteredOpps;
     return baseFilteredOpps.filter(opp => evaluateFilterGroup(opp, filters));
-  }, [opportunities, filters]);
+  }, [opportunities, filters, showAllOpportunities]);
   
   const allTasksForCurrentUser = useMemo((): TaskWithOpportunityContext[] => {
     if (!currentUser) return [];
@@ -386,6 +395,8 @@ const App: React.FC = () => {
         onOpenFilterBuilder={() => setIsFilterBuilderOpen(true)}
         onOpenOrgChart={() => setIsOrgChartModalOpen(true)}
         activeFilterCount={filters.rules.length}
+        showAllOpportunities={showAllOpportunities}
+        onToggleShowAll={setShowAllOpportunities}
       />
     );
   };

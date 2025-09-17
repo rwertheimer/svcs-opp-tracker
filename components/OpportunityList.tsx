@@ -1,4 +1,5 @@
 
+
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import type { Opportunity, SavedFilter } from '../types';
 import Tag from './Tag';
@@ -150,6 +151,8 @@ interface OpportunityListProps {
   onOpenFilterBuilder: () => void;
   onOpenOrgChart: () => void;
   activeFilterCount: number;
+  showAllOpportunities: boolean;
+  onToggleShowAll: (value: boolean) => void;
 }
 
 const OpportunityList: React.FC<OpportunityListProps> = ({ 
@@ -162,7 +165,9 @@ const OpportunityList: React.FC<OpportunityListProps> = ({
     onAddScoping,
     onOpenFilterBuilder,
     onOpenOrgChart,
-    activeFilterCount
+    activeFilterCount,
+    showAllOpportunities,
+    onToggleShowAll
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [newViewName, setNewViewName] = useState('');
@@ -244,7 +249,7 @@ const OpportunityList: React.FC<OpportunityListProps> = ({
         <div className="p-4 border-b flex justify-between items-center">
             <div>
                 <h2 className="text-xl font-bold text-slate-800">Professional Services Opportunities</h2>
-                <p className="text-sm text-slate-500 mt-1">Shows active NA opportunities closing in the next 120 days, plus any opportunities you have dispositioned. Use filters to refine.</p>
+                <p className="text-sm text-slate-500 mt-1">Shows active NA opportunities closing in the next 120 days. Use the toggle to show all, or filters to refine.</p>
             </div>
             <div className="flex items-center space-x-2">
                 <button onClick={onAddScoping} className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 font-semibold text-sm flex items-center space-x-2 whitespace-nowrap">
@@ -309,6 +314,22 @@ const OpportunityList: React.FC<OpportunityListProps> = ({
                         Clear
                     </button>
                 </div>
+            </div>
+             {/* --- NEW: Debug Toggle --- */}
+            <div className="mt-4 pt-4 border-t border-slate-200 flex items-center space-x-3">
+                <div className="relative inline-flex items-center cursor-pointer">
+                     <input 
+                        type="checkbox" 
+                        id="showAllToggle"
+                        checked={showAllOpportunities}
+                        onChange={(e) => onToggleShowAll(e.target.checked)}
+                        className="sr-only peer" 
+                     />
+                    <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                </div>
+                <label htmlFor="showAllToggle" className="text-sm font-medium text-slate-700">
+                    Show All Active Opportunities (ignores 120-day filter)
+                </label>
             </div>
         </div>
 
