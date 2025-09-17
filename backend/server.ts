@@ -31,7 +31,8 @@ const userMiddleware = (req: Request, res: Response, next: NextFunction) => {
     // In a real app, this would come from a JWT or session cookie.
     // For this prototype, we'll pass it in the header for simplicity.
     // FIX: Switched to req.header() to resolve typing issues with req.headers.
-    const userId = req.header('x-user-id');
+    // FIX: `req.header()` does not exist on the Request type. Use `req.get()` which is the correct method to retrieve a request header.
+    const userId = req.get('x-user-id');
     if (userId) {
         (req as any).userId = userId;
     }

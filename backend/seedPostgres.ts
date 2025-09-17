@@ -18,6 +18,8 @@ const POSTGRES_CONFIG = {
   password: process.env.PG_PASSWORD,
   port: parseInt(process.env.PG_PORT || '5432', 10),
   ssl: { rejectUnauthorized: false },
+  // NEW: Add a client-side query timeout to prevent hangs on individual queries
+  query_timeout: 30000, // 30 seconds
 };
 
 const bigquery = new BigQuery({ projectId: GCLOUD_PROJECT_ID });
@@ -42,7 +44,7 @@ const OPPORTUNITIES_QUERY = `
         accounts.se_territory_owner_email,
         opportunities.connector_type_list  AS opportunities_connectors,
         opportunities.connector_tshirt_size_list,
-        opportunities.destinations,
+        destinations,
         opportunities.type  AS opportunities_type,
         accounts.region_name,
         accounts.salesforce_account_id,
@@ -133,15 +135,11 @@ const MOCK_USERS = [
 
 async function seedDatabase() {
   const pgClient = new Client(POSTGRES_CONFIG);
-  let exitCode = 0;
   console.log('--- Starting PostgreSQL Database Seeding ---');
 
   try {
     await pgClient.connect();
     console.log('Step 1: Connected to PostgreSQL.');
-
-    await pgClient.query("SET statement_timeout = '30s'");
-    console.log('\t> Set statement_timeout to 30 seconds.');
 
     console.log('Step 2: Creating new multi-user schema...');
     await pgClient.query(CREATE_SCHEMA_SQL);
@@ -201,15 +199,32 @@ async function seedDatabase() {
     console.log(`\t> Successfully inserted ${rows.length} opportunities.`);
     console.log('--- Database Seeding Complete ---');
 
-  } catch (error) {
-    console.error('An error occurred during seeding:', error);
-    exitCode = 1;
   } finally {
     await pgClient.end();
     console.log('PostgreSQL connection closed.');
-    // Forcefully exit the process to prevent hanging from open gRPC handles.
-    process.exit(exitCode);
   }
 }
 
-seedDatabase();
+// NEW: Master timeout "dead man's switch" to guarantee termination
+const masterTimeout = new Promise((_, reject) => 
+  setTimeout(() => {
+    reject(new Error(
+      'Script timed out after 90 seconds. This is likely due to a database deadlock from a previously failed script run. ' +
+      'Please check your PostgreSQL server for any "idle in transaction" sessions and terminate them.'
+    ));
+  }, 90000)
+);
+
+Promise.race([
+    seedDatabase(),
+    masterTimeout
+])
+.then(() => {
+    console.log('Script finished successfully.');
+    process.exit(0);
+})
+.catch((error) => {
+    console.error('\n--- A FATAL ERROR OCCURRED ---');
+    console.error(error);
+    process.exit(1);
+});
