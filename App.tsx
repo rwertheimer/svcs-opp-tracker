@@ -112,25 +112,29 @@ const App: React.FC = () => {
     oneHundredTwentyDaysFromNow.setDate(oneHundredTwentyDaysFromNow.getDate() + 120);
 
     const baseFilteredOpps = opportunities.filter(opp => {
+      // This is a permanent base filter, which is a sensible default for a pipeline view.
+      const stageNameLower = opp.opportunities_stage_name.toLowerCase();
+      const isClosed = stageNameLower.includes('closed') || stageNameLower.includes('won') || stageNameLower.includes('lost');
+      if (isClosed) {
+        return false;
+      }
+
+      // The "Show All" toggle now bypasses ALL other default filters (region, type, and date)
+      if (showAllOpportunities) {
+        return true;
+      }
+      
+      // If toggle is OFF, apply the more restrictive default filters
       const allowedTypes = ['Renewal', 'New Business', 'Upsell', 'Expansion'];
       const typeMatch = allowedTypes.includes(opp.opportunities_type);
+      
       const regionMatch = opp.accounts_region_name === 'NA - Enterprise' || opp.accounts_region_name === 'NA - Commercial';
-      const stageNameLower = opp.opportunities_stage_name.toLowerCase();
-      const stageMatch = !stageNameLower.includes('closed') && !stageNameLower.includes('won') && !stageNameLower.includes('lost');
-
-      if (!typeMatch || !regionMatch || !stageMatch) return false;
-
-      // The toggle bypasses the 120-day date filter.
-      if (showAllOpportunities) {
-          return true;
-      }
       
       const closeDate = new Date(opp.opportunities_close_date);
       const subscriptionEndDate = new Date(opp.accounts_subscription_end_date);
       const dateMatch = (closeDate <= oneHundredTwentyDaysFromNow) || (subscriptionEndDate <= oneHundredTwentyDaysFromNow);
       
-      // The base filter no longer considers disposition status. Users can filter this manually.
-      return dateMatch;
+      return typeMatch && regionMatch && dateMatch;
     });
 
     if (filters.rules.length === 0) return baseFilteredOpps;

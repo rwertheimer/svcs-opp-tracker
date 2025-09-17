@@ -249,7 +249,7 @@ const OpportunityList: React.FC<OpportunityListProps> = ({
         <div className="p-4 border-b flex justify-between items-center">
             <div>
                 <h2 className="text-xl font-bold text-slate-800">Professional Services Opportunities</h2>
-                <p className="text-sm text-slate-500 mt-1">Shows active NA opportunities closing in the next 120 days. Use the toggle to show all, or filters to refine.</p>
+                <p className="text-sm text-slate-500 mt-1">Default view shows active NA opportunities of certain types closing in the next 120 days. Use the toggle to show all active opportunities.</p>
             </div>
             <div className="flex items-center space-x-2">
                 <button onClick={onAddScoping} className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 font-semibold text-sm flex items-center space-x-2 whitespace-nowrap">
