@@ -1,14 +1,14 @@
 /// <reference types="node" />
 
-// FIX: The previously merged express import was causing type resolution issues.
-// It has been split into a value import for the express function and a type-only
-// import for Express's request/response types to ensure correctness and avoid DOM conflicts.
-import express from 'express';
-import type { Request as ExpressRequest, Response as ExpressResponse, NextFunction as ExpressNextFunction } from 'express';
+// FIX: Consolidating express imports to resolve type issues. Using aliases for Request,
+// Response, and NextFunction avoids conflicts with global DOM types.
+import express, { Request as ExpressRequest, Response as ExpressResponse, NextFunction as ExpressNextFunction } from 'express';
 import cors from 'cors';
 import { Pool } from 'pg';
 import * as dotenv from 'dotenv';
 import { BigQuery } from '@google-cloud/bigquery';
+import type { User, Opportunity, ActionItem, Disposition } from '../types';
+
 
 dotenv.config();
 
@@ -46,9 +46,9 @@ app.use(userMiddleware);
 const apiRouter = express.Router();
 
 // --- NEW User Endpoint ---
-apiRouter.get('/users', async (req, res) => {
+apiRouter.get('/users', async (req: ExpressRequest, res: ExpressResponse) => {
     try {
-        const result = await pgPool.query('SELECT user_id, name, email FROM users ORDER BY name');
+        const result = await pgPool.query<User>('SELECT user_id, name, email FROM users ORDER BY name');
         res.status(200).json(result.rows);
     } catch (error) {
         console.error('Error fetching users:', error);
@@ -58,7 +58,7 @@ apiRouter.get('/users', async (req, res) => {
 
 
 // --- Opportunity Endpoint ---
-apiRouter.get('/opportunities', async (req, res) => {
+apiRouter.get('/opportunities', async (req: ExpressRequest, res: ExpressResponse) => {
     const GET_OPPS_QUERY = `
         SELECT 
             o.*,
@@ -72,7 +72,7 @@ apiRouter.get('/opportunities', async (req, res) => {
         ORDER BY o.opportunities_close_date ASC;
     `;
     try {
-        const result = await pgPool.query(GET_OPPS_QUERY);
+        const result = await pgPool.query<Opportunity>(GET_OPPS_QUERY);
         res.status(200).json(result.rows);
     } catch (error) {
         console.error('Error fetching opportunities:', error);
@@ -82,7 +82,7 @@ apiRouter.get('/opportunities', async (req, res) => {
 
 
 // --- REWRITTEN Disposition Endpoint with Optimistic Locking ---
-apiRouter.post('/opportunities/:opportunityId/disposition', async (req, res) => {
+apiRouter.post('/opportunities/:opportunityId/disposition', async (req: ExpressRequest, res: ExpressResponse) => {
     const { opportunityId } = req.params;
     const { disposition, userId } = req.body;
 
@@ -112,7 +112,7 @@ apiRouter.post('/opportunities/:opportunityId/disposition', async (req, res) => 
 
         // 3. Versions match, proceed with update
         const newVersion = currentVersion + 1;
-        const updatedDisposition = {
+        const updatedDisposition: Disposition = {
             ...disposition,
             version: newVersion,
             last_updated_by_user_id: userId,
@@ -148,10 +148,10 @@ apiRouter.post('/opportunities/:opportunityId/disposition', async (req, res) => 
 
 
 // --- NEW Action Item CRUD Endpoints ---
-apiRouter.post('/action-items', async (req, res) => {
+apiRouter.post('/action-items', async (req: ExpressRequest, res: ExpressResponse) => {
     const { opportunity_id, name, status, due_date, notes, documents, created_by_user_id, assigned_to_user_id } = req.body;
     try {
-        const result = await pgPool.query(
+        const result = await pgPool.query<ActionItem>(
             'INSERT INTO action_items (opportunity_id, name, status, due_date, notes, documents, created_by_user_id, assigned_to_user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
             [opportunity_id, name, status, due_date || null, notes, documents || [], created_by_user_id, assigned_to_user_id]
         );
@@ -162,7 +162,7 @@ apiRouter.post('/action-items', async (req, res) => {
     }
 });
 
-apiRouter.put('/action-items/:itemId', async (req, res) => {
+apiRouter.put('/action-items/:itemId', async (req: ExpressRequest, res: ExpressResponse) => {
     const { itemId } = req.params;
     const fields = Object.keys(req.body);
     const setClause = fields.map((field, index) => `"${field}" = $${index + 1}`).join(', ');
@@ -171,7 +171,7 @@ apiRouter.put('/action-items/:itemId', async (req, res) => {
     if (fields.length === 0) return res.status(400).send('No update fields provided.');
 
     try {
-        const result = await pgPool.query(
+        const result = await pgPool.query<ActionItem>(
             `UPDATE action_items SET ${setClause} WHERE action_item_id = $${fields.length + 1} RETURNING *`,
             [...values, itemId]
         );
@@ -183,7 +183,7 @@ apiRouter.put('/action-items/:itemId', async (req, res) => {
     }
 });
 
-apiRouter.delete('/action-items/:itemId', async (req, res) => {
+apiRouter.delete('/action-items/:itemId', async (req: ExpressRequest, res: ExpressResponse) => {
     const { itemId } = req.params;
     try {
         const result = await pgPool.query('DELETE FROM action_items WHERE action_item_id = $1', [itemId]);
@@ -196,10 +196,95 @@ apiRouter.delete('/action-items/:itemId', async (req, res) => {
 });
 
 
-// --- Account Detail Endpoints (unchanged) ---
-apiRouter.get('/accounts/:accountId/support-tickets', async (req, res) => { /* ... */ });
-apiRouter.get('/accounts/:accountId/usage-history', async (req, res) => { /* ... */ });
-apiRouter.get('/accounts/:accountId/project-history', async (req, res) => { /* ... */ });
+// --- Account Detail Endpoints ---
+apiRouter.get('/accounts/:accountId/support-tickets', async (req: ExpressRequest, res: ExpressResponse) => {
+    const { accountId } = req.params;
+    const query = `
+        SELECT
+            t.salesforce_account_id AS accounts_salesforce_account_id,
+            a.outreach_account_link AS accounts_outreach_account_link,
+            a.salesforce_account_name AS accounts_salesforce_account_name,
+            a.owner_name AS accounts_owner_name,
+            t.ticket_url AS tickets_ticket_url,
+            t.ticket_number AS tickets_ticket_number,
+            CAST(t.created_date AS STRING) AS tickets_created_date,
+            t.status AS tickets_status,
+            t.subject AS tickets_subject,
+            DATE_DIFF(CURRENT_DATE(), DATE(t.created_date), DAY) AS days_open,
+            CAST(t.last_response_from_support_at_date AS STRING) AS tickets_last_response_from_support_at_date,
+            (CASE WHEN t.is_escalated THEN 'Yes' ELSE 'No' END) AS tickets_is_escalated,
+            DATE_DIFF(CURRENT_DATE(), DATE(t.last_response_from_support_at_date), DAY) AS days_since_last_response,
+            t.priority AS tickets_priority,
+            t.new_csat_numeric AS tickets_new_csat_numeric,
+            t.engineering_issue_links_c AS tickets_engineering_issue_links_c
+        FROM \`digital-arbor-400.transforms_bi.tickets\` t
+        JOIN \`digital-arbor-400.transforms_bi.accounts\` a ON t.salesforce_account_id = a.salesforce_account_id
+        WHERE t.salesforce_account_id = @accountId
+        ORDER BY t.created_date DESC;
+    `;
+    try {
+        const [rows] = await bigquery.query({ query, params: { accountId } });
+        res.status(200).json(rows);
+    } catch (error) {
+        console.error(`Error fetching support tickets for account ${accountId}:`, error);
+        res.status(500).send('Internal Server Error fetching support tickets.');
+    }
+});
+
+apiRouter.get('/accounts/:accountId/usage-history', async (req: ExpressRequest, res: ExpressResponse) => {
+    const { accountId } = req.params;
+    const query = `
+        SELECT
+            month,
+            service,
+            warehouse_subtype,
+            annualized_revenue,
+            connections_count
+        FROM \`digital-arbor-400.transforms_bi.usage_history\`
+        WHERE salesforce_account_id = @accountId
+        ORDER BY month DESC;
+    `;
+    try {
+        const [rows] = await bigquery.query({ query, params: { accountId } });
+        res.status(200).json(rows);
+    } catch (error) {
+        console.error(`Error fetching usage history for account ${accountId}:`, error);
+        res.status(500).send('Internal Server Error fetching usage history.');
+    }
+});
+
+apiRouter.get('/accounts/:accountId/project-history', async (req: ExpressRequest, res: ExpressResponse) => {
+    const { accountId } = req.params;
+    const query = `
+        SELECT
+            a.salesforce_account_id AS accounts_salesforce_account_id,
+            a.outreach_account_link AS accounts_outreach_account_link,
+            a.salesforce_account_name AS accounts_salesforce_account_name,
+            o.id AS opportunities_id,
+            o.name AS opportunities_name,
+            o.project_owner_email_c AS opportunities_project_owner_email,
+            CAST(o.close_date AS STRING) AS opportunities_close_date,
+            CAST(o.rl_open_project_new_end_date_c AS STRING) AS opportunities_rl_open_project_new_end_date,
+            CAST(a.subscription_end_date AS STRING) AS opportunities_subscription_end_date,
+            o.budgeted_hours_c AS opportunities_budgeted_hours,
+            o.billable_hours_c AS opportunities_billable_hours,
+            o.non_billable_hours_c AS opportunities_non_billable_hours,
+            o.remaining_billable_hours_c AS opportunities_remaining_billable_hours
+        FROM \`digital-arbor-400.transforms_bi.opportunities\` o
+        JOIN \`digital-arbor-400.transforms_bi.accounts\` a ON o.salesforce_account_id = a.salesforce_account_id
+        WHERE o.salesforce_account_id = @accountId
+        AND UPPER(o.stage_name) LIKE '%CLOSED%WON%'
+        AND o.has_services_flag = TRUE
+        ORDER BY o.close_date DESC;
+    `;
+    try {
+        const [rows] = await bigquery.query({ query, params: { accountId } });
+        res.status(200).json(rows);
+    } catch (error) {
+        console.error(`Error fetching project history for account ${accountId}:`, error);
+        res.status(500).send('Internal Server Error fetching project history.');
+    }
+});
 
 
 // --- SERVER START ---
