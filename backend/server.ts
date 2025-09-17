@@ -31,7 +31,9 @@ const userMiddleware = (req: Request, res: Response, next: NextFunction) => {
     // In a real app, this would come from a JWT or session cookie.
     // For this prototype, we'll pass it in the header for simplicity.
     // FIX: Use req.header() to safely access headers. `req.get()` was causing type issues with some @types/express versions.
-    const userId = req.header('x-user-id');
+    // Fix: Using req.headers to access header values as req.header() was causing a type error. This should resolve both reported issues.
+    const userIdHeader = req.headers['x-user-id'];
+    const userId = Array.isArray(userIdHeader) ? userIdHeader[0] : userIdHeader;
     if (userId) {
         (req as any).userId = userId;
     }

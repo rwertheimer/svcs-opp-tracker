@@ -70,7 +70,6 @@ const CREATE_SCHEMA_SQL = `
         email VARCHAR(255) UNIQUE NOT NULL
     );
 
-    -- FIX: Renamed columns to exactly match the BigQuery query results to prevent "column does not exist" errors.
     CREATE TABLE opportunities (
         opportunities_id VARCHAR(255) PRIMARY KEY,
         opportunities_name TEXT,
@@ -141,6 +140,11 @@ async function seedDatabase() {
     await pgClient.connect();
     console.log('Step 1: Connected to PostgreSQL.');
 
+    // DEBUGGING: Set a statement timeout to prevent infinite hangs on locks.
+    // This will cause a query to error out if it takes longer than 15 seconds.
+    await pgClient.query("SET statement_timeout = '15s'");
+    console.log('\t> Set statement_timeout to 15 seconds.');
+
     console.log('Step 2: Creating new multi-user schema...');
     await pgClient.query(CREATE_SCHEMA_SQL);
     console.log('\t> Tables created: users, opportunities, action_items, disposition_history.');
@@ -186,6 +190,8 @@ async function seedDatabase() {
                 { name: 'Share Initial Proposal', status: 'Not Started', created_by: insertedUsers[1].user_id, assigned_to: insertedUsers[1].user_id },
             ];
             for (const item of actionItems) {
+                // DEBUGGING: Log before each individual insert.
+                console.log(`\t\t> Inserting action item: "${item.name}"`);
                 await pgClient.query(
                     'INSERT INTO action_items (opportunity_id, name, status, created_by_user_id, assigned_to_user_id) VALUES ($1, $2, $3, $4, $5)',
                     [row.opportunities_id, item.name, item.status, item.created_by, item.assigned_to]
