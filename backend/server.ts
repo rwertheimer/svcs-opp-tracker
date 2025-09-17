@@ -28,8 +28,9 @@ app.use(express.json());
 // --- MIDDLEWARE to simulate getting a user from a request header ---
 const userMiddleware = (req: Request, res: Response, next: NextFunction) => {
     // In a real app, this would come from a JWT or session cookie.
-    // FIX: Replaced req.get() with req.header() to resolve a typing issue where the 'get' method was not found on the Request object.
-    const userId = req.header('x-user-id');
+    // FIX: Replaced `req.header()` with `req.get()` which is the correct method for Express.
+    // This resolves both the property access error and the downstream app.use() overload error.
+    const userId = req.get('x-user-id');
     if (userId) {
         (req as any).userId = userId;
     }
