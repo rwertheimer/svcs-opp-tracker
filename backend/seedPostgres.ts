@@ -1,4 +1,3 @@
-
 /**
  * backend/seedPostgres.ts
  *
