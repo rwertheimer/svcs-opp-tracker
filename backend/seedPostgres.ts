@@ -139,29 +139,24 @@ async function seedDatabase() {
   let client: PoolClient | null = null;
   
   try {
-    console.log('[DEBUG] Step 1: Attempting to get client from pool...');
     client = await pool.connect();
-    console.log('[DEBUG] Step 1: Client connected successfully.');
 
-    console.log('[DEBUG] Step 2: Attempting to create schema...');
+    console.log('Step 1: Creating database schema...');
     await client.query(CREATE_SCHEMA_SQL);
-    console.log('[DEBUG] Step 2: Schema created successfully.');
+    console.log('> Schema created successfully.');
     
-    console.log('[DEBUG] Step 3: Attempting to start transaction...');
     await client.query('BEGIN');
-    console.log('[DEBUG] Step 3: Database transaction started.');
-
-    console.log('[DEBUG] Step 4: Attempting to insert mock users...');
+    console.log('Step 2: Inserting mock users...');
     const userInsertPromises = MOCK_USERS.map(user => 
         client!.query('INSERT INTO users (name, email) VALUES ($1, $2)', [user.name, user.email])
     );
     await Promise.all(userInsertPromises);
     const { rows: insertedUsers } = await client.query('SELECT * FROM users');
-    console.log(`[DEBUG] Step 4: Inserted ${insertedUsers.length} users successfully.`);
+    console.log(`> Inserted ${insertedUsers.length} users successfully.`);
 
-    console.log('[DEBUG] Step 5: Attempting to fetch from BigQuery...');
+    console.log('Step 3: Fetching opportunities from BigQuery...');
     const [rows] = await bigquery.query({ query: OPPORTUNITIES_QUERY });
-    console.log(`[DEBUG] Step 5: Fetched ${rows.length} opportunities from BigQuery.`);
+    console.log(`> Fetched ${rows.length} opportunities from BigQuery.`);
 
     if (rows.length === 0) {
       console.log('No opportunities found, committing transaction.');
@@ -169,7 +164,7 @@ async function seedDatabase() {
       return;
     }
 
-    console.log('[DEBUG] Step 6: Looping through opportunities to insert...');
+    console.log(`Step 4: Inserting ${rows.length} opportunities...`);
     for (const [index, row] of rows.entries()) {
         const defaultDisposition = {
             status: 'Not Reviewed',
@@ -182,73 +177,61 @@ async function seedDatabase() {
         const columns = Object.keys(row);
         const values = columns.map(col => {
             const value = row[col];
-            // Handle BigQuery date/datetime objects
             if (value && typeof value === 'object' && 'value' in value) {
                 return value.value;
             }
             return value === undefined ? null : value;
         });
         
-        console.log(`[DEBUG] --- PREPARING TO INSERT ROW ${index + 1} ---`);
-        console.log(JSON.stringify(row, null, 2));
-
-        console.log(`[DEBUG] Attempting INSERT for opp: ${row.opportunities_name}`);
         await client.query(
             `INSERT INTO opportunities (${columns.join(', ')}, disposition) VALUES (${columns.map((_, i) => `$${i+1}`).join(', ')}, $${columns.length + 1})`,
             [...values, defaultDisposition]
         );
-        console.log(`[DEBUG] Success INSERT for opp: ${row.opportunities_name}`);
 
         if (index === 0) {
-            console.log(`\t> Inserting sample action items for opp: ${row.opportunities_name}`);
+            console.log(`> Adding sample action items for first opportunity: ${row.opportunities_name}`);
             const actionItems = [
                 { name: 'Initial Scoping Call', status: 'Completed', created_by: insertedUsers[0].user_id, assigned_to: insertedUsers[0].user_id },
                 { name: 'Develop Initial Proposal', status: 'In Progress', created_by: insertedUsers[0].user_id, assigned_to: insertedUsers[1].user_id },
                 { name: 'Share Initial Proposal', status: 'Not Started', created_by: insertedUsers[1].user_id, assigned_to: insertedUsers[1].user_id },
             ];
             for (const item of actionItems) {
-                console.log(`\t\t> [DEBUG] Attempting INSERT for action item: "${item.name}"`);
                 await client.query(
                     'INSERT INTO action_items (opportunity_id, name, status, created_by_user_id, assigned_to_user_id) VALUES ($1, $2, $3, $4, $5)',
                     [row.opportunities_id, item.name, item.status, item.created_by, item.assigned_to]
                 );
-                console.log(`\t\t> [DEBUG] Success INSERT for action item: "${item.name}"`);
             }
         }
     }
-    console.log(`[DEBUG] Step 6: Finished looping through opportunities.`);
+    console.log(`> Finished inserting opportunities.`);
     
-    console.log('[DEBUG] Step 7: Attempting to commit transaction...');
+    console.log('Step 5: Committing transaction...');
     await client.query('COMMIT');
-    console.log('[DEBUG] Step 7: Database transaction committed successfully.');
-    console.log('--- Database Seeding Complete ---');
+    console.log('> Database transaction committed successfully.');
+    console.log('\n--- Database Seeding Complete ---');
 
   } catch (error) {
     if (client) {
         console.error('--- An error occurred, attempting to roll back transaction... ---');
         await client.query('ROLLBACK');
-        console.error('[DEBUG] Transaction rolled back.');
+        console.error('> Transaction rolled back.');
     }
     throw error;
   } finally {
     if (client) {
-        console.log('[DEBUG] Step 8: Attempting to release client...');
         client.release();
-        console.log('[DEBUG] Step 8: PostgreSQL client has been released.');
     }
-    console.log('[DEBUG] Step 9: Attempting to end pool...');
     await pool.end();
-    console.log('[DEBUG] Step 9: PostgreSQL pool has been closed.');
   }
 }
 
 seedDatabase()
   .then(() => {
-    console.log('Script finished successfully in .then() block.');
+    console.log('Script finished successfully.');
     process.exit(0);
   })
   .catch((error) => {
-    console.error('\n--- A FATAL ERROR OCCURRED in .catch() block ---');
+    console.error('\n--- A FATAL ERROR OCCURRED ---');
     console.error(error);
     process.exit(1);
   });

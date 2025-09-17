@@ -26,13 +26,15 @@ app.use(cors());
 app.use(express.json());
 
 // --- MIDDLEWARE to simulate getting a user from a request header ---
+// FIX: Switched to accessing headers via `req.headers['x-user-id']` to resolve a TypeScript error
+// where the `req.get()` method was not found on the Request type. This also resolves a
+// follow-on overload error on `app.use()`.
 const userMiddleware = (req: Request, res: Response, next: NextFunction) => {
     // In a real app, this would come from a JWT or session cookie.
-    // FIX: Replaced `req.header()` with `req.get()` which is the correct method for Express.
-    // This resolves both the property access error and the downstream app.use() overload error.
-    const userId = req.get('x-user-id');
-    if (userId) {
-        (req as any).userId = userId;
+    const userIdHeader = req.headers['x-user-id'];
+    if (userIdHeader) {
+        // Ensure userId is a string, as headers can be an array.
+        (req as any).userId = Array.isArray(userIdHeader) ? userIdHeader[0] : userIdHeader;
     }
     next();
 };
