@@ -164,8 +164,18 @@ async function seedDatabase() {
       return;
     }
 
-    console.log(`Step 4: Inserting ${rows.length} opportunities...`);
-    for (const [index, row] of rows.entries()) {
+    console.log(`Step 4: Inserting ${rows.length} opportunities in batches...`);
+    const BATCH_SIZE = 1000;
+    const firstOpp = rows[0]; // Keep a reference for adding action items later
+    const columns = Object.keys(firstOpp);
+    const columnsList = [...columns, 'disposition'].join(', ');
+
+    for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+        const batchRows = rows.slice(i, i + BATCH_SIZE);
+        const valueClauses = [];
+        const queryParams = [];
+        let paramIndex = 1;
+
         const defaultDisposition = {
             status: 'Not Reviewed',
             notes: '',
@@ -173,37 +183,38 @@ async function seedDatabase() {
             version: 1,
             last_updated_by_user_id: insertedUsers[0].user_id,
         };
-        
-        const columns = Object.keys(row);
-        const values = columns.map(col => {
-            const value = row[col];
-            if (value && typeof value === 'object' && 'value' in value) {
-                return value.value;
-            }
-            return value === undefined ? null : value;
-        });
-        
-        await client.query(
-            `INSERT INTO opportunities (${columns.join(', ')}, disposition) VALUES (${columns.map((_, i) => `$${i+1}`).join(', ')}, $${columns.length + 1})`,
-            [...values, defaultDisposition]
-        );
 
-        if (index === 0) {
-            console.log(`> Adding sample action items for first opportunity: ${row.opportunities_name}`);
-            const actionItems = [
-                { name: 'Initial Scoping Call', status: 'Completed', created_by: insertedUsers[0].user_id, assigned_to: insertedUsers[0].user_id },
-                { name: 'Develop Initial Proposal', status: 'In Progress', created_by: insertedUsers[0].user_id, assigned_to: insertedUsers[1].user_id },
-                { name: 'Share Initial Proposal', status: 'Not Started', created_by: insertedUsers[1].user_id, assigned_to: insertedUsers[1].user_id },
-            ];
-            for (const item of actionItems) {
-                await client.query(
-                    'INSERT INTO action_items (opportunity_id, name, status, created_by_user_id, assigned_to_user_id) VALUES ($1, $2, $3, $4, $5)',
-                    [row.opportunities_id, item.name, item.status, item.created_by, item.assigned_to]
-                );
-            }
+        for (const row of batchRows) {
+            const values = columns.map(col => {
+                const value = row[col];
+                return value?.value ?? (value === undefined ? null : value);
+            });
+            values.push(defaultDisposition);
+
+            const placeholders = values.map(() => `$${paramIndex++}`).join(', ');
+            valueClauses.push(`(${placeholders})`);
+            queryParams.push(...values);
         }
+
+        const queryText = `INSERT INTO opportunities (${columnsList}) VALUES ${valueClauses.join(', ')}`;
+        await client.query(queryText, queryParams);
+        console.log(`> Inserted batch of ${batchRows.length} opportunities (rows ${i + 1}-${i + batchRows.length}).`);
     }
-    console.log(`> Finished inserting opportunities.`);
+
+    console.log('> Finished inserting all opportunities.');
+
+    console.log(`> Adding sample action items for first opportunity: ${firstOpp.opportunities_name}`);
+    const actionItems = [
+        { name: 'Initial Scoping Call', status: 'Completed', created_by: insertedUsers[0].user_id, assigned_to: insertedUsers[0].user_id },
+        { name: 'Develop Initial Proposal', status: 'In Progress', created_by: insertedUsers[0].user_id, assigned_to: insertedUsers[1].user_id },
+        { name: 'Share Initial Proposal', status: 'Not Started', created_by: insertedUsers[1].user_id, assigned_to: insertedUsers[1].user_id },
+    ];
+    for (const item of actionItems) {
+        await client.query(
+            'INSERT INTO action_items (opportunity_id, name, status, created_by_user_id, assigned_to_user_id) VALUES ($1, $2, $3, $4, $5)',
+            [firstOpp.opportunities_id, item.name, item.status, item.created_by, item.assigned_to]
+        );
+    }
     
     console.log('Step 5: Committing transaction...');
     await client.query('COMMIT');

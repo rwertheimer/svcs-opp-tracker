@@ -1,6 +1,8 @@
 /// <reference types="node" />
 
-import express, { Request, Response, NextFunction } from 'express';
+import express from 'express';
+// FIX: Separated express value and type imports and used `import type` to resolve type conflicts with global DOM types.
+import type { Request as ExpressRequest, Response as ExpressResponse, NextFunction as ExpressNextFunction } from 'express';
 import cors from 'cors';
 import { Pool } from 'pg';
 import * as dotenv from 'dotenv';
@@ -26,10 +28,8 @@ app.use(cors());
 app.use(express.json());
 
 // --- MIDDLEWARE to simulate getting a user from a request header ---
-// FIX: Switched to accessing headers via `req.headers['x-user-id']` to resolve a TypeScript error
-// where the `req.get()` method was not found on the Request type. This also resolves a
-// follow-on overload error on `app.use()`.
-const userMiddleware = (req: Request, res: Response, next: NextFunction) => {
+// NOTE: Aliased express types are used to resolve conflicts with other global types (e.g., from DOM).
+const userMiddleware = (req: ExpressRequest, res: ExpressResponse, next: ExpressNextFunction) => {
     // In a real app, this would come from a JWT or session cookie.
     const userIdHeader = req.headers['x-user-id'];
     if (userIdHeader) {
