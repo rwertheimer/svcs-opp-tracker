@@ -2,7 +2,6 @@
 
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
-// FIX: Use Pool instead of Client for connection pooling, which is appropriate for a web server.
 import { Pool } from 'pg';
 import * as dotenv from 'dotenv';
 import { BigQuery } from '@google-cloud/bigquery';
@@ -13,8 +12,7 @@ const app = express();
 const PORT = process.env.PORT || 8080;
 
 const GCLOUD_PROJECT_ID = 'digital-arbor-400';
-// FIX: Instantiate a Pool instead of a single Client.
-const pgClient = new Pool({
+const pgPool = new Pool({
   host: process.env.PG_HOST,
   port: parseInt(process.env.PG_PORT || '5432', 10),
   user: process.env.PG_USER,
@@ -28,11 +26,13 @@ app.use(cors());
 app.use(express.json());
 
 // --- MIDDLEWARE to simulate getting a user from a request header ---
+// FIX: The original req.get() call was causing a type error because the property did not exist on the Request type.
+// Replaced with req.headers[] to correctly and safely read the header value. This also resolves the
+// cascading type inference error for the middleware function passed to app.use().
 const userMiddleware = (req: Request, res: Response, next: NextFunction) => {
     // In a real app, this would come from a JWT or session cookie.
-    // FIX: Use req.get() which is the correct method on the Express Request type to get a header.
-    // This resolves a type error where `req.headers` was not found.
-    const userId = req.get('x-user-id');
+    const userIdFromHeader = req.headers['x-user-id'];
+    const userId = Array.isArray(userIdFromHeader) ? userIdFromHeader[0] : userIdFromHeader;
     if (userId) {
         (req as any).userId = userId;
     }
@@ -46,7 +46,7 @@ const apiRouter = express.Router();
 // --- NEW User Endpoint ---
 apiRouter.get('/users', async (req, res) => {
     try {
-        const result = await pgClient.query('SELECT user_id, name, email FROM users ORDER BY name');
+        const result = await pgPool.query('SELECT user_id, name, email FROM users ORDER BY name');
         res.status(200).json(result.rows);
     } catch (error) {
         console.error('Error fetching users:', error);
@@ -70,7 +70,7 @@ apiRouter.get('/opportunities', async (req, res) => {
         ORDER BY o.opportunities_amount DESC, o.opportunities_incremental_bookings DESC;
     `;
     try {
-        const result = await pgClient.query(GET_OPPS_QUERY);
+        const result = await pgPool.query(GET_OPPS_QUERY);
         res.status(200).json(result.rows);
     } catch (error) {
         console.error('Error fetching opportunities:', error);
@@ -88,8 +88,7 @@ apiRouter.post('/opportunities/:opportunityId/disposition', async (req, res) => 
         return res.status(400).send('Disposition, user ID, and version are required.');
     }
     
-    // FIX: pgClient is now a Pool, so .connect() correctly checks out a client for the transaction.
-    const client = await pgClient.connect();
+    const client = await pgPool.connect();
 
     try {
         await client.query('BEGIN');
@@ -150,7 +149,7 @@ apiRouter.post('/opportunities/:opportunityId/disposition', async (req, res) => 
 apiRouter.post('/action-items', async (req, res) => {
     const { opportunity_id, name, status, due_date, notes, documents, created_by_user_id, assigned_to_user_id } = req.body;
     try {
-        const result = await pgClient.query(
+        const result = await pgPool.query(
             'INSERT INTO action_items (opportunity_id, name, status, due_date, notes, documents, created_by_user_id, assigned_to_user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
             [opportunity_id, name, status, due_date || null, notes, documents || [], created_by_user_id, assigned_to_user_id]
         );
@@ -170,7 +169,7 @@ apiRouter.put('/action-items/:itemId', async (req, res) => {
     if (fields.length === 0) return res.status(400).send('No update fields provided.');
 
     try {
-        const result = await pgClient.query(
+        const result = await pgPool.query(
             `UPDATE action_items SET ${setClause} WHERE action_item_id = $${fields.length + 1} RETURNING *`,
             [...values, itemId]
         );
@@ -185,7 +184,7 @@ apiRouter.put('/action-items/:itemId', async (req, res) => {
 apiRouter.delete('/action-items/:itemId', async (req, res) => {
     const { itemId } = req.params;
     try {
-        const result = await pgClient.query('DELETE FROM action_items WHERE action_item_id = $1', [itemId]);
+        const result = await pgPool.query('DELETE FROM action_items WHERE action_item_id = $1', [itemId]);
         if (result.rowCount === 0) return res.status(404).send('Action item not found.');
         res.status(204).send();
     } catch (error) {
@@ -206,8 +205,7 @@ app.use('/api', apiRouter);
 
 (async () => {
     try {
-        // FIX: Test connection using pool.query to avoid leaking clients.
-        await pgClient.query('SELECT NOW()');
+        await pgPool.query('SELECT NOW()');
         console.log('Successfully connected to PostgreSQL database.');
         app.listen(PORT, () => {
             console.log(`Server is running on http://localhost:${PORT}`);

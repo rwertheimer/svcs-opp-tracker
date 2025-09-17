@@ -134,34 +134,34 @@ const MOCK_USERS = [
 ];
 
 async function seedDatabase() {
+  console.log('--- Starting PostgreSQL Database Seeding ---');
   const pool = new Pool(POSTGRES_CONFIG);
   let client: PoolClient | null = null;
-  console.log('--- Starting PostgreSQL Database Seeding ---');
-
+  
   try {
-    console.log('[DEBUG] Attempting to get client from pool...');
+    console.log('[DEBUG] Step 1: Attempting to get client from pool...');
     client = await pool.connect();
-    console.log('[DEBUG] Client connected successfully.');
+    console.log('[DEBUG] Step 1: Client connected successfully.');
 
-    console.log('Step 2: Creating new multi-user schema...');
+    console.log('[DEBUG] Step 2: Attempting to create schema...');
     await client.query(CREATE_SCHEMA_SQL);
-    console.log('\t> Tables created: users, opportunities, action_items, disposition_history.');
+    console.log('[DEBUG] Step 2: Schema created successfully.');
     
-    console.log('[DEBUG] Attempting to start transaction...');
+    console.log('[DEBUG] Step 3: Attempting to start transaction...');
     await client.query('BEGIN');
-    console.log('Step 3: Database transaction started.');
+    console.log('[DEBUG] Step 3: Database transaction started.');
 
-    console.log('Step 4: Inserting mock users...');
+    console.log('[DEBUG] Step 4: Attempting to insert mock users...');
     const userInsertPromises = MOCK_USERS.map(user => 
         client!.query('INSERT INTO users (name, email) VALUES ($1, $2)', [user.name, user.email])
     );
     await Promise.all(userInsertPromises);
     const { rows: insertedUsers } = await client.query('SELECT * FROM users');
-    console.log(`\t> Inserted ${insertedUsers.length} users.`);
+    console.log(`[DEBUG] Step 4: Inserted ${insertedUsers.length} users successfully.`);
 
-    console.log('Step 5: Fetching opportunities from BigQuery...');
+    console.log('[DEBUG] Step 5: Attempting to fetch from BigQuery...');
     const [rows] = await bigquery.query({ query: OPPORTUNITIES_QUERY });
-    console.log(`\t> Found ${rows.length} opportunities.`);
+    console.log(`[DEBUG] Step 5: Fetched ${rows.length} opportunities from BigQuery.`);
 
     if (rows.length === 0) {
       console.log('No opportunities found, committing transaction.');
@@ -169,7 +169,7 @@ async function seedDatabase() {
       return;
     }
 
-    console.log('Step 6: Inserting opportunities and action items...');
+    console.log('[DEBUG] Step 6: Looping through opportunities to insert...');
     for (const [index, row] of rows.entries()) {
         const defaultDisposition = {
             status: 'Not Reviewed',
@@ -188,7 +188,7 @@ async function seedDatabase() {
         );
 
         if (index === 0) {
-            console.log(`\t> Adding sample action items for opp: ${row.opportunities_name}`);
+            console.log(`\t> Inserting sample action items for opp: ${row.opportunities_name}`);
             const actionItems = [
                 { name: 'Initial Scoping Call', status: 'Completed', created_by: insertedUsers[0].user_id, assigned_to: insertedUsers[0].user_id },
                 { name: 'Develop Initial Proposal', status: 'In Progress', created_by: insertedUsers[0].user_id, assigned_to: insertedUsers[1].user_id },
@@ -203,11 +203,11 @@ async function seedDatabase() {
             }
         }
     }
-    console.log(`\t> Successfully queued ${rows.length} opportunities for insertion.`);
+    console.log(`[DEBUG] Step 6: Finished looping through opportunities.`);
     
-    console.log('[DEBUG] Attempting to commit transaction...');
+    console.log('[DEBUG] Step 7: Attempting to commit transaction...');
     await client.query('COMMIT');
-    console.log('Step 7: Database transaction committed successfully.');
+    console.log('[DEBUG] Step 7: Database transaction committed successfully.');
     console.log('--- Database Seeding Complete ---');
 
   } catch (error) {
@@ -219,13 +219,13 @@ async function seedDatabase() {
     throw error;
   } finally {
     if (client) {
-        console.log('[DEBUG] Attempting to release client...');
+        console.log('[DEBUG] Step 8: Attempting to release client...');
         client.release();
-        console.log('[DEBUG] PostgreSQL client has been released.');
+        console.log('[DEBUG] Step 8: PostgreSQL client has been released.');
     }
-    console.log('[DEBUG] Attempting to end pool...');
+    console.log('[DEBUG] Step 9: Attempting to end pool...');
     await pool.end();
-    console.log('[DEBUG] PostgreSQL pool has been closed.');
+    console.log('[DEBUG] Step 9: PostgreSQL pool has been closed.');
   }
 }
 
