@@ -1,7 +1,8 @@
 
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import type { Opportunity, AccountDetails, Disposition, SavedFilter, TaskWithOpportunityContext, ActionItem, FilterGroup } from './types';
-import { fetchOpportunities, fetchOpportunityDetails, saveDisposition } from './services/apiService';
+import type { Opportunity, AccountDetails, Disposition, SavedFilter, TaskWithOpportunityContext, ActionItem, FilterGroup, User } from './types';
+import { fetchOpportunities, fetchOpportunityDetails, saveDisposition, fetchUsers, createActionItem, updateActionItem, deleteActionItem } from './services/apiService';
 import OpportunityList from './components/OpportunityList';
 import OpportunityDetail from './components/OpportunityDetail';
 import Header from './components/Header';
@@ -17,7 +18,6 @@ const initialFilterGroup: FilterGroup = {
     rules: [],
 };
 
-// Helper to safely access nested property values using a dot-notation string.
 const getNestedValue = (obj: any, path: string): any => {
   return path.split('.').reduce((acc, part) => acc && acc[part], obj);
 };
@@ -34,16 +34,27 @@ const App: React.FC = () => {
   const [isScopingModalOpen, setIsScopingModalOpen] = useState(false);
   const [isFilterBuilderOpen, setIsFilterBuilderOpen] = useState(false);
   const [isOrgChartModalOpen, setIsOrgChartModalOpen] = useState(false);
+  
+  // --- NEW: User Management State ---
+  const [users, setUsers] = useState<User[]>([]);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
 
-
-  const loadOpportunities = useCallback(async () => {
+  const loadInitialData = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
+      
+      // Fetch users first to establish context
+      const fetchedUsers = await fetchUsers();
+      setUsers(fetchedUsers);
+      if (fetchedUsers.length > 0) {
+        setCurrentUser(fetchedUsers[0]);
+      }
+      
       const fetchedOpportunities = await fetchOpportunities();
       setOpportunities(fetchedOpportunities);
-    } catch (err) {
-      setError('Failed to fetch opportunities. Please try again.');
+    } catch (err: any) {
+      setError('Failed to fetch initial data. Please try again.');
       console.error(err);
     } finally {
       setIsLoading(false);
@@ -51,14 +62,14 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    loadOpportunities();
-  }, [loadOpportunities]);
+    loadInitialData();
+  }, [loadInitialData]);
   
   const evaluateFilterGroup = (opp: Opportunity, group: FilterGroup): boolean => {
     const results = group.rules.map(rule => {
-      if ('combinator' in rule) { // It's a nested group
+      if ('combinator' in rule) {
         return evaluateFilterGroup(opp, rule);
-      } else { // It's a rule
+      } else {
         const value = getNestedValue(opp, rule.field);
         if (value === null || value === undefined) return false;
         
@@ -66,94 +77,70 @@ const App: React.FC = () => {
         const oppValue = value;
 
         switch (rule.operator) {
-          // Text
           case 'contains': return oppValue.toString().toLowerCase().includes(ruleValue.toString().toLowerCase());
           case 'not_contains': return !oppValue.toString().toLowerCase().includes(ruleValue.toString().toLowerCase());
           case 'equals': return oppValue.toString().toLowerCase() === ruleValue.toString().toLowerCase();
           case 'not_equals': return oppValue.toString().toLowerCase() !== ruleValue.toString().toLowerCase();
-          // Number
           case 'eq': return Number(oppValue) === Number(ruleValue);
           case 'neq': return Number(oppValue) !== Number(ruleValue);
           case 'gt': return Number(oppValue) > Number(ruleValue);
           case 'gte': return Number(oppValue) >= Number(ruleValue);
           case 'lt': return Number(oppValue) < Number(ruleValue);
           case 'lte': return Number(oppValue) <= Number(ruleValue);
-          // Date
           case 'on': return new Date(oppValue as string).toDateString() === new Date(ruleValue).toDateString();
           case 'before': return new Date(oppValue as string) < new Date(ruleValue);
           case 'after': return new Date(oppValue as string) > new Date(ruleValue);
-          // Select
           case 'is': 
-              if (typeof oppValue === 'string' && typeof ruleValue === 'string') {
-                  return oppValue.toLowerCase() === ruleValue.toLowerCase();
-              }
+              if (typeof oppValue === 'string' && typeof ruleValue === 'string') return oppValue.toLowerCase() === ruleValue.toLowerCase();
               return oppValue === ruleValue;
           case 'is_not': 
-              if (typeof oppValue === 'string' && typeof ruleValue === 'string') {
-                  return oppValue.toLowerCase() !== ruleValue.toLowerCase();
-              }
+              if (typeof oppValue === 'string' && typeof ruleValue === 'string') return oppValue.toLowerCase() !== ruleValue.toLowerCase();
               return oppValue !== ruleValue;
           default: return false;
         }
       }
     });
-
-    if (group.combinator === 'AND') {
-      return results.every(res => res);
-    } else {
-      return results.some(res => res);
-    }
+    return group.combinator === 'AND' ? results.every(res => res) : results.some(res => res);
   };
-
 
   const filteredOpportunities = useMemo(() => {
     const oneHundredTwentyDaysFromNow = new Date();
     oneHundredTwentyDaysFromNow.setDate(oneHundredTwentyDaysFromNow.getDate() + 120);
 
-    // Apply the base filter. An opportunity is included if it's either a
-    // standard triage candidate OR if it has been previously engaged with by the user.
     const baseFilteredOpps = opportunities.filter(opp => {
-      // Common criteria for any opportunity to be considered
       const allowedTypes = ['Renewal', 'New Business', 'Upsell', 'Expansion'];
       const typeMatch = allowedTypes.includes(opp.opportunities_type);
       const regionMatch = opp.accounts_region_name === 'NA - Enterprise' || opp.accounts_region_name === 'NA - Commercial';
       const stageNameLower = opp.opportunities_stage_name.toLowerCase();
       const stageMatch = !stageNameLower.includes('closed') && !stageNameLower.includes('won') && !stageNameLower.includes('lost');
 
-      if (!typeMatch || !regionMatch || !stageMatch) {
-          return false;
-      }
+      if (!typeMatch || !regionMatch || !stageMatch) return false;
 
-      // Condition 1: Is this a standard triage candidate within the date window?
       const closeDate = new Date(opp.opportunities_close_date);
       const subscriptionEndDate = new Date(opp.accounts_subscription_end_date);
       const dateMatch = (closeDate <= oneHundredTwentyDaysFromNow) || (subscriptionEndDate <= oneHundredTwentyDaysFromNow);
-
-      // Condition 2: Is this an "Engaged" opportunity that the user has worked on?
       const isEngaged = opp.disposition?.status !== 'Not Reviewed';
       
       return dateMatch || isEngaged;
     });
 
-    // Then apply the user's advanced filters
-    if (filters.rules.length === 0) {
-        return baseFilteredOpps;
-    }
+    if (filters.rules.length === 0) return baseFilteredOpps;
     return baseFilteredOpps.filter(opp => evaluateFilterGroup(opp, filters));
-
   }, [opportunities, filters]);
-
-  const allTasks = useMemo((): TaskWithOpportunityContext[] => {
+  
+  const allTasksForCurrentUser = useMemo((): TaskWithOpportunityContext[] => {
+    if (!currentUser) return [];
     return opportunities.flatMap(opp => 
-      opp.disposition?.actionItems.map(item => ({
-        ...item,
-        opportunityId: opp.opportunities_id,
-        opportunityName: opp.opportunities_name,
-        accountName: opp.accounts_salesforce_account_name,
-      })) || []
+      (opp.actionItems ?? [])
+        .filter(item => item.assigned_to_user_id === currentUser.user_id)
+        .map(item => ({
+            ...item,
+            opportunityId: opp.opportunities_id,
+            opportunityName: opp.opportunities_name,
+            accountName: opp.accounts_salesforce_account_name,
+        }))
     );
-  }, [opportunities]);
-
+  }, [opportunities, currentUser]);
 
   const handleSelectOpportunity = async (opportunity: Opportunity) => {
     setActiveView('opportunities');
@@ -165,7 +152,6 @@ const App: React.FC = () => {
       setSelectedOpportunityDetails(details);
     } catch (err) {
       setError('Failed to fetch opportunity details.');
-      console.error(err);
     } finally {
       setIsLoading(false);
     }
@@ -173,12 +159,8 @@ const App: React.FC = () => {
   
   const handleSelectOpportunityById = (opportunityId: string) => {
     const opportunity = opportunities.find(opp => opp.opportunities_id === opportunityId);
-    if (opportunity) {
-        handleSelectOpportunity(opportunity);
-    } else {
-        console.warn(`Could not find opportunity with ID: ${opportunityId}`);
-    }
-};
+    if (opportunity) handleSelectOpportunity(opportunity);
+  };
 
   const handleGoBack = () => {
     setSelectedOpportunity(null);
@@ -186,57 +168,100 @@ const App: React.FC = () => {
   };
   
   const handleSaveDisposition = async (disposition: Disposition) => {
-    if (!selectedOpportunity) return;
+    if (!selectedOpportunity || !currentUser) return;
 
-    const originalOpportunity = { ...selectedOpportunity };
-    const updatedOpportunity = { ...selectedOpportunity, disposition };
-    const opportunityId = selectedOpportunity.opportunities_id;
+    const originalOpportunity = opportunities.find(opp => opp.opportunities_id === selectedOpportunity.opportunities_id);
+    if (!originalOpportunity) return;
 
-    // Optimistic UI Update: Update the disposition in the main opportunities list.
-    setOpportunities(prevOpps =>
-      prevOpps.map(opp =>
-        opp.opportunities_id === opportunityId ? updatedOpportunity : opp
-      )
-    );
+    const updatedOpportunity = { ...originalOpportunity, disposition: { ...disposition, last_updated_by_user_id: currentUser.user_id }};
     
-    // Close the detail view and return to the updated list.
+    setOpportunities(prevOpps => prevOpps.map(opp => opp.opportunities_id === updatedOpportunity.opportunities_id ? updatedOpportunity : opp));
     handleGoBack();
 
     try {
-      await saveDisposition(opportunityId, disposition);
-      // On success, the optimistic update stands. We could add a success notification here.
-    } catch (err) {
-      console.error("Failed to save disposition:", err);
-      setError(`Failed to save disposition for ${originalOpportunity.opportunities_name}. Your changes have been reverted.`);
-      
-      // Revert the optimistic update on failure.
-      setOpportunities(prevOpps =>
-        prevOpps.map(opp =>
-          opp.opportunities_id === opportunityId ? originalOpportunity : opp
-        )
-      );
+      const savedDisposition = await saveDisposition(updatedOpportunity.opportunities_id, updatedOpportunity.disposition, currentUser.user_id);
+      // On success, update the opportunity with the new version from the server
+      setOpportunities(prevOpps => prevOpps.map(opp => opp.opportunities_id === updatedOpportunity.opportunities_id ? { ...updatedOpportunity, disposition: savedDisposition } : opp));
+    } catch (err: any) {
+        // FIX: Check for error status code 409 for optimistic locking conflicts.
+        if (err.status === 409) { // Optimistic locking conflict
+            alert("Conflict: This opportunity was updated by another user. Your changes could not be saved. The view will now refresh.");
+            window.location.reload(); // Force a refresh to get the latest data
+        } else {
+            console.error("Failed to save disposition:", err);
+            setError(`Failed to save disposition for ${originalOpportunity.opportunities_name}. Your changes have been reverted.`);
+            setOpportunities(prevOpps => prevOpps.map(opp => opp.opportunities_id === originalOpportunity.opportunities_id ? originalOpportunity : opp));
+        }
     }
   };
   
-  const handleTaskUpdate = (taskId: string, opportunityId: string, updates: Partial<ActionItem>) => {
-    setOpportunities(prevOpps =>
-      prevOpps.map(opp => {
-        if (opp.opportunities_id === opportunityId && opp.disposition) {
-          const updatedActionItems = opp.disposition.actionItems.map(item =>
-            item.id === taskId ? { ...item, ...updates } : item
-          );
-          return {
-            ...opp,
-            disposition: {
-              ...opp.disposition,
-              actionItems: updatedActionItems,
-            },
-          };
-        }
-        return opp;
-      })
-    );
+  // --- NEW: Action Item Handlers ---
+  const handleActionItemCreate = async (opportunityId: string, actionItem: Omit<ActionItem, 'action_item_id' | 'created_by_user_id'>) => {
+      if (!currentUser) return;
+      
+      // Optimistic update
+      const tempId = `temp-${Date.now()}`;
+      const newItem: ActionItem = {
+          ...actionItem,
+          action_item_id: tempId,
+          created_by_user_id: currentUser.user_id
+      };
+      setOpportunities(prev => prev.map(opp => opp.opportunities_id === opportunityId ? {...opp, actionItems: [...(opp.actionItems || []), newItem]} : opp));
+
+      try {
+          const savedItem = await createActionItem(opportunityId, newItem);
+          // Replace temp item with saved item from server
+          setOpportunities(prev => prev.map(opp => opp.opportunities_id === opportunityId 
+              ? {...opp, actionItems: (opp.actionItems || []).map(item => item.action_item_id === tempId ? savedItem : item)} 
+              : opp
+          ));
+      } catch (error) {
+          console.error("Failed to create action item:", error);
+          setError("Failed to save new action item. Reverting change.");
+          // Revert optimistic update
+          setOpportunities(prev => prev.map(opp => opp.opportunities_id === opportunityId 
+              ? {...opp, actionItems: (opp.actionItems || []).filter(item => item.action_item_id !== tempId)} 
+              : opp
+          ));
+      }
   };
+
+  const handleActionItemUpdate = async (opportunityId: string, actionItemId: string, updates: Partial<ActionItem>) => {
+      const originalOpps = [...opportunities];
+      // Optimistic update
+      setOpportunities(prev => prev.map(opp => {
+          if (opp.opportunities_id === opportunityId) {
+              return {...opp, actionItems: (opp.actionItems || []).map(item => item.action_item_id === actionItemId ? {...item, ...updates} : item)};
+          }
+          return opp;
+      }));
+      
+      try {
+          await updateActionItem(actionItemId, updates);
+      } catch (error) {
+          console.error("Failed to update action item:", error);
+          setError("Failed to update action item. Reverting change.");
+          setOpportunities(originalOpps);
+      }
+  };
+
+  const handleActionItemDelete = async (opportunityId: string, actionItemId: string) => {
+      const originalOpps = [...opportunities];
+      // Optimistic update
+      setOpportunities(prev => prev.map(opp => opp.opportunities_id === opportunityId 
+          ? {...opp, actionItems: (opp.actionItems || []).filter(item => item.action_item_id !== actionItemId)} 
+          : opp
+      ));
+
+      try {
+          await deleteActionItem(actionItemId);
+      } catch (error) {
+          console.error("Failed to delete action item:", error);
+          setError("Failed to delete action item. Reverting change.");
+          setOpportunities(originalOpps);
+      }
+  };
+
 
   const handleApplyAdvancedFilters = (newFilters: FilterGroup) => {
     setFilters(newFilters);
@@ -255,23 +280,18 @@ const App: React.FC = () => {
 
   const handleApplySavedFilter = (id: string) => {
     const savedFilter = savedFilters.find(f => f.id === id);
-    if (savedFilter) {
-        setFilters(savedFilter.criteria);
-    }
+    if (savedFilter) setFilters(savedFilter.criteria);
   };
 
-  const handleClearFilters = () => {
-    setFilters(initialFilterGroup);
-  };
+  const handleClearFilters = () => setFilters(initialFilterGroup);
   
   const handleSaveScopingActivity = (data: { accountName: string; contact: string; description: string; }) => {
-    // This creates a new opportunity object that conforms to the new SQL-aligned schema
     const newScopingOpp: Opportunity = {
       opportunities_id: `scoping-${Date.now()}`,
       opportunities_name: `Scoping: ${data.description.substring(0, 30)}...`,
       opportunities_subscription_start_date: new Date().toISOString(),
       opportunities_stage_name: 'Pre-Sales Scoping',
-      opportunities_owner_name: 'N/A',
+      opportunities_owner_name: currentUser?.name ?? 'N/A',
       opportunities_renewal_date_on_creation_date: new Date().toISOString(),
       opportunities_automated_renewal_status: 'N/A',
       accounts_dollars_months_left: 0,
@@ -294,13 +314,14 @@ const App: React.FC = () => {
       opportunities_close_date: new Date().toISOString(),
       opportunities_incremental_bookings: 0,
       opportunities_amount: 0,
-      // FIX: Add missing forecast properties required by the Opportunity type.
       opportunities_forecast_category: 'N/A',
       opportunities_services_forecast_sfdc: 0,
+      actionItems: [],
       disposition: {
         status: 'Not Reviewed',
         notes: `Initial Contact: ${data.contact}\n\nDescription:\n${data.description}`,
-        actionItems: []
+        version: 1,
+        last_updated_by_user_id: currentUser?.user_id ?? ''
       }
     };
     setOpportunities(prev => [newScopingOpp, ...prev]);
@@ -308,7 +329,7 @@ const App: React.FC = () => {
   };
 
   const renderContent = () => {
-    if (isLoading && opportunities.length === 0) {
+    if (!currentUser && isLoading) {
       return <LoadingSpinner />;
     }
 
@@ -317,12 +338,7 @@ const App: React.FC = () => {
         <div className="text-center p-8">
           <h2 className="text-2xl font-bold text-red-600">An Error Occurred</h2>
           <p className="text-slate-600 mt-2">{error}</p>
-          <button
-            onClick={loadOpportunities}
-            className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition"
-          >
-            Retry
-          </button>
+          <button onClick={loadInitialData} className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700">Retry</button>
         </div>
       );
     }
@@ -330,18 +346,17 @@ const App: React.FC = () => {
     if (activeView === 'tasks') {
         return (
             <TaskCockpit 
-                tasks={allTasks} 
-                onTaskUpdate={handleTaskUpdate}
+                tasks={allTasksForCurrentUser} 
+                onTaskUpdate={(taskId, oppId, updates) => handleActionItemUpdate(oppId, taskId, updates)}
                 onSelectOpportunity={handleSelectOpportunityById}
+                users={users}
+                currentUser={currentUser!}
             />
         );
     }
 
     if (selectedOpportunity && selectedOpportunityDetails) {
-      // Find historical opportunities for the selected account from the main list
-      const historicalOpps = opportunities.filter(
-        opp => opp.accounts_salesforce_account_id === selectedOpportunity.accounts_salesforce_account_id
-      );
+      const historicalOpps = opportunities.filter(opp => opp.accounts_salesforce_account_id === selectedOpportunity.accounts_salesforce_account_id);
 
       return (
         <OpportunityDetail
@@ -350,6 +365,11 @@ const App: React.FC = () => {
           historicalOpportunities={historicalOpps}
           onBack={handleGoBack}
           onSave={handleSaveDisposition}
+          users={users}
+          currentUser={currentUser!}
+          onActionItemCreate={handleActionItemCreate}
+          onActionItemUpdate={handleActionItemUpdate}
+          onActionItemDelete={handleActionItemDelete}
         />
       );
     }
@@ -372,7 +392,13 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-100 font-sans text-slate-800">
-      <Header activeView={activeView} onNavigate={setActiveView} />
+      <Header 
+        activeView={activeView} 
+        onNavigate={setActiveView} 
+        users={users}
+        currentUser={currentUser}
+        onSwitchUser={setCurrentUser}
+      />
       <main className="container mx-auto p-4 md:p-8">
         {isLoading && opportunities.length > 0 && <div className="fixed top-20 right-4 bg-indigo-600 text-white px-4 py-2 rounded-md shadow-lg animate-pulse">Updating...</div>}
         {renderContent()}

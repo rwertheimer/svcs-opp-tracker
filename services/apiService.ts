@@ -1,7 +1,5 @@
 
-// Fix: The /// <reference types="vite/client" /> directive was causing a "Cannot find type definition file" error.
-// To resolve this and the subsequent error on `import.meta.env`, we provide a minimal global
-// type definition for `import.meta.env` to satisfy TypeScript.
+
 declare global {
   interface ImportMeta {
     readonly env: {
@@ -10,58 +8,40 @@ declare global {
   }
 }
 
-import type { Opportunity, AccountDetails, Disposition } from '../types';
-import { generateOpportunities, generateAccountDetails } from './mockData';
+import type { Opportunity, AccountDetails, Disposition, User, ActionItem } from '../types';
+import { generateOpportunities, generateAccountDetails, MOCK_USERS } from './mockData';
 
-/**
- * apiService.ts: A dual-mode API service for flexible development.
- *
- * This service can operate in two modes, controlled by an environment variable.
- * Create a local .env file (copy from .env.example) to control the mode.
- *
- * 1. Mock Mode (VITE_USE_MOCK_DATA = 'true'): The service uses local mock data. This ensures
- *    the application is self-contained and works in a browser-only environment.
- * 2. Live Mode (VITE_USE_MOCK_DATA = 'false'): The service makes live HTTP requests to a
- *    local backend server (e.g., http://localhost:8080).
- */
-
-// --- CONFIGURATION ---
-// The app mode is now controlled by an environment variable.
-// In your local .env file, set VITE_USE_MOCK_DATA=false to connect to the backend.
-// Vite automatically loads .env files. The VITE_ prefix is required.
 const USE_MOCK_DATA = (import.meta.env?.VITE_USE_MOCK_DATA ?? 'true') === 'true';
 const API_BASE_URL = 'http://localhost:8080/api';
 
-/**
- * Fetches the main list of opportunities.
- */
-export const fetchOpportunities = async (): Promise<Opportunity[]> => {
+// --- NEW: User API ---
+export const fetchUsers = async (): Promise<User[]> => {
   if (USE_MOCK_DATA) {
-    console.log("Fetching opportunities from local mock data...");
-    await new Promise(resolve => setTimeout(resolve, 500));
-    return generateOpportunities(50);
+    return Promise.resolve(MOCK_USERS);
   } else {
-    console.log(`Fetching real opportunities from GET ${API_BASE_URL}/opportunities...`);
-    const response = await fetch(`${API_BASE_URL}/opportunities`);
-    if (!response.ok) {
-      throw new Error('Failed to fetch opportunities from the backend. Is the server running?');
-    }
-    // Backend now provides the disposition object, including defaults for null records.
+    const response = await fetch(`${API_BASE_URL}/users`);
+    if (!response.ok) throw new Error('Failed to fetch users.');
     return response.json();
   }
 };
 
-/**
- * Fetches the detailed data for a specific account by calling multiple specialized endpoints.
- */
+// --- Opportunity APIs ---
+export const fetchOpportunities = async (): Promise<Opportunity[]> => {
+  if (USE_MOCK_DATA) {
+    await new Promise(resolve => setTimeout(resolve, 500));
+    return generateOpportunities(50);
+  } else {
+    const response = await fetch(`${API_BASE_URL}/opportunities`);
+    if (!response.ok) throw new Error('Failed to fetch opportunities. Is the server running?');
+    return response.json();
+  }
+};
+
 export const fetchOpportunityDetails = async (accountId: string): Promise<AccountDetails> => {
   if (USE_MOCK_DATA) {
-    console.log(`Generating mock details for account ${accountId}...`);
     await new Promise(resolve => setTimeout(resolve, 500));
     return generateAccountDetails(accountId);
   } else {
-    console.log(`Fetching real details for account ${accountId} from backend endpoints...`);
-
     try {
       const [supportTicketsRes, usageHistoryRes, projectHistoryRes] = await Promise.all([
         fetch(`${API_BASE_URL}/accounts/${accountId}/support-tickets`),
@@ -70,51 +50,89 @@ export const fetchOpportunityDetails = async (accountId: string): Promise<Accoun
       ]);
 
       if (!supportTicketsRes.ok || !usageHistoryRes.ok || !projectHistoryRes.ok) {
-        // Log the status for better debugging
-        console.error('Support Tickets Status:', supportTicketsRes.status);
-        console.error('Usage History Status:', usageHistoryRes.status);
-        console.error('Project History Status:', projectHistoryRes.status);
-        throw new Error(`Failed to fetch one or more details for account ${accountId}. Is the server running?`);
+        throw new Error(`Failed to fetch one or more details for account ${accountId}.`);
       }
 
-      const supportTickets = await supportTicketsRes.json();
-      const usageHistory = await usageHistoryRes.json();
-      const projectHistory = await projectHistoryRes.json();
-
-      return { supportTickets, usageHistory, projectHistory };
+      return { 
+        supportTickets: await supportTicketsRes.json(), 
+        usageHistory: await usageHistoryRes.json(), 
+        projectHistory: await projectHistoryRes.json() 
+      };
 
     } catch (error) {
       console.error("Error in fetchOpportunityDetails:", error);
-      throw error; // Re-throw the error to be caught by the calling component
+      throw error;
     }
   }
 };
 
-/**
- * Saves a disposition for a specific opportunity.
- * In mock mode, this is a no-op that resolves successfully.
- * In live mode, it sends the data to the backend.
- */
-export const saveDisposition = async (opportunityId: string, disposition: Disposition): Promise<void> => {
+export const saveDisposition = async (opportunityId: string, disposition: Disposition, userId: string): Promise<Disposition> => {
   if (USE_MOCK_DATA) {
-    console.log(`(In-Memory) Saving disposition for ${opportunityId}`, disposition);
-    // In mock mode, this is a no-op as state is handled optimistically in the UI.
-    return Promise.resolve();
+    console.log(`(Mock) Saving disposition for ${opportunityId}`, { ...disposition, version: disposition.version + 1 });
+    return Promise.resolve({ ...disposition, version: disposition.version + 1 });
   } else {
-    console.log(`Saving real disposition for ${opportunityId} to POST ${API_BASE_URL}/opportunities/${opportunityId}/disposition...`);
-    
     const response = await fetch(`${API_BASE_URL}/opportunities/${opportunityId}/disposition`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ disposition }),
+      body: JSON.stringify({ disposition, userId }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Failed to save disposition: ${response.status} ${errorText}`);
+      // Propagate the status to be handled for optimistic locking
+      const error = new Error(`Failed to save disposition: ${response.status} ${errorText}`);
+      // FIX: Attach status to the error object so the UI can check for 409 conflicts.
+      (error as any).status = response.status;
+      throw error;
     }
-    // A successful 2xx response is sufficient.
+    return response.json(); // Return the updated disposition with the new version
   }
+};
+
+// --- NEW: Action Item APIs ---
+
+export const createActionItem = async (opportunityId: string, item: Omit<ActionItem, 'action_item_id'>): Promise<ActionItem> => {
+    if (USE_MOCK_DATA) {
+        const newItem = { ...item, action_item_id: `mock-ai-${Date.now()}` };
+        console.log("(Mock) Creating action item:", newItem);
+        return Promise.resolve(newItem as ActionItem);
+    } else {
+        const response = await fetch(`${API_BASE_URL}/action-items`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ opportunity_id: opportunityId, ...item }),
+        });
+        if (!response.ok) throw new Error('Failed to create action item');
+        return response.json();
+    }
+};
+
+export const updateActionItem = async (actionItemId: string, updates: Partial<ActionItem>): Promise<ActionItem> => {
+     if (USE_MOCK_DATA) {
+        console.log(`(Mock) Updating action item ${actionItemId}:`, updates);
+        // This won't actually persist in mock mode, but we can simulate success.
+        return Promise.resolve({} as ActionItem);
+    } else {
+        const response = await fetch(`${API_BASE_URL}/action-items/${actionItemId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updates),
+        });
+        if (!response.ok) throw new Error('Failed to update action item');
+        return response.json();
+    }
+};
+
+export const deleteActionItem = async (actionItemId: string): Promise<void> => {
+    if (USE_MOCK_DATA) {
+        console.log(`(Mock) Deleting action item ${actionItemId}`);
+        return Promise.resolve();
+    } else {
+        const response = await fetch(`${API_BASE_URL}/action-items/${actionItemId}`, {
+            method: 'DELETE',
+        });
+        if (!response.ok) throw new Error('Failed to delete action item');
+    }
 };

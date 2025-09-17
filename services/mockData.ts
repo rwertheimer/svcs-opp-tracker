@@ -1,5 +1,19 @@
-import type { Opportunity, AccountDetails, SupportTicket, ProjectHistory, UsageData, ActionItem, Document } from '../types';
-import { OpportunityStage, ActionItemStatus, DispositionStatus } from '../types';
+
+
+import type { Opportunity, AccountDetails, SupportTicket, ProjectHistory, UsageData, ActionItem, Document, User } from '../types';
+// FIX: Removed OpportunityStage from import as it does not exist in types.ts
+import { ActionItemStatus } from '../types';
+
+// FIX: Added local OpportunityStage enum to resolve missing type and allow MOCK_STAGES to be created correctly.
+export enum OpportunityStage {
+    Created = '0 - Created',
+    Contacted = '1 - Contacted',
+    WhyStay = '2 - Why Stay?',
+    Selected = '3 - Selected',
+    Contract = '4 - Contract',
+    Closed = '5 - Closed',
+    PreSalesScoping = 'Pre-Sales Scoping',
+}
 
 // --- Helper Functions ---
 const getRandomId = () => Math.random().toString(36).substring(2, 10);
@@ -16,12 +30,19 @@ const createFutureDate = (daysAhead: number) => {
 };
 
 // --- MOCK DATA CONSTANTS ---
+// FIX: Added and exported MOCK_USERS to be used by the mock apiService.
+export const MOCK_USERS: User[] = [
+    { user_id: 'user-1', name: 'Alice Johnson', email: 'alice.johnson@fivetran.com' },
+    { user_id: 'user-2', name: 'Bob Williams', email: 'bob.williams@fivetran.com' },
+    { user_id: 'user-3', name: 'Charlie Brown', email: 'charlie.brown@fivetran.com' },
+    { user_id: 'user-4', name: 'Diana Miller', email: 'diana.miller@fivetran.com' }
+];
 const MOCK_ACCOUNTS = ['Globex Corporation', 'Stark Industries', 'Wayne Enterprises', 'Cyberdyne Systems', 'Tyrell Corporation', 'Sirius Cybernetics Corp', 'Monsters, Inc.', 'Acme Corporation'];
 const MOCK_OPP_ADJECTIVES = ['Enterprise', 'Strategic', 'High-Value', 'Growth', 'Renewal', 'Expansion', 'Migration'];
 const MOCK_OPP_NOUNS = ['Platform Deal', 'Services Engagement', 'Connector Package', 'License Upgrade', 'Database Migration'];
 const MOCK_REPS = ['Alice Johnson', 'Bob Williams', 'Charlie Brown', 'Diana Miller'];
 const MOCK_REGIONS = ['NA - Enterprise', 'NA - Commercial', 'EMEA', 'APAC'];
-const MOCK_STAGES = Object.values(OpportunityStage).filter(s => s !== OpportunityStage.PreSalesScoping);
+const MOCK_STAGES: string[] = Object.values(OpportunityStage).filter(s => s !== OpportunityStage.PreSalesScoping);
 const MOCK_OPP_TYPES = ['Renewal', 'New Business', 'Upsell', 'Expansion', 'Sales'];
 const MOCK_FORECAST_CATEGORIES = ['Commit', 'Most Likely', 'Upside', 'Omitted'];
 const MOCK_WAREHOUSE_SUBTYPES = ['snowflake', 'databricks', 'bigquery', 'redshift'];
@@ -126,18 +147,20 @@ export const generateAccountDetails = (accountId: string): AccountDetails => {
 // --- Main Mock Data Generation ---
 
 const generatePreDispositionedOpp = (): Opportunity => {
+    const opportunityId = 'demo-fit-opp-123';
+    // FIX: Corrected ActionItem structure to use `action_item_id`, `due_date`, and added required fields.
      const defaultActionItems: ActionItem[] = [
-        { id: 'task-1', name: 'Initial Scoping Call', status: ActionItemStatus.Completed, dueDate: createPastDate(10), notes: 'Completed initial call, customer is very interested.', documents: [] },
-        { id: 'task-2', name: 'Develop Initial Proposal', status: ActionItemStatus.InProgress, dueDate: createFutureDate(2), notes: 'Working on the proposal draft.', documents: [{id: 'doc-1', text: 'Proposal Template', url: 'http://example.com/template'}] },
-        { id: 'task-3', name: 'Share Initial Proposal', status: ActionItemStatus.NotStarted, dueDate: createFutureDate(7), notes: '', documents: [] },
-        { id: 'task-4', name: 'Revise and Finalize Proposal', status: ActionItemStatus.NotStarted, dueDate: createFutureDate(14), notes: '', documents: [] },
-        { id: 'task-5', name: 'Approvals', status: ActionItemStatus.NotStarted, dueDate: createFutureDate(21), notes: '', documents: [] },
+        { action_item_id: 'task-1', opportunity_id: opportunityId, name: 'Initial Scoping Call', status: ActionItemStatus.Completed, due_date: createPastDate(10), notes: 'Completed initial call, customer is very interested.', documents: [], created_by_user_id: MOCK_USERS[0].user_id, assigned_to_user_id: MOCK_USERS[0].user_id },
+        { action_item_id: 'task-2', opportunity_id: opportunityId, name: 'Develop Initial Proposal', status: ActionItemStatus.InProgress, due_date: createFutureDate(2), notes: 'Working on the proposal draft.', documents: [{id: 'doc-1', text: 'Proposal Template', url: 'http://example.com/template'}], created_by_user_id: MOCK_USERS[0].user_id, assigned_to_user_id: MOCK_USERS[0].user_id },
+        { action_item_id: 'task-3', opportunity_id: opportunityId, name: 'Share Initial Proposal', status: ActionItemStatus.NotStarted, due_date: createFutureDate(7), notes: '', documents: [], created_by_user_id: MOCK_USERS[0].user_id, assigned_to_user_id: MOCK_USERS[0].user_id },
+        { action_item_id: 'task-4', opportunity_id: opportunityId, name: 'Revise and Finalize Proposal', status: ActionItemStatus.NotStarted, due_date: createFutureDate(14), notes: '', documents: [], created_by_user_id: MOCK_USERS[0].user_id, assigned_to_user_id: MOCK_USERS[0].user_id },
+        { action_item_id: 'task-5', opportunity_id: opportunityId, name: 'Approvals', status: ActionItemStatus.NotStarted, due_date: createFutureDate(21), notes: '', documents: [], created_by_user_id: MOCK_USERS[0].user_id, assigned_to_user_id: MOCK_USERS[0].user_id },
     ];
     const closeDate = createFutureDate(45);
     const servicesAmount = 25000;
 
     return {
-        opportunities_id: 'demo-fit-opp-123',
+        opportunities_id: opportunityId,
         opportunities_name: 'Strategic Platform Migration',
         opportunities_subscription_start_date: createPastDate(180),
         opportunities_stage_name: OpportunityStage.Selected,
@@ -169,8 +192,12 @@ const generatePreDispositionedOpp = (): Opportunity => {
         disposition: {
             status: 'Services Fit',
             notes: 'This is a high-priority opportunity. Customer wants to migrate their legacy Oracle DB to Snowflake and needs significant help with the data replication strategy.',
-            actionItems: defaultActionItems
-        }
+            // FIX: Removed `actionItems` from `disposition` as it belongs on the Opportunity object.
+            version: 1,
+            last_updated_by_user_id: MOCK_USERS[0].user_id,
+        },
+        // FIX: Added `actionItems` to the top-level Opportunity object.
+        actionItems: defaultActionItems
     };
 };
 
@@ -194,6 +221,7 @@ export const generateOpportunities = (count: number): Opportunity[] => {
             opportunities_id: getRandomId(),
             opportunities_name: `${getRandomElement(MOCK_OPP_ADJECTIVES)} ${getRandomElement(MOCK_OPP_NOUNS)}`,
             opportunities_subscription_start_date: createPastDate(Math.floor(Math.random() * 365)),
+            // FIX: Ensured `getRandomElement(MOCK_STAGES)` correctly returns a string.
             opportunities_stage_name: getRandomElement(MOCK_STAGES),
             opportunities_owner_name: getRandomElement(MOCK_REPS),
             opportunities_renewal_date_on_creation_date: createPastDate(0),
@@ -223,8 +251,11 @@ export const generateOpportunities = (count: number): Opportunity[] => {
             disposition: {
                 status: 'Not Reviewed',
                 notes: '',
-                actionItems: []
-            }
+                version: 1,
+                last_updated_by_user_id: MOCK_USERS[0].user_id,
+            },
+            // FIX: Added `actionItems` to the top-level Opportunity object.
+            actionItems: []
         };
         opportunities.push(opp);
     }
