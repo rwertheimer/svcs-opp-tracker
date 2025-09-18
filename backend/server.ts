@@ -1,10 +1,8 @@
-// DO NOT MODIFY THIS FILE UNTIL FURTHER NOTICE. THE TYPE MISMATCH ISSUE IS STILL UNDER INVESTIGATION.
-
 /// <reference types="node" />
 
-// FIX: Using namespace import for express to avoid conflicts with global DOM types for Request and Response.
-// This resolves issues where properties like .status, .body, .params were not found on aliased types.
-import * as express from 'express';
+// Use default import for callable express, and a separate type namespace to avoid DOM type conflicts
+import express from 'express';
+import type * as expressTypes from 'express';
 import cors from 'cors';
 import { Pool } from 'pg';
 import * as dotenv from 'dotenv';
@@ -33,7 +31,7 @@ app.use(express.json());
 
 // --- MIDDLEWARE to simulate getting a user from a request header ---
 // NOTE: Explicit express types are used to resolve conflicts with other global types (e.g., from DOM).
-const userMiddleware = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+const userMiddleware = (req: expressTypes.Request, res: expressTypes.Response, next: expressTypes.NextFunction) => {
     // In a real app, this would come from a JWT or session cookie.
     const userIdHeader = req.headers['x-user-id'];
     if (userIdHeader) {
@@ -48,7 +46,7 @@ app.use(userMiddleware);
 const apiRouter = express.Router();
 
 // --- NEW User Endpoint ---
-apiRouter.get('/users', async (req: express.Request, res: express.Response) => {
+apiRouter.get('/users', async (req: expressTypes.Request, res: expressTypes.Response) => {
     try {
         const result = await pgPool.query<User>('SELECT user_id, name, email FROM users ORDER BY name');
         res.status(200).json(result.rows);
@@ -60,10 +58,40 @@ apiRouter.get('/users', async (req: express.Request, res: express.Response) => {
 
 
 // --- Opportunity Endpoint ---
-apiRouter.get('/opportunities', async (req: express.Request, res: express.Response) => {
+apiRouter.get('/opportunities', async (req: expressTypes.Request, res: expressTypes.Response) => {
     const GET_OPPS_QUERY = `
         SELECT 
-            o.*,
+            -- Explicit column list with aliases to match Opportunity interface
+            o.opportunities_id,
+            o.opportunities_name,
+            o.opportunities_subscription_start_date,
+            o.opportunities_stage_name,
+            o.opportunities_owner_name,
+            o.opportunities_renewal_date_on_creation_date,
+            o.automated_renewal_status AS opportunities_automated_renewal_status,
+            o.accounts_dollars_months_left,
+            o.opportunities_has_services_flag,
+            o.opportunities_amount_services,
+            o.outreach_account_link AS accounts_outreach_account_link,
+            o.salesforce_account_name AS accounts_salesforce_account_name,
+            o.primary_fivetran_account_status AS accounts_primary_fivetran_account_status,
+            o.quoted_products AS opportunities_quoted_products,
+            o.product_being_pitched AS opportunities_product_being_pitched,
+            o.se_territory_owner_email AS accounts_se_territory_owner_email,
+            o.opportunities_connectors,
+            o.connector_tshirt_size_list AS opportunities_connector_tshirt_size_list,
+            o.destinations AS opportunities_destinations,
+            o.opportunities_type,
+            o.region_name AS accounts_region_name,
+            o.salesforce_account_id AS accounts_salesforce_account_id,
+            o.manager_of_opp_email AS opportunities_manager_of_opp_email,
+            o.accounts_subscription_end_date,
+            o.opportunities_close_date,
+            o.opportunities_forecast_category,
+            o.opportunities_services_forecast_sfdc,
+            o.opportunities_incremental_bookings,
+            o.opportunities_amount,
+            o.disposition,
             -- Subquery to aggregate action items for each opportunity
             (
                 SELECT COALESCE(jsonb_agg(ai.* ORDER BY ai.due_date ASC NULLS LAST), '[]'::jsonb)
@@ -84,7 +112,7 @@ apiRouter.get('/opportunities', async (req: express.Request, res: express.Respon
 
 
 // --- REWRITTEN Disposition Endpoint with Optimistic Locking ---
-apiRouter.post('/opportunities/:opportunityId/disposition', async (req: express.Request, res: express.Response) => {
+apiRouter.post('/opportunities/:opportunityId/disposition', async (req: expressTypes.Request, res: expressTypes.Response) => {
     const { opportunityId } = req.params;
     const { disposition, userId } = req.body;
 
@@ -150,7 +178,7 @@ apiRouter.post('/opportunities/:opportunityId/disposition', async (req: express.
 
 
 // --- NEW Action Item CRUD Endpoints ---
-apiRouter.post('/action-items', async (req: express.Request, res: express.Response) => {
+apiRouter.post('/action-items', async (req: expressTypes.Request, res: expressTypes.Response) => {
     const { opportunity_id, name, status, due_date, notes, documents, created_by_user_id, assigned_to_user_id } = req.body;
     try {
         const result = await pgPool.query<ActionItem>(
@@ -164,7 +192,7 @@ apiRouter.post('/action-items', async (req: express.Request, res: express.Respon
     }
 });
 
-apiRouter.put('/action-items/:itemId', async (req: express.Request, res: express.Response) => {
+apiRouter.put('/action-items/:itemId', async (req: expressTypes.Request, res: expressTypes.Response) => {
     const { itemId } = req.params;
     const fields = Object.keys(req.body);
     const setClause = fields.map((field, index) => `"${field}" = $${index + 1}`).join(', ');
@@ -185,7 +213,7 @@ apiRouter.put('/action-items/:itemId', async (req: express.Request, res: express
     }
 });
 
-apiRouter.delete('/action-items/:itemId', async (req: express.Request, res: express.Response) => {
+apiRouter.delete('/action-items/:itemId', async (req: expressTypes.Request, res: expressTypes.Response) => {
     const { itemId } = req.params;
     try {
         const result = await pgPool.query('DELETE FROM action_items WHERE action_item_id = $1', [itemId]);
@@ -199,30 +227,35 @@ apiRouter.delete('/action-items/:itemId', async (req: express.Request, res: expr
 
 
 // --- Account Detail Endpoints ---
-apiRouter.get('/accounts/:accountId/support-tickets', async (req: express.Request, res: express.Response) => {
+apiRouter.get('/accounts/:accountId/support-tickets', async (req: expressTypes.Request, res: expressTypes.Response) => {
     const { accountId } = req.params;
+    console.log(`[Live Endpoint] GET Support Tickets for account ${accountId}`);
     const query = `
         SELECT
-            t.salesforce_account_id AS accounts_salesforce_account_id,
+            a.salesforce_account_id AS accounts_salesforce_account_id,
             a.outreach_account_link AS accounts_outreach_account_link,
             a.salesforce_account_name AS accounts_salesforce_account_name,
             a.owner_name AS accounts_owner_name,
             t.ticket_url AS tickets_ticket_url,
             t.ticket_number AS tickets_ticket_number,
-            CAST(t.created_date AS STRING) AS tickets_created_date,
+            DATE(t.created_date, 'America/Los_Angeles') AS tickets_created_date,
             t.status AS tickets_status,
             t.subject AS tickets_subject,
-            DATE_DIFF(CURRENT_DATE(), DATE(t.created_date), DAY) AS days_open,
-            CAST(t.last_response_from_support_at_date AS STRING) AS tickets_last_response_from_support_at_date,
+            DATE_DIFF(CURRENT_DATE('America/Los_Angeles'), DATE(t.created_date, 'America/Los_Angeles'), DAY) AS days_open,
+            DATE(t.last_response_from_support_at, 'America/Los_Angeles') AS tickets_last_response_from_support_at_date,
             (CASE WHEN t.is_escalated THEN 'Yes' ELSE 'No' END) AS tickets_is_escalated,
-            DATE_DIFF(CURRENT_DATE(), DATE(t.last_response_from_support_at_date), DAY) AS days_since_last_response,
+            DATE_DIFF(CURRENT_DATE('America/Los_Angeles'), DATE(t.last_response_from_support_at, 'America/Los_Angeles'), DAY) AS days_since_last_response,
             t.priority AS tickets_priority,
             t.new_csat_numeric AS tickets_new_csat_numeric,
             t.engineering_issue_links_c AS tickets_engineering_issue_links_c
-        FROM \`digital-arbor-400.transforms_bi.tickets\` t
-        JOIN \`digital-arbor-400.transforms_bi.accounts\` a ON t.salesforce_account_id = a.salesforce_account_id
-        WHERE t.salesforce_account_id = @accountId
-        ORDER BY t.created_date DESC;
+        FROM \`digital-arbor-400.transforms_bi.tickets\` AS t
+        LEFT JOIN \`digital-arbor-400.transforms_bi.accounts\` AS a ON t.salesforce_account_id = a.salesforce_account_id
+        WHERE
+            (t.is_duplicate IS NOT TRUE)
+            AND (t.is_support_group IS TRUE)
+            AND UPPER(a.salesforce_account_id) = UPPER(@accountId)
+        ORDER BY
+            tickets_created_date DESC;
     `;
     try {
         const [rows] = await bigquery.query({ query, params: { accountId } });
@@ -233,21 +266,64 @@ apiRouter.get('/accounts/:accountId/support-tickets', async (req: express.Reques
     }
 });
 
-apiRouter.get('/accounts/:accountId/usage-history', async (req: express.Request, res: express.Response) => {
+apiRouter.get('/accounts/:accountId/usage-history', async (req: expressTypes.Request, res: expressTypes.Response) => {
     const { accountId } = req.params;
-    const query = `
+    console.log(`[Live Endpoint] GET Usage History for account ${accountId}`);
+
+    const GET_USAGE_QUERY = `
+        DECLARE start_date DATE DEFAULT DATE_TRUNC(DATE_SUB(CURRENT_DATE('America/Los_Angeles'), INTERVAL 2 MONTH), MONTH);
+
+        WITH
+        DeduplicatedRevenue AS (
+            SELECT DISTINCT
+                FORMAT_DATE('%Y-%m', ct.date) AS month,
+                ct.service_eom AS service,
+                c.warehouse_subtype,
+                ct.connector_id,
+                ct.distributed_connection_proj_model_arr AS revenue
+            FROM \`digital-arbor-400.transforms_bi.connections_timeline\` AS ct
+            LEFT JOIN \`digital-arbor-400.transforms_bi.connections\` AS c ON ct.connector_id = c.connector_id
+            WHERE ct.salesforce_account_id = @accountId
+              AND ct.date >= start_date
+              AND ct.has_volume
+              AND ct.show_month
+        ),
+        ConnectionCounts AS (
+            SELECT
+                FORMAT_DATE('%Y-%m', ct.date) AS month,
+                ct.service_eom AS service,
+                c.warehouse_subtype,
+                COUNT(DISTINCT IF(ct.connection_observed AND ct.group_id IS NOT NULL, ct.connector_id, NULL)) AS connections_count
+            FROM \`digital-arbor-400.transforms_bi.connections_timeline\` AS ct
+            LEFT JOIN \`digital-arbor-400.transforms_bi.connections\` AS c ON ct.connector_id = c.connector_id
+            WHERE ct.salesforce_account_id = @accountId
+              AND ct.date >= start_date
+            GROUP BY 1, 2, 3
+        ),
+        AggregatedRevenue AS (
+            SELECT
+                month,
+                service,
+                warehouse_subtype,
+                SUM(revenue) AS annualized_revenue
+            FROM DeduplicatedRevenue
+            GROUP BY 1, 2, 3
+        )
         SELECT
-            month,
-            service,
-            warehouse_subtype,
-            annualized_revenue,
-            connections_count
-        FROM \`digital-arbor-400.transforms_bi.usage_history\`
-        WHERE salesforce_account_id = @accountId
-        ORDER BY month DESC;
+            COALESCE(ar.month, cc.month) as month,
+            COALESCE(ar.service, cc.service) as service,
+            COALESCE(ar.warehouse_subtype, cc.warehouse_subtype) as warehouse_subtype,
+            COALESCE(ar.annualized_revenue, 0) as annualized_revenue,
+            COALESCE(cc.connections_count, 0) as connections_count
+        FROM AggregatedRevenue ar
+        FULL OUTER JOIN ConnectionCounts cc
+          ON ar.month = cc.month 
+          AND ar.service = cc.service 
+          AND COALESCE(ar.warehouse_subtype, '___NULL___') = COALESCE(cc.warehouse_subtype, '___NULL___');
     `;
+
     try {
-        const [rows] = await bigquery.query({ query, params: { accountId } });
+        const [rows] = await bigquery.query({ query: GET_USAGE_QUERY, params: { accountId } });
         res.status(200).json(rows);
     } catch (error) {
         console.error(`Error fetching usage history for account ${accountId}:`, error);
@@ -255,8 +331,9 @@ apiRouter.get('/accounts/:accountId/usage-history', async (req: express.Request,
     }
 });
 
-apiRouter.get('/accounts/:accountId/project-history', async (req: express.Request, res: express.Response) => {
+apiRouter.get('/accounts/:accountId/project-history', async (req: expressTypes.Request, res: expressTypes.Response) => {
     const { accountId } = req.params;
+    console.log(`[Live Endpoint] GET Project History for account ${accountId}`);
     const query = `
         SELECT
             a.salesforce_account_id AS accounts_salesforce_account_id,
@@ -264,20 +341,26 @@ apiRouter.get('/accounts/:accountId/project-history', async (req: express.Reques
             a.salesforce_account_name AS accounts_salesforce_account_name,
             o.id AS opportunities_id,
             o.name AS opportunities_name,
-            o.project_owner_email_c AS opportunities_project_owner_email,
-            CAST(o.close_date AS STRING) AS opportunities_close_date,
-            CAST(o.rl_open_project_new_end_date_c AS STRING) AS opportunities_rl_open_project_new_end_date,
-            CAST(a.subscription_end_date AS STRING) AS opportunities_subscription_end_date,
-            o.budgeted_hours_c AS opportunities_budgeted_hours,
-            o.billable_hours_c AS opportunities_billable_hours,
-            o.non_billable_hours_c AS opportunities_non_billable_hours,
-            o.remaining_billable_hours_c AS opportunities_remaining_billable_hours
-        FROM \`digital-arbor-400.transforms_bi.opportunities\` o
-        JOIN \`digital-arbor-400.transforms_bi.accounts\` a ON o.salesforce_account_id = a.salesforce_account_id
-        WHERE o.salesforce_account_id = @accountId
-        AND UPPER(o.stage_name) LIKE '%CLOSED%WON%'
-        AND o.has_services_flag = TRUE
-        ORDER BY o.close_date DESC;
+            o.project_owner_email AS opportunities_project_owner_email,
+            CAST(DATE(o.close_date) AS STRING) AS opportunities_close_date,
+            CAST(DATE(o.rl_open_project_new_end_date, 'America/Los_Angeles') AS STRING) AS opportunities_rl_open_project_new_end_date,
+            CAST(DATE(o.subscription_end_date) AS STRING) AS opportunities_subscription_end_date,
+            COALESCE(SUM(o.rl_budgeted_hours), 0) AS opportunities_budgeted_hours,
+            COALESCE(SUM(o.rl_billable_hours), 0) AS opportunities_billable_hours,
+            COALESCE(SUM(o.rl_non_billable_hours), 0) AS opportunities_non_billable_hours,
+            COALESCE(SUM(o.rl_remaining_billable_hours), 0) AS opportunities_remaining_billable_hours
+        FROM \`digital-arbor-400.transforms_bi.opportunities\` AS o
+        INNER JOIN \`digital-arbor-400.transforms_bi.accounts\` AS a ON o.salesforce_account_id = a.salesforce_account_id
+        WHERE
+            a.salesforce_account_id = @accountId
+            AND (
+                UPPER(o.rl_status_label) != 'IN PROGRESS' 
+                OR UPPER(o.stage_name) LIKE '%WON%'
+            )
+            AND o.has_services_flag = TRUE
+        GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9
+        HAVING COALESCE(SUM(o.rl_budgeted_hours), 0) > 0
+        ORDER BY opportunities_close_date DESC;
     `;
     try {
         const [rows] = await bigquery.query({ query, params: { accountId } });
@@ -297,6 +380,13 @@ app.use('/api', apiRouter);
         // Test the connection
         const client = await pgPool.connect();
         console.log('Successfully connected to PostgreSQL database.');
+        // Ensure helpful indexes exist for performance-sensitive queries
+        try {
+            await client.query('CREATE INDEX IF NOT EXISTS idx_action_items_opportunity_due ON action_items (opportunity_id, due_date)');
+            console.log('Ensured index idx_action_items_opportunity_due exists.');
+        } catch (e) {
+            console.warn('Warning: Failed to ensure action_items index:', e);
+        }
         client.release();
 
         app.listen(PORT, () => {

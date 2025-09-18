@@ -153,6 +153,10 @@ const FilterGroupComponent: React.FC<{ group: FilterGroup; onChange: (group: Fil
                     <button onClick={() => handleCombinatorChange('AND')} className={`px-2 py-0.5 text-xs font-bold rounded ${group.combinator === 'AND' ? 'bg-indigo-600 text-white' : 'text-slate-600'}`}>AND</button>
                     <button onClick={() => handleCombinatorChange('OR')} className={`px-2 py-0.5 text-xs font-bold rounded ${group.combinator === 'OR' ? 'bg-indigo-600 text-white' : 'text-slate-600'}`}>OR</button>
                 </div>
+                {/* Show a small badge if this group was created via the Sales Org Chart flow */}
+                {!isRoot && group.id?.toString().startsWith('org-') && (
+                    <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200">Org Chart</span>
+                )}
                 <div className="flex-grow"></div>
                 {!isRoot && <button onClick={onDelete} className="text-slate-400 hover:text-red-500 p-1">{ICONS.trash}</button>}
             </div>

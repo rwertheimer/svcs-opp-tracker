@@ -1,7 +1,7 @@
 
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import type { Opportunity, AccountDetails, Disposition, SavedFilter, TaskWithOpportunityContext, ActionItem, FilterGroup, User } from './types';
+import type { Opportunity, AccountDetails, Disposition, SavedFilter, TaskWithOpportunityContext, ActionItem, FilterGroup, User, FilterRule } from './types';
 import { fetchOpportunities, fetchOpportunityDetails, saveDisposition, fetchUsers, createActionItem, updateActionItem, deleteActionItem } from './services/apiService';
 import OpportunityList from './components/OpportunityList';
 import OpportunityDetail from './components/OpportunityDetail';
@@ -11,6 +11,8 @@ import TaskCockpit from './components/TaskCockpit';
 import AddScopingModal from './components/AddScopingModal';
 import AdvancedFilterBuilder from './components/AdvancedFilterBuilder';
 import SalesOrgChart from './components/SalesOrgChart';
+import { useToast } from './components/Toast';
+import { ICONS } from './constants';
 
 const initialFilterGroup: FilterGroup = {
     id: 'root',
@@ -30,32 +32,35 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<FilterGroup>(initialFilterGroup);
   const [savedFilters, setSavedFilters] = useState<SavedFilter[]>([]);
+  const [activeViewId, setActiveViewId] = useState<string | null>(null);
+  const [isManageViewsOpen, setIsManageViewsOpen] = useState(false);
   const [activeView, setActiveView] = useState<'opportunities' | 'tasks'>('opportunities');
   const [isScopingModalOpen, setIsScopingModalOpen] = useState(false);
   const [isFilterBuilderOpen, setIsFilterBuilderOpen] = useState(false);
   const [isOrgChartModalOpen, setIsOrgChartModalOpen] = useState(false);
+  const [detailInitialSection, setDetailInitialSection] = useState<string | undefined>(undefined);
+  // Internal: prime Advanced Filter Builder with org-chart selections
+  const [pendingOrgFilters, setPendingOrgFilters] = useState<FilterGroup | null>(null);
   
   // --- NEW: User Management State ---
   const [users, setUsers] = useState<User[]>([]);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const { showToast } = useToast();
   
   // --- NEW: Debugging/View State ---
-  const [showAllOpportunities, setShowAllOpportunities] = useState(false);
 
 
   const loadInitialData = useCallback(async () => {
     try {
       setIsLoading(true);
       setError(null);
-      
-      // Fetch users first to establish context
-      const fetchedUsers = await fetchUsers();
+      // Fetch users and opportunities in parallel to reduce total load time
+      const [fetchedUsers, fetchedOpportunities] = await Promise.all([
+        fetchUsers(),
+        fetchOpportunities(),
+      ]);
       setUsers(fetchedUsers);
-      if (fetchedUsers.length > 0) {
-        setCurrentUser(fetchedUsers[0]);
-      }
-      
-      const fetchedOpportunities = await fetchOpportunities();
+      if (fetchedUsers.length > 0) setCurrentUser(fetchedUsers[0]);
       setOpportunities(fetchedOpportunities);
     } catch (err: any) {
       setError('Failed to fetch initial data. Please try again.');
@@ -64,6 +69,41 @@ const App: React.FC = () => {
       setIsLoading(false);
     }
   }, []);
+
+  // --- Saved Views: localStorage hydration ---
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('savedFilters');
+      if (raw) {
+        const parsed: SavedFilter[] = JSON.parse(raw);
+        setSavedFilters(parsed);
+        const defaultView = parsed.find(v => v.isDefault);
+        if (defaultView) {
+          setFilters(defaultView.criteria);
+          setActiveViewId(defaultView.id);
+        }
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('savedFilters', JSON.stringify(savedFilters));
+    } catch {}
+  }, [savedFilters]);
+
+  const deepEqual = (a: any, b: any) => JSON.stringify(a) === JSON.stringify(b);
+  const hasOrgGroup = (fg: FilterGroup): boolean => {
+    const stack: (FilterGroup | FilterRule)[] = [fg as any];
+    while (stack.length) {
+      const node = stack.pop()!;
+      if ('combinator' in node) {
+        if (node.id?.toString().startsWith('org-')) return true;
+        stack.push(...node.rules);
+      }
+    }
+    return false;
+  };
 
   useEffect(() => {
     loadInitialData();
@@ -113,20 +153,16 @@ const App: React.FC = () => {
 
     const baseFilteredOpps = opportunities.filter(opp => {
       // This is a permanent base filter, which is a sensible default for a pipeline view.
-      const stageNameLower = opp.opportunities_stage_name.toLowerCase();
+      const stageNameLower = (opp.opportunities_stage_name || '').toLowerCase();
       const isClosed = stageNameLower.includes('closed') || stageNameLower.includes('won') || stageNameLower.includes('lost');
       if (isClosed) {
         return false;
       }
 
-      // The "Show All" toggle now bypasses ALL other default filters (region, type, and date)
-      if (showAllOpportunities) {
-        return true;
-      }
-      
       // If toggle is OFF, apply the more restrictive default filters
-      const allowedTypes = ['Renewal', 'New Business', 'Upsell', 'Expansion'];
-      const typeMatch = allowedTypes.includes(opp.opportunities_type);
+      // Be tolerant of common type variants by doing a contains match
+      const typeLower = (opp.opportunities_type || '').toLowerCase();
+      const typeMatch = ['renewal', 'new', 'upsell', 'expansion'].some(k => typeLower.includes(k));
       
       const regionMatch = opp.accounts_region_name === 'NA - Enterprise' || opp.accounts_region_name === 'NA - Commercial';
       
@@ -139,7 +175,7 @@ const App: React.FC = () => {
 
     if (filters.rules.length === 0) return baseFilteredOpps;
     return baseFilteredOpps.filter(opp => evaluateFilterGroup(opp, filters));
-  }, [opportunities, filters, showAllOpportunities]);
+  }, [opportunities, filters]);
   
   const allTasksForCurrentUser = useMemo((): TaskWithOpportunityContext[] => {
     if (!currentUser) return [];
@@ -158,6 +194,9 @@ const App: React.FC = () => {
   const handleSelectOpportunity = async (opportunity: Opportunity) => {
     setActiveView('opportunities');
     setSelectedOpportunity(opportunity);
+    setDetailInitialSection(undefined); // default when coming from list
+    // Clear hash to avoid unintended scroll targets
+    try { window.history.replaceState(null, '', window.location.pathname); } catch {}
     try {
       setIsLoading(true);
       setError(null);
@@ -172,7 +211,12 @@ const App: React.FC = () => {
   
   const handleSelectOpportunityById = (opportunityId: string) => {
     const opportunity = opportunities.find(opp => opp.opportunities_id === opportunityId);
-    if (opportunity) handleSelectOpportunity(opportunity);
+    if (opportunity) {
+      // Navigate directly to the Disposition/Action Plan area
+      setDetailInitialSection('disposition');
+      try { window.location.hash = '#disposition'; } catch {}
+      handleSelectOpportunity(opportunity);
+    }
   };
 
   const handleGoBack = () => {
@@ -188,22 +232,29 @@ const App: React.FC = () => {
 
     const updatedOpportunity = { ...originalOpportunity, disposition: { ...disposition, last_updated_by_user_id: currentUser.user_id }};
     
+    // Optimistically update local state and keep user on the detail view
     setOpportunities(prevOpps => prevOpps.map(opp => opp.opportunities_id === updatedOpportunity.opportunities_id ? updatedOpportunity : opp));
-    handleGoBack();
+    setSelectedOpportunity(updatedOpportunity);
+    showToast('Saving disposition...', 'info', 1500);
 
     try {
       const savedDisposition = await saveDisposition(updatedOpportunity.opportunities_id, updatedOpportunity.disposition, currentUser.user_id);
       // On success, update the opportunity with the new version from the server
-      setOpportunities(prevOpps => prevOpps.map(opp => opp.opportunities_id === updatedOpportunity.opportunities_id ? { ...updatedOpportunity, disposition: savedDisposition } : opp));
+      const merged = { ...updatedOpportunity, disposition: savedDisposition };
+      setOpportunities(prevOpps => prevOpps.map(opp => opp.opportunities_id === updatedOpportunity.opportunities_id ? merged : opp));
+      setSelectedOpportunity(merged);
+      showToast('Disposition saved', 'success');
     } catch (err: any) {
         // FIX: Check for error status code 409 for optimistic locking conflicts.
         if (err.status === 409) { // Optimistic locking conflict
+            showToast('Save conflict: another user updated this item', 'error');
             alert("Conflict: This opportunity was updated by another user. Your changes could not be saved. The view will now refresh.");
             window.location.reload(); // Force a refresh to get the latest data
         } else {
             console.error("Failed to save disposition:", err);
             setError(`Failed to save disposition for ${originalOpportunity.opportunities_name}. Your changes have been reverted.`);
             setOpportunities(prevOpps => prevOpps.map(opp => opp.opportunities_id === originalOpportunity.opportunities_id ? originalOpportunity : opp));
+            showToast('Failed to save disposition', 'error');
         }
     }
   };
@@ -220,6 +271,10 @@ const App: React.FC = () => {
           created_by_user_id: currentUser.user_id
       };
       setOpportunities(prev => prev.map(opp => opp.opportunities_id === opportunityId ? {...opp, actionItems: [...(opp.actionItems || []), newItem]} : opp));
+      // Keep selectedOpportunity in sync so UI updates immediately
+      setSelectedOpportunity(prev => prev && prev.opportunities_id === opportunityId 
+        ? { ...prev, actionItems: [...(prev.actionItems || []), newItem] } 
+        : prev);
 
       try {
           const savedItem = await createActionItem(opportunityId, newItem);
@@ -228,6 +283,9 @@ const App: React.FC = () => {
               ? {...opp, actionItems: (opp.actionItems || []).map(item => item.action_item_id === tempId ? savedItem : item)} 
               : opp
           ));
+          setSelectedOpportunity(prev => prev && prev.opportunities_id === opportunityId 
+            ? { ...prev, actionItems: (prev.actionItems || []).map(item => item.action_item_id === tempId ? savedItem : item) } 
+            : prev);
       } catch (error) {
           console.error("Failed to create action item:", error);
           setError("Failed to save new action item. Reverting change.");
@@ -236,6 +294,9 @@ const App: React.FC = () => {
               ? {...opp, actionItems: (opp.actionItems || []).filter(item => item.action_item_id !== tempId)} 
               : opp
           ));
+          setSelectedOpportunity(prev => prev && prev.opportunities_id === opportunityId 
+            ? { ...prev, actionItems: (prev.actionItems || []).filter(item => item.action_item_id !== tempId) } 
+            : prev);
       }
   };
 
@@ -248,6 +309,9 @@ const App: React.FC = () => {
           }
           return opp;
       }));
+      setSelectedOpportunity(prev => prev && prev.opportunities_id === opportunityId 
+        ? { ...prev, actionItems: (prev.actionItems || []).map(item => item.action_item_id === actionItemId ? { ...item, ...updates } : item) }
+        : prev);
       
       try {
           await updateActionItem(actionItemId, updates);
@@ -255,6 +319,9 @@ const App: React.FC = () => {
           console.error("Failed to update action item:", error);
           setError("Failed to update action item. Reverting change.");
           setOpportunities(originalOpps);
+          // Re-sync selectedOpportunity from originalOpps
+          const orig = originalOpps.find(o => o.opportunities_id === opportunityId);
+          setSelectedOpportunity(prev => prev && prev.opportunities_id === opportunityId && orig ? orig : prev);
       }
   };
 
@@ -265,6 +332,9 @@ const App: React.FC = () => {
           ? {...opp, actionItems: (opp.actionItems || []).filter(item => item.action_item_id !== actionItemId)} 
           : opp
       ));
+      setSelectedOpportunity(prev => prev && prev.opportunities_id === opportunityId 
+        ? { ...prev, actionItems: (prev.actionItems || []).filter(item => item.action_item_id !== actionItemId) }
+        : prev);
 
       try {
           await deleteActionItem(actionItemId);
@@ -272,6 +342,8 @@ const App: React.FC = () => {
           console.error("Failed to delete action item:", error);
           setError("Failed to delete action item. Reverting change.");
           setOpportunities(originalOpps);
+          const orig = originalOpps.find(o => o.opportunities_id === opportunityId);
+          setSelectedOpportunity(prev => prev && prev.opportunities_id === opportunityId && orig ? orig : prev);
       }
   };
 
@@ -282,21 +354,66 @@ const App: React.FC = () => {
   }
 
   const handleSaveFilter = (name: string) => {
-    if (!name.trim()) return;
-    const newSavedFilter: SavedFilter = {
-        id: Date.now().toString(),
-        name,
-        criteria: { ...filters }
-    };
-    setSavedFilters(prev => [...prev, newSavedFilter]);
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    const now = new Date().toISOString();
+    const dupe = savedFilters.find(v => v.name.toLowerCase() === trimmed.toLowerCase());
+    const origin: SavedFilter['origin'] = hasOrgGroup(filters) ? 'orgChart' : 'manual';
+    if (dupe) {
+      const replace = window.confirm(`A view named "${trimmed}" already exists.\nClick OK to replace it, or Cancel to save as a new name.`);
+      if (replace) {
+        setSavedFilters(prev => prev.map(v => v.id === dupe.id ? { ...v, name: trimmed, criteria: filters, updatedAt: now, origin } : v));
+        setActiveViewId(dupe.id);
+        return;
+      }
+      const newName = window.prompt('Enter a new name for this view:', `${trimmed} (copy)`);
+      if (!newName || !newName.trim()) return;
+      const finalName = newName.trim();
+      if (savedFilters.some(v => v.name.toLowerCase() === finalName.toLowerCase())) {
+        alert('A view with that name already exists. Please choose a different name.');
+        return;
+      }
+      const newView: SavedFilter = { id: Date.now().toString(), name: finalName, criteria: filters, createdAt: now, updatedAt: now, origin };
+      setSavedFilters(prev => [...prev, newView]);
+      setActiveViewId(newView.id);
+      return;
+    }
+    const newView: SavedFilter = { id: Date.now().toString(), name: trimmed, criteria: filters, createdAt: now, updatedAt: now, origin };
+    setSavedFilters(prev => [...prev, newView]);
+    setActiveViewId(newView.id);
   };
 
   const handleApplySavedFilter = (id: string) => {
     const savedFilter = savedFilters.find(f => f.id === id);
-    if (savedFilter) setFilters(savedFilter.criteria);
+    if (savedFilter) {
+      setFilters(savedFilter.criteria);
+      setActiveViewId(id);
+    }
   };
 
-  const handleClearFilters = () => setFilters(initialFilterGroup);
+  const handleClearFilters = () => { setFilters(initialFilterGroup); setActiveViewId(null); };
+
+  const handleRenameSavedFilter = (id: string, newName: string) => {
+    const trimmed = newName.trim();
+    if (!trimmed) return;
+    if (savedFilters.some(v => v.id !== id && v.name.toLowerCase() === trimmed.toLowerCase())) {
+      alert('A view with that name already exists.');
+      return;
+    }
+    setSavedFilters(prev => prev.map(v => v.id === id ? { ...v, name: trimmed, updatedAt: new Date().toISOString() } : v));
+  };
+
+  const handleDeleteSavedFilter = (id: string) => {
+    const view = savedFilters.find(v => v.id === id);
+    if (!view) return;
+    if (!window.confirm(`Delete saved view "${view.name}"?`)) return;
+    setSavedFilters(prev => prev.filter(v => v.id !== id));
+    if (activeViewId === id) { setActiveViewId(null); }
+  };
+
+  const handleSetDefaultView = (id: string) => {
+    setSavedFilters(prev => prev.map(v => ({ ...v, isDefault: v.id === id })));
+  };
   
   const handleSaveScopingActivity = (data: { accountName: string; contact: string; description: string; }) => {
     const newScopingOpp: Opportunity = {
@@ -341,8 +458,32 @@ const App: React.FC = () => {
     setIsScopingModalOpen(false);
   };
 
+  // --- Unsaved changes banner for active saved view ---
+  const activeSavedView = useMemo(() => savedFilters.find(v => v.id === activeViewId) || null, [savedFilters, activeViewId]);
+  const isDirty = useMemo(() => {
+    if (!activeSavedView) return false;
+    return !deepEqual(activeSavedView.criteria, filters);
+  }, [activeSavedView, filters]);
+
+  const handleSaveChangesToActiveView = () => {
+    if (!activeSavedView) return;
+    const now = new Date().toISOString();
+    setSavedFilters(prev => prev.map(v => v.id === activeSavedView.id ? { ...v, criteria: filters, updatedAt: now } : v));
+  };
+
+  const handleSaveAsFromBanner = () => {
+    const name = window.prompt('Save current filters as a new view. Enter name:');
+    if (name) handleSaveFilter(name);
+  };
+
+  const handleRevertActiveView = () => {
+    if (!activeSavedView) return;
+    setFilters(activeSavedView.criteria);
+  };
+
   const renderContent = () => {
-    if (!currentUser && isLoading) {
+    // Show full-page spinner when initial dataset is loading
+    if (isLoading && opportunities.length === 0) {
       return <LoadingSpinner />;
     }
 
@@ -368,6 +509,11 @@ const App: React.FC = () => {
         );
     }
 
+    // While loading details for a selected opportunity, show spinner instead of list flicker
+    if (activeView === 'opportunities' && selectedOpportunity && isLoading && !selectedOpportunityDetails) {
+      return <LoadingSpinner />;
+    }
+
     if (selectedOpportunity && selectedOpportunityDetails) {
       const historicalOpps = opportunities.filter(opp => opp.accounts_salesforce_account_id === selectedOpportunity.accounts_salesforce_account_id);
 
@@ -383,12 +529,31 @@ const App: React.FC = () => {
           onActionItemCreate={handleActionItemCreate}
           onActionItemUpdate={handleActionItemUpdate}
           onActionItemDelete={handleActionItemDelete}
+          initialSectionId={detailInitialSection}
         />
       );
     }
 
     return (
-      <OpportunityList
+      <>
+        {activeSavedView && isDirty && (
+          <div className="mb-3 p-3 bg-yellow-50 border border-yellow-200 rounded-md flex items-center justify-between">
+            <div className="text-sm text-yellow-800 flex items-center space-x-2">
+              <span>{ICONS.warning}</span>
+              <span>
+                Unsaved changes to view
+                <span className="font-semibold"> {activeSavedView.name}</span>
+              </span>
+            </div>
+            <div className="space-x-2">
+              <button onClick={() => setIsFilterBuilderOpen(true)} className="px-3 py-1 text-xs bg-white border border-slate-300 rounded hover:bg-slate-100">Open Builder</button>
+              <button onClick={handleRevertActiveView} className="px-3 py-1 text-xs bg-white border border-slate-300 rounded hover:bg-slate-100">Revert</button>
+              <button onClick={handleSaveAsFromBanner} className="px-3 py-1 text-xs bg-white border border-slate-300 rounded hover:bg-slate-100">Save As…</button>
+              <button onClick={handleSaveChangesToActiveView} className="px-3 py-1 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700">Save Changes</button>
+            </div>
+          </div>
+        )}
+        <OpportunityList
         opportunities={filteredOpportunities}
         onSelect={handleSelectOpportunity}
         savedFilters={savedFilters}
@@ -399,9 +564,9 @@ const App: React.FC = () => {
         onOpenFilterBuilder={() => setIsFilterBuilderOpen(true)}
         onOpenOrgChart={() => setIsOrgChartModalOpen(true)}
         activeFilterCount={filters.rules.length}
-        showAllOpportunities={showAllOpportunities}
-        onToggleShowAll={setShowAllOpportunities}
+        onOpenManageSavedViews={() => setIsManageViewsOpen(true)}
       />
+      </>
     );
   };
 
@@ -425,16 +590,75 @@ const App: React.FC = () => {
       />
       <SalesOrgChart
         isOpen={isOrgChartModalOpen}
-        onClose={() => setIsOrgChartModalOpen(false)}
+        onClose={(selected) => {
+          setIsOrgChartModalOpen(false);
+          if (selected && (selected.owners.length > 0 || selected.managers.length > 0)) {
+            // Build an OR subgroup combining owners and managers equals rules
+            const rules: any[] = [];
+            selected.owners.forEach(owner => {
+              rules.push({ id: `rule-owner-${owner}`, field: 'opportunities_owner_name', operator: 'equals', value: owner });
+            });
+            selected.managers.forEach(manager => {
+              rules.push({ id: `rule-mgr-${manager}`, field: 'opportunities_manager_of_opp_email', operator: 'equals', value: manager });
+            });
+            const orgGroup: FilterGroup = { id: `org-${Date.now()}`, combinator: 'OR', rules } as any;
+            const merged: FilterGroup = {
+              id: filters.id,
+              combinator: filters.combinator,
+              rules: [...filters.rules, orgGroup],
+            };
+            // Prime builder with merged filters and open it for review
+            setPendingOrgFilters(merged);
+            setIsFilterBuilderOpen(true);
+          }
+        }}
         opportunities={opportunities}
       />
       {isFilterBuilderOpen && (
          <AdvancedFilterBuilder
             isOpen={isFilterBuilderOpen}
             onClose={() => setIsFilterBuilderOpen(false)}
-            onApply={handleApplyAdvancedFilters}
-            initialFilters={filters}
+            onApply={(fg) => {
+              handleApplyAdvancedFilters(fg);
+              setPendingOrgFilters(null);
+            }}
+            initialFilters={pendingOrgFilters ?? filters}
          />
+      )}
+
+      {isManageViewsOpen && (
+        <div className="fixed inset-0 bg-black/50 z-40 flex items-start justify-center pt-16" onClick={() => setIsManageViewsOpen(false)}>
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-xl m-4 animate-fade-in-up" onClick={e => e.stopPropagation()}>
+            <div className="p-4 border-b flex justify-between items-center">
+              <h3 className="text-lg font-bold text-slate-800">Manage Saved Views</h3>
+              <button className="text-slate-400 hover:text-slate-600" onClick={() => setIsManageViewsOpen(false)}>{ICONS.xMark}</button>
+            </div>
+            <div className="p-4 max-h-[60vh] overflow-y-auto space-y-2">
+              {savedFilters.length === 0 && <p className="text-slate-500 text-sm">No saved views yet.</p>}
+              {savedFilters.map(v => (
+                <div key={v.id} className="flex items-center justify-between border rounded-md p-2">
+                  <div>
+                    <div className="font-semibold text-slate-800 flex items-center space-x-2">
+                      <span>{v.name}</span>
+                      {v.origin === 'orgChart' && <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200">Org Chart</span>}
+                      {v.isDefault && <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-md bg-green-50 text-green-700 border border-green-200">Default</span>}
+                    </div>
+                    <div className="text-xs text-slate-500">Updated {new Date(v.updatedAt || v.createdAt || '').toLocaleString()}</div>
+                  </div>
+                  <div className="space-x-2">
+                    <button className="px-2 py-1 text-xs bg-white border border-slate-300 rounded hover:bg-slate-100" onClick={() => { handleApplySavedFilter(v.id); setIsManageViewsOpen(false); }}>Apply</button>
+                    <button className="px-2 py-1 text-xs bg-white border border-slate-300 rounded hover:bg-slate-100" onClick={() => { const nn = prompt('Rename view', v.name); if (nn !== null) handleRenameSavedFilter(v.id, nn); }}>Rename</button>
+                    <button className="px-2 py-1 text-xs bg-white border border-slate-300 rounded hover:bg-slate-100" onClick={() => handleSetDefaultView(v.id)}>Set Default</button>
+                    <button className="px-2 py-1 text-xs bg-white border border-slate-300 rounded hover:bg-red-50 text-red-600" onClick={() => handleDeleteSavedFilter(v.id)}>Delete</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="p-3 bg-slate-50 border-t text-right">
+              <button className="px-4 py-2 bg-white text-slate-700 border border-slate-300 rounded-md hover:bg-slate-100 font-semibold" onClick={() => setIsManageViewsOpen(false)}>Close</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

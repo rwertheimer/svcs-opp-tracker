@@ -187,4 +187,9 @@ export interface SavedFilter {
   id: string;
   name: string;
   criteria: FilterGroup;
+  createdAt?: string;
+  updatedAt?: string;
+  origin?: 'orgChart' | 'manual' | 'other';
+  description?: string;
+  isDefault?: boolean;
 }

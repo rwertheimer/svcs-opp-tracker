@@ -7,7 +7,9 @@
     "start:server": "nodemon --watch 'backend/**/*.ts' --exec 'ts-node -P backend/tsconfig.json backend/server.ts'",
     "seed:firestore": "npx ts-node backend/seedDatabase.ts",
     "seed:postgres": "npx ts-node backend/seedPostgres.ts",
-    "dev:frontend": "vite"
+    "dev:frontend": "vite",
+    "test": "vitest --run",
+    "test:watch": "vitest"
   },
   "author": "",
   "license": "ISC",
@@ -32,6 +34,12 @@
     "@vitejs/plugin-react": "^4.3.1",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
-    "nodemon": "^3.1.0"
+    "nodemon": "^3.1.0",
+    "vitest": "^1.6.0",
+    "@testing-library/react": "^14.3.1",
+    "@testing-library/jest-dom": "^6.4.2",
+    "@testing-library/user-event": "^14.5.2",
+    "jsdom": "^24.1.0",
+    "msw": "^2.3.0"
   }
 }

@@ -22,3 +22,21 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Dependencies
+/node_modules
+
+# Build output
+/dist
+
+# Environment variables
+# Never commit your local .env file!
+.env
+.env.*.local
+
+# Service Account Keys
+# Never commit your GCP service account keys!
+backend/*.json
+
+# IDE config files
+.vscode/

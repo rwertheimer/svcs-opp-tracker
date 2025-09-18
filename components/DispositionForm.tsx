@@ -6,10 +6,11 @@ import { ICONS, FORECAST_CATEGORIES } from '../constants';
 interface DispositionFormProps {
     onSave: (disposition: Disposition) => void;
     opportunity: Opportunity;
-    lastUpdatedBy: string;
+    lastUpdatedBy?: string;
+    onStatusChange?: (status: DispositionStatus) => void;
 }
 
-const DispositionForm: React.FC<DispositionFormProps> = ({ onSave, opportunity, lastUpdatedBy }) => {
+const DispositionForm: React.FC<DispositionFormProps> = ({ onSave, opportunity, lastUpdatedBy, onStatusChange }) => {
   const [disposition, setDisposition] = useState<Disposition>(opportunity.disposition);
 
   useEffect(() => {
@@ -17,6 +18,7 @@ const DispositionForm: React.FC<DispositionFormProps> = ({ onSave, opportunity, 
   }, [opportunity.disposition]);
 
   const handleSetDispositionStatus = (status: DispositionStatus) => {
+    if (onStatusChange) onStatusChange(status);
     setDisposition(prev => {
         const newState = {...prev, status};
         if (status === 'Services Fit') {
@@ -46,9 +48,11 @@ const DispositionForm: React.FC<DispositionFormProps> = ({ onSave, opportunity, 
                 {ICONS.clipboard}
                 <h3 className="text-lg font-semibold text-slate-700">Disposition</h3>
             </div>
-            <div className="text-xs text-slate-500">
-                Last updated by: <span className="font-semibold">{lastUpdatedBy}</span> (Version {disposition.version})
-            </div>
+            {lastUpdatedBy && (
+              <div className="text-xs text-slate-500">
+                  Last updated by: <span className="font-semibold">{lastUpdatedBy}</span> (Version {disposition.version})
+              </div>
+            )}
         </div>
         <div className="p-6 space-y-6">
             <div>
