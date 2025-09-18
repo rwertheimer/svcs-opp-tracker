@@ -45,6 +45,54 @@ app.use(userMiddleware);
 
 const apiRouter = express.Router();
 
+// --- Ensure Saved Views schema (idempotent) ---
+async function ensureSavedViewsSchema() {
+    const client = await pgPool.connect();
+    try {
+        try {
+            await client.query('CREATE EXTENSION IF NOT EXISTS pgcrypto');
+        } catch (extErr) {
+            console.warn('Warning: could not ensure pgcrypto extension (gen_random_uuid). Proceeding:', extErr);
+        }
+
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS saved_views (
+              view_id      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+              user_id      UUID NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+              name         TEXT NOT NULL,
+              criteria     JSONB NOT NULL,
+              origin       TEXT,
+              description  TEXT,
+              is_default   BOOLEAN NOT NULL DEFAULT FALSE,
+              created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+              updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        `);
+
+        await client.query(`
+            CREATE UNIQUE INDEX IF NOT EXISTS ux_saved_views_user_lower_name
+              ON saved_views (user_id, lower(name))
+        `);
+
+        await client.query(`
+            CREATE UNIQUE INDEX IF NOT EXISTS ux_saved_views_one_default_per_user
+              ON saved_views (user_id)
+              WHERE is_default
+        `);
+
+        await client.query(`
+            CREATE INDEX IF NOT EXISTS ix_saved_views_user_updated
+              ON saved_views (user_id, updated_at DESC)
+        `);
+
+        console.log('Ensured saved_views schema.');
+    } catch (error) {
+        console.warn('Warning: failed to ensure saved_views schema:', error);
+    } finally {
+        client.release();
+    }
+}
+
 // --- NEW User Endpoint ---
 apiRouter.get('/users', async (req: expressTypes.Request, res: expressTypes.Response) => {
     try {
@@ -110,6 +158,148 @@ apiRouter.get('/opportunities', async (req: expressTypes.Request, res: expressTy
     }
 });
 
+
+// --- Saved Views Endpoints (Multi-user persistence) ---
+// Response shape maps DB columns to frontend SavedFilter fields
+const mapSavedViewRow = (row: any) => ({
+    id: row.view_id,
+    user_id: row.user_id,
+    name: row.name,
+    criteria: row.criteria,
+    origin: row.origin ?? null,
+    description: row.description ?? null,
+    isDefault: row.is_default,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+});
+
+apiRouter.get('/users/:userId/views', async (req: expressTypes.Request, res: expressTypes.Response) => {
+    const { userId } = req.params;
+    const run = async () => pgPool.query('SELECT * FROM saved_views WHERE user_id = $1 ORDER BY is_default DESC, updated_at DESC', [userId]);
+    try {
+        const result = await run();
+        res.status(200).json(result.rows.map(mapSavedViewRow));
+    } catch (error: any) {
+        if (error?.code === '42P01') {
+            await ensureSavedViewsSchema();
+            try {
+                const result = await run();
+                return res.status(200).json(result.rows.map(mapSavedViewRow));
+            } catch (e2) {
+                console.error(`Error fetching saved views for user ${userId} after ensure:`, e2);
+                return res.status(500).send('Internal Server Error fetching saved views.');
+            }
+        }
+        console.error(`Error fetching saved views for user ${userId}:`, error);
+        res.status(500).send('Internal Server Error fetching saved views.');
+    }
+});
+
+apiRouter.post('/users/:userId/views', async (req: expressTypes.Request, res: expressTypes.Response) => {
+    const { userId } = req.params;
+    const { name, criteria, origin, description, is_default } = req.body || {};
+    if (!name || !criteria) return res.status(400).send('Name and criteria are required.');
+
+    const client = await pgPool.connect();
+    try {
+        await client.query('BEGIN');
+        if (is_default === true) {
+            await client.query('UPDATE saved_views SET is_default = FALSE WHERE user_id = $1 AND is_default = TRUE', [userId]);
+        }
+        const insert = await client.query(
+            'INSERT INTO saved_views (user_id, name, criteria, origin, description, is_default) VALUES ($1, $2, $3, $4, $5, COALESCE($6, FALSE)) RETURNING *',
+            [userId, name, criteria, origin ?? null, description ?? null, is_default === true]
+        );
+        await client.query('COMMIT');
+        res.status(201).json(mapSavedViewRow(insert.rows[0]));
+    } catch (error: any) {
+        await client.query('ROLLBACK');
+        if (error?.code === '23505') {
+            return res.status(409).send('A view with that name already exists.');
+        }
+        console.error(`Error creating saved view for user ${userId}:`, error);
+        res.status(500).send('Internal Server Error creating saved view.');
+    } finally {
+        client.release();
+    }
+});
+
+apiRouter.put('/users/:userId/views/:viewId', async (req: expressTypes.Request, res: expressTypes.Response) => {
+    const { userId, viewId } = req.params;
+    const { name, criteria, origin, description, is_default } = req.body || {};
+
+    const fields: string[] = [];
+    const values: any[] = [];
+    let idx = 1;
+    if (name !== undefined) { fields.push(`name = $${idx++}`); values.push(name); }
+    if (criteria !== undefined) { fields.push(`criteria = $${idx++}`); values.push(criteria); }
+    if (origin !== undefined) { fields.push(`origin = $${idx++}`); values.push(origin); }
+    if (description !== undefined) { fields.push(`description = $${idx++}`); values.push(description); }
+    fields.push(`updated_at = NOW()`);
+
+    const client = await pgPool.connect();
+    try {
+        await client.query('BEGIN');
+        if (is_default === true) {
+            await client.query('UPDATE saved_views SET is_default = FALSE WHERE user_id = $1 AND view_id <> $2 AND is_default = TRUE', [userId, viewId]);
+            fields.push(`is_default = TRUE`);
+        } else if (is_default === false) {
+            fields.push(`is_default = FALSE`);
+        }
+
+        if (fields.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(400).send('No fields to update.');
+        }
+
+        const sql = `UPDATE saved_views SET ${fields.join(', ')} WHERE user_id = $${idx} AND view_id = $${idx + 1} RETURNING *`;
+        values.push(userId, viewId);
+        const result = await client.query(sql, values);
+        await client.query('COMMIT');
+        if (result.rows.length === 0) return res.status(404).send('Saved view not found.');
+        res.status(200).json(mapSavedViewRow(result.rows[0]));
+    } catch (error: any) {
+        await client.query('ROLLBACK');
+        if (error?.code === '23505') {
+            return res.status(409).send('A view with that name already exists.');
+        }
+        console.error(`Error updating saved view ${viewId} for user ${userId}:`, error);
+        res.status(500).send('Internal Server Error updating saved view.');
+    } finally {
+        client.release();
+    }
+});
+
+apiRouter.delete('/users/:userId/views/:viewId', async (req: expressTypes.Request, res: expressTypes.Response) => {
+    const { userId, viewId } = req.params;
+    try {
+        const result = await pgPool.query('DELETE FROM saved_views WHERE user_id = $1 AND view_id = $2', [userId, viewId]);
+        if (result.rowCount === 0) return res.status(404).send('Saved view not found.');
+        res.status(204).send();
+    } catch (error) {
+        console.error(`Error deleting saved view ${viewId} for user ${userId}:`, error);
+        res.status(500).send('Internal Server Error deleting saved view.');
+    }
+});
+
+apiRouter.put('/users/:userId/views/:viewId/default', async (req: expressTypes.Request, res: expressTypes.Response) => {
+    const { userId, viewId } = req.params;
+    const client = await pgPool.connect();
+    try {
+        await client.query('BEGIN');
+        await client.query('UPDATE saved_views SET is_default = FALSE WHERE user_id = $1 AND is_default = TRUE', [userId]);
+        const result = await client.query('UPDATE saved_views SET is_default = TRUE, updated_at = NOW() WHERE user_id = $1 AND view_id = $2 RETURNING *', [userId, viewId]);
+        await client.query('COMMIT');
+        if (result.rows.length === 0) return res.status(404).send('Saved view not found.');
+        res.status(200).json(mapSavedViewRow(result.rows[0]));
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error(`Error setting default saved view ${viewId} for user ${userId}:`, error);
+        res.status(500).send('Internal Server Error setting default saved view.');
+    } finally {
+        client.release();
+    }
+});
 
 // --- REWRITTEN Disposition Endpoint with Optimistic Locking ---
 apiRouter.post('/opportunities/:opportunityId/disposition', async (req: expressTypes.Request, res: expressTypes.Response) => {

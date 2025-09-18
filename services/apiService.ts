@@ -4,11 +4,12 @@ declare global {
   interface ImportMeta {
     readonly env: {
       readonly VITE_USE_MOCK_DATA?: string;
+      readonly VITE_SAVED_VIEWS_API?: string;
     }
   }
 }
 
-import type { Opportunity, AccountDetails, Disposition, User, ActionItem } from '../types';
+import type { Opportunity, AccountDetails, Disposition, User, ActionItem, SavedFilter } from '../types';
 import { generateOpportunities, generateAccountDetails, MOCK_USERS } from './mockData';
 
 const USE_MOCK_DATA = (import.meta.env?.VITE_USE_MOCK_DATA ?? 'true') === 'true';
@@ -135,4 +136,97 @@ export const deleteActionItem = async (actionItemId: string): Promise<void> => {
         });
         if (!response.ok) throw new Error('Failed to delete action item');
     }
+};
+
+// --- NEW: Saved Views APIs (multi-user persistence) ---
+
+type BackendSavedView = {
+  view_id: string;
+  user_id: string;
+  name: string;
+  criteria: any;
+  origin?: string | null;
+  description?: string | null;
+  isDefault: boolean; // mapped in backend
+  createdAt: string;
+  updatedAt: string;
+};
+
+const mapView = (v: any): SavedFilter => ({
+  id: v.id ?? v.view_id,
+  name: v.name,
+  criteria: v.criteria,
+  origin: v.origin ?? undefined,
+  description: v.description ?? undefined,
+  isDefault: v.isDefault ?? v.is_default,
+  createdAt: v.createdAt ?? v.created_at,
+  updatedAt: v.updatedAt ?? v.updated_at,
+} as SavedFilter);
+
+export const fetchSavedViews = async (userId: string): Promise<SavedFilter[]> => {
+  const res = await fetch(`${API_BASE_URL}/users/${userId}/views`);
+  if (!res.ok) throw new Error('Failed to fetch saved views');
+  const data = await res.json();
+  return data.map(mapView);
+};
+
+export const createSavedView = async (
+  userId: string,
+  payload: Pick<SavedFilter, 'name' | 'criteria' | 'origin' | 'description'> & { isDefault?: boolean }
+): Promise<SavedFilter> => {
+  const res = await fetch(`${API_BASE_URL}/users/${userId}/views`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: payload.name,
+      criteria: payload.criteria,
+      origin: payload.origin ?? null,
+      description: payload.description ?? null,
+      is_default: payload.isDefault === true,
+    }),
+  });
+  if (res.status === 409) {
+    const err: any = new Error('Name conflict');
+    err.status = 409;
+    throw err;
+  }
+  if (!res.ok) throw new Error('Failed to create saved view');
+  return mapView(await res.json());
+};
+
+export const updateSavedView = async (
+  userId: string,
+  viewId: string,
+  payload: Partial<Pick<SavedFilter, 'name' | 'criteria' | 'origin' | 'description' | 'isDefault'>>
+): Promise<SavedFilter> => {
+  const body: any = {};
+  if (payload.name !== undefined) body.name = payload.name;
+  if (payload.criteria !== undefined) body.criteria = payload.criteria;
+  if (payload.origin !== undefined) body.origin = payload.origin;
+  if (payload.description !== undefined) body.description = payload.description;
+  if (payload.isDefault !== undefined) body.is_default = payload.isDefault;
+  const res = await fetch(`${API_BASE_URL}/users/${userId}/views/${viewId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (res.status === 409) {
+    const err: any = new Error('Name conflict');
+    err.status = 409;
+    throw err;
+  }
+  if (!res.ok) throw new Error('Failed to update saved view');
+  return mapView(await res.json());
+};
+
+export const deleteSavedView = async (userId: string, viewId: string): Promise<void> => {
+  const res = await fetch(`${API_BASE_URL}/users/${userId}/views/${viewId}`, { method: 'DELETE' });
+  if (res.status === 404) throw new Error('Not found');
+  if (!res.ok && res.status !== 204) throw new Error('Failed to delete saved view');
+};
+
+export const setDefaultSavedView = async (userId: string, viewId: string): Promise<SavedFilter> => {
+  const res = await fetch(`${API_BASE_URL}/users/${userId}/views/${viewId}/default`, { method: 'PUT' });
+  if (!res.ok) throw new Error('Failed to set default view');
+  return mapView(await res.json());
 };

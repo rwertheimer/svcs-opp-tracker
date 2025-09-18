@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Opportunity, AccountDetails, Disposition, SavedFilter, TaskWithOpportunityContext, ActionItem, FilterGroup, User, FilterRule } from './types';
-import { fetchOpportunities, fetchOpportunityDetails, saveDisposition, fetchUsers, createActionItem, updateActionItem, deleteActionItem } from './services/apiService';
+import { fetchOpportunities, fetchOpportunityDetails, saveDisposition, fetchUsers, createActionItem, updateActionItem, deleteActionItem, fetchSavedViews, createSavedView, updateSavedView, deleteSavedView as deleteSavedViewApi, setDefaultSavedView } from './services/apiService';
 import OpportunityList from './components/OpportunityList';
 import OpportunityDetail from './components/OpportunityDetail';
 import Header from './components/Header';
@@ -41,6 +41,7 @@ const App: React.FC = () => {
   const [detailInitialSection, setDetailInitialSection] = useState<string | undefined>(undefined);
   // Internal: prime Advanced Filter Builder with org-chart selections
   const [pendingOrgFilters, setPendingOrgFilters] = useState<FilterGroup | null>(null);
+  const USE_SAVED_VIEWS_API = import.meta.env?.VITE_SAVED_VIEWS_API === 'true';
   
   // --- NEW: User Management State ---
   const [users, setUsers] = useState<User[]>([]);
@@ -60,7 +61,13 @@ const App: React.FC = () => {
         fetchOpportunities(),
       ]);
       setUsers(fetchedUsers);
-      if (fetchedUsers.length > 0) setCurrentUser(fetchedUsers[0]);
+      if (fetchedUsers.length > 0) {
+        const storedUserId = (() => {
+          try { return localStorage.getItem('currentUserId') || undefined; } catch { return undefined; }
+        })();
+        const preferred = storedUserId ? fetchedUsers.find(u => u.user_id === storedUserId) : undefined;
+        setCurrentUser(preferred ?? fetchedUsers[0]);
+      }
       setOpportunities(fetchedOpportunities);
     } catch (err: any) {
       setError('Failed to fetch initial data. Please try again.');
@@ -69,9 +76,12 @@ const App: React.FC = () => {
       setIsLoading(false);
     }
   }, []);
+  
+//console.log('SavedViews API mode:', import.meta.env.VITE_SAVED_VIEWS_API);
 
-  // --- Saved Views: localStorage hydration ---
+  // --- Saved Views hydration ---
   useEffect(() => {
+    if (USE_SAVED_VIEWS_API) return; // handled by API effect below
     try {
       const raw = localStorage.getItem('savedFilters');
       if (raw) {
@@ -84,15 +94,57 @@ const App: React.FC = () => {
         }
       }
     } catch {}
-  }, []);
+  }, [USE_SAVED_VIEWS_API]);
 
   useEffect(() => {
+    if (USE_SAVED_VIEWS_API) return; // don't write when using API
     try {
       localStorage.setItem('savedFilters', JSON.stringify(savedFilters));
     } catch {}
-  }, [savedFilters]);
+  }, [savedFilters, USE_SAVED_VIEWS_API]);
 
-  const deepEqual = (a: any, b: any) => JSON.stringify(a) === JSON.stringify(b);
+  // API-backed saved views hydration
+  const refreshSavedViews = useCallback(async (uid: string) => {
+    const list = await fetchSavedViews(uid);
+    setSavedFilters(list);
+    return list;
+  }, []);
+
+  useEffect(() => {
+    const uid = currentUser?.user_id;
+    if (!USE_SAVED_VIEWS_API || !uid) return;
+    (async () => {
+      try {
+        const list = await refreshSavedViews(uid);
+        const def = list.find(v => v.isDefault);
+        if (def) {
+          setFilters(def.criteria);
+          setActiveViewId(def.id);
+        }
+      } catch (e) {
+        console.error('Failed to load saved views:', e);
+      }
+    })();
+  }, [USE_SAVED_VIEWS_API, currentUser?.user_id, refreshSavedViews]);
+
+  // Stable deep equality that ignores object key order
+  const deepEqual = (a: any, b: any) => {
+    const stable = (val: any): any => {
+      if (Array.isArray(val)) return val.map(stable);
+      if (val && typeof val === 'object') {
+        const sortedKeys = Object.keys(val).sort();
+        const out: any = {};
+        for (const k of sortedKeys) out[k] = stable(val[k]);
+        return out;
+      }
+      return val;
+    };
+    try {
+      return JSON.stringify(stable(a)) === JSON.stringify(stable(b));
+    } catch {
+      return false;
+    }
+  };
   const hasOrgGroup = (fg: FilterGroup): boolean => {
     const stack: (FilterGroup | FilterRule)[] = [fg as any];
     while (stack.length) {
@@ -108,6 +160,13 @@ const App: React.FC = () => {
   useEffect(() => {
     loadInitialData();
   }, [loadInitialData]);
+  
+  // Persist the selected user so API-backed Saved Views load consistently across reloads
+  useEffect(() => {
+    if (currentUser?.user_id) {
+      try { localStorage.setItem('currentUserId', currentUser.user_id); } catch {}
+    }
+  }, [currentUser?.user_id]);
   
   const evaluateFilterGroup = (opp: Opportunity, group: FilterGroup): boolean => {
     const results = group.rules.map(rule => {
@@ -362,7 +421,13 @@ const App: React.FC = () => {
     if (dupe) {
       const replace = window.confirm(`A view named "${trimmed}" already exists.\nClick OK to replace it, or Cancel to save as a new name.`);
       if (replace) {
-        setSavedFilters(prev => prev.map(v => v.id === dupe.id ? { ...v, name: trimmed, criteria: filters, updatedAt: now, origin } : v));
+        if (USE_SAVED_VIEWS_API && currentUser) {
+          updateSavedView(currentUser.user_id, dupe.id, { name: trimmed, criteria: filters, origin })
+            .then(() => refreshSavedViews(currentUser.user_id))
+            .catch(e => console.error(e));
+        } else {
+          setSavedFilters(prev => prev.map(v => v.id === dupe.id ? { ...v, name: trimmed, criteria: filters, updatedAt: now, origin } : v));
+        }
         setActiveViewId(dupe.id);
         return;
       }
@@ -373,14 +438,26 @@ const App: React.FC = () => {
         alert('A view with that name already exists. Please choose a different name.');
         return;
       }
-      const newView: SavedFilter = { id: Date.now().toString(), name: finalName, criteria: filters, createdAt: now, updatedAt: now, origin };
-      setSavedFilters(prev => [...prev, newView]);
-      setActiveViewId(newView.id);
+      if (USE_SAVED_VIEWS_API && currentUser) {
+        createSavedView(currentUser.user_id, { name: finalName, criteria: filters, origin })
+          .then(v => { setActiveViewId(v.id); return refreshSavedViews(currentUser.user_id); })
+          .catch(e => console.error(e));
+      } else {
+        const newView: SavedFilter = { id: Date.now().toString(), name: finalName, criteria: filters, createdAt: now, updatedAt: now, origin };
+        setSavedFilters(prev => [...prev, newView]);
+        setActiveViewId(newView.id);
+      }
       return;
     }
-    const newView: SavedFilter = { id: Date.now().toString(), name: trimmed, criteria: filters, createdAt: now, updatedAt: now, origin };
-    setSavedFilters(prev => [...prev, newView]);
-    setActiveViewId(newView.id);
+    if (USE_SAVED_VIEWS_API && currentUser) {
+      createSavedView(currentUser.user_id, { name: trimmed, criteria: filters, origin })
+        .then(v => { setActiveViewId(v.id); return refreshSavedViews(currentUser.user_id); })
+        .catch(e => console.error(e));
+    } else {
+      const newView: SavedFilter = { id: Date.now().toString(), name: trimmed, criteria: filters, createdAt: now, updatedAt: now, origin };
+      setSavedFilters(prev => [...prev, newView]);
+      setActiveViewId(newView.id);
+    }
   };
 
   const handleApplySavedFilter = (id: string) => {
@@ -400,19 +477,37 @@ const App: React.FC = () => {
       alert('A view with that name already exists.');
       return;
     }
-    setSavedFilters(prev => prev.map(v => v.id === id ? { ...v, name: trimmed, updatedAt: new Date().toISOString() } : v));
+    if (USE_SAVED_VIEWS_API && currentUser) {
+      updateSavedView(currentUser.user_id, id, { name: trimmed })
+        .then(() => refreshSavedViews(currentUser.user_id))
+        .catch(e => console.error(e));
+    } else {
+      setSavedFilters(prev => prev.map(v => v.id === id ? { ...v, name: trimmed, updatedAt: new Date().toISOString() } : v));
+    }
   };
 
   const handleDeleteSavedFilter = (id: string) => {
     const view = savedFilters.find(v => v.id === id);
     if (!view) return;
     if (!window.confirm(`Delete saved view "${view.name}"?`)) return;
-    setSavedFilters(prev => prev.filter(v => v.id !== id));
+    if (USE_SAVED_VIEWS_API && currentUser) {
+      deleteSavedViewApi(currentUser.user_id, id)
+        .then(() => refreshSavedViews(currentUser.user_id))
+        .catch(e => console.error(e));
+    } else {
+      setSavedFilters(prev => prev.filter(v => v.id !== id));
+    }
     if (activeViewId === id) { setActiveViewId(null); }
   };
 
   const handleSetDefaultView = (id: string) => {
-    setSavedFilters(prev => prev.map(v => ({ ...v, isDefault: v.id === id })));
+    if (USE_SAVED_VIEWS_API && currentUser) {
+      setDefaultSavedView(currentUser.user_id, id)
+        .then(() => refreshSavedViews(currentUser.user_id))
+        .catch(e => console.error(e));
+    } else {
+      setSavedFilters(prev => prev.map(v => ({ ...v, isDefault: v.id === id })));
+    }
   };
   
   const handleSaveScopingActivity = (data: { accountName: string; contact: string; description: string; }) => {
@@ -554,18 +649,19 @@ const App: React.FC = () => {
           </div>
         )}
         <OpportunityList
-        opportunities={filteredOpportunities}
-        onSelect={handleSelectOpportunity}
-        savedFilters={savedFilters}
-        onSaveFilter={handleSaveFilter}
-        onApplyFilter={handleApplySavedFilter}
-        onClearFilters={handleClearFilters}
-        onAddScoping={() => setIsScopingModalOpen(true)}
-        onOpenFilterBuilder={() => setIsFilterBuilderOpen(true)}
-        onOpenOrgChart={() => setIsOrgChartModalOpen(true)}
-        activeFilterCount={filters.rules.length}
-        onOpenManageSavedViews={() => setIsManageViewsOpen(true)}
-      />
+          opportunities={filteredOpportunities}
+          onSelect={handleSelectOpportunity}
+          savedFilters={savedFilters}
+          onSaveFilter={handleSaveFilter}
+          onApplyFilter={handleApplySavedFilter}
+          onClearFilters={handleClearFilters}
+          onAddScoping={() => setIsScopingModalOpen(true)}
+          onOpenFilterBuilder={() => setIsFilterBuilderOpen(true)}
+          onOpenOrgChart={() => setIsOrgChartModalOpen(true)}
+          activeFilterCount={filters.rules.length}
+          onOpenManageSavedViews={() => setIsManageViewsOpen(true)}
+          apiModeInfo={USE_SAVED_VIEWS_API ? `API • ${currentUser?.email ?? (currentUser?.user_id || '').slice(0,8)}` : 'Local'}
+        />
       </>
     );
   };
