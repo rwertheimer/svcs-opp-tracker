@@ -15,14 +15,32 @@ import { generateOpportunities, generateAccountDetails, MOCK_USERS } from './moc
 const USE_MOCK_DATA = (import.meta.env?.VITE_USE_MOCK_DATA ?? 'true') === 'true';
 const API_BASE_URL = 'http://localhost:8080/api';
 
+// Unified fetch helper that throws enriched errors
+async function httpJson(url: string, init?: RequestInit & { timeoutMs?: number }) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), init?.timeoutMs ?? 15000);
+  try {
+    const res = await fetch(url, { ...init, signal: controller.signal });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      const err: any = new Error(text || `Request failed: ${res.status}`);
+      err.status = res.status;
+      throw err;
+    }
+    const ct = res.headers.get('content-type') || '';
+    if (ct.includes('application/json')) return res.json();
+    return res.text();
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 // --- NEW: User API ---
 export const fetchUsers = async (): Promise<User[]> => {
   if (USE_MOCK_DATA) {
     return Promise.resolve(MOCK_USERS);
   } else {
-    const response = await fetch(`${API_BASE_URL}/users`);
-    if (!response.ok) throw new Error('Failed to fetch users.');
-    return response.json();
+    return httpJson(`${API_BASE_URL}/users`);
   }
 };
 
@@ -32,9 +50,7 @@ export const fetchOpportunities = async (): Promise<Opportunity[]> => {
     await new Promise(resolve => setTimeout(resolve, 500));
     return generateOpportunities(50);
   } else {
-    const response = await fetch(`${API_BASE_URL}/opportunities`);
-    if (!response.ok) throw new Error('Failed to fetch opportunities. Is the server running?');
-    return response.json();
+    return httpJson(`${API_BASE_URL}/opportunities`);
   }
 };
 
@@ -44,21 +60,13 @@ export const fetchOpportunityDetails = async (accountId: string): Promise<Accoun
     return generateAccountDetails(accountId);
   } else {
     try {
-      const [supportTicketsRes, usageHistoryRes, projectHistoryRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/accounts/${accountId}/support-tickets`),
-        fetch(`${API_BASE_URL}/accounts/${accountId}/usage-history`),
-        fetch(`${API_BASE_URL}/accounts/${accountId}/project-history`)
+      const [supportTickets, usageHistory, projectHistory] = await Promise.all([
+        httpJson(`${API_BASE_URL}/accounts/${accountId}/support-tickets`),
+        httpJson(`${API_BASE_URL}/accounts/${accountId}/usage-history`),
+        httpJson(`${API_BASE_URL}/accounts/${accountId}/project-history`),
       ]);
 
-      if (!supportTicketsRes.ok || !usageHistoryRes.ok || !projectHistoryRes.ok) {
-        throw new Error(`Failed to fetch one or more details for account ${accountId}.`);
-      }
-
-      return { 
-        supportTickets: await supportTicketsRes.json(), 
-        usageHistory: await usageHistoryRes.json(), 
-        projectHistory: await projectHistoryRes.json() 
-      };
+      return { supportTickets, usageHistory, projectHistory };
 
     } catch (error) {
       console.error("Error in fetchOpportunityDetails:", error);
@@ -72,23 +80,18 @@ export const saveDisposition = async (opportunityId: string, disposition: Dispos
     console.log(`(Mock) Saving disposition for ${opportunityId}`, { ...disposition, version: disposition.version + 1 });
     return Promise.resolve({ ...disposition, version: disposition.version + 1 });
   } else {
-    const response = await fetch(`${API_BASE_URL}/opportunities/${opportunityId}/disposition`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ disposition, userId }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      // Propagate the status to be handled for optimistic locking
-      const error = new Error(`Failed to save disposition: ${response.status} ${errorText}`);
-      // FIX: Attach status to the error object so the UI can check for 409 conflicts.
-      (error as any).status = response.status;
-      throw error;
+    try {
+      return await httpJson(`${API_BASE_URL}/opportunities/${opportunityId}/disposition`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ disposition, userId }),
+      });
+    } catch (e: any) {
+      if (e?.status) throw e; // pass through with status
+      const err: any = new Error('Failed to save disposition');
+      err.status = 500;
+      throw err;
     }
-    return response.json(); // Return the updated disposition with the new version
   }
 };
 
@@ -100,13 +103,11 @@ export const createActionItem = async (opportunityId: string, item: Omit<ActionI
         console.log("(Mock) Creating action item:", newItem);
         return Promise.resolve(newItem as ActionItem);
     } else {
-        const response = await fetch(`${API_BASE_URL}/action-items`, {
+        return httpJson(`${API_BASE_URL}/action-items`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ opportunity_id: opportunityId, ...item }),
         });
-        if (!response.ok) throw new Error('Failed to create action item');
-        return response.json();
     }
 };
 
@@ -116,13 +117,11 @@ export const updateActionItem = async (actionItemId: string, updates: Partial<Ac
         // This won't actually persist in mock mode, but we can simulate success.
         return Promise.resolve({} as ActionItem);
     } else {
-        const response = await fetch(`${API_BASE_URL}/action-items/${actionItemId}`, {
+        return httpJson(`${API_BASE_URL}/action-items/${actionItemId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(updates),
         });
-        if (!response.ok) throw new Error('Failed to update action item');
-        return response.json();
     }
 };
 
@@ -131,10 +130,13 @@ export const deleteActionItem = async (actionItemId: string): Promise<void> => {
         console.log(`(Mock) Deleting action item ${actionItemId}`);
         return Promise.resolve();
     } else {
-        const response = await fetch(`${API_BASE_URL}/action-items/${actionItemId}`, {
-            method: 'DELETE',
-        });
-        if (!response.ok) throw new Error('Failed to delete action item');
+        const res = await fetch(`${API_BASE_URL}/action-items/${actionItemId}`, { method: 'DELETE' });
+        if (!res.ok) {
+          const text = await res.text().catch(() => '');
+          const err: any = new Error(text || 'Failed to delete action item');
+          err.status = res.status;
+          throw err;
+        }
     }
 };
 
@@ -164,9 +166,7 @@ const mapView = (v: any): SavedFilter => ({
 } as SavedFilter);
 
 export const fetchSavedViews = async (userId: string): Promise<SavedFilter[]> => {
-  const res = await fetch(`${API_BASE_URL}/users/${userId}/views`);
-  if (!res.ok) throw new Error('Failed to fetch saved views');
-  const data = await res.json();
+  const data = await httpJson(`${API_BASE_URL}/users/${userId}/views`);
   return data.map(mapView);
 };
 
@@ -174,24 +174,23 @@ export const createSavedView = async (
   userId: string,
   payload: Pick<SavedFilter, 'name' | 'criteria' | 'origin' | 'description'> & { isDefault?: boolean }
 ): Promise<SavedFilter> => {
-  const res = await fetch(`${API_BASE_URL}/users/${userId}/views`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      name: payload.name,
-      criteria: payload.criteria,
-      origin: payload.origin ?? null,
-      description: payload.description ?? null,
-      is_default: payload.isDefault === true,
-    }),
-  });
-  if (res.status === 409) {
-    const err: any = new Error('Name conflict');
-    err.status = 409;
-    throw err;
+  try {
+    const data = await httpJson(`${API_BASE_URL}/users/${userId}/views`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: payload.name,
+        criteria: payload.criteria,
+        origin: payload.origin ?? null,
+        description: payload.description ?? null,
+        is_default: payload.isDefault === true,
+      }),
+    });
+    return mapView(data);
+  } catch (e: any) {
+    if (e?.status === 409) throw e;
+    throw e;
   }
-  if (!res.ok) throw new Error('Failed to create saved view');
-  return mapView(await res.json());
 };
 
 export const updateSavedView = async (
@@ -205,18 +204,17 @@ export const updateSavedView = async (
   if (payload.origin !== undefined) body.origin = payload.origin;
   if (payload.description !== undefined) body.description = payload.description;
   if (payload.isDefault !== undefined) body.is_default = payload.isDefault;
-  const res = await fetch(`${API_BASE_URL}/users/${userId}/views/${viewId}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  if (res.status === 409) {
-    const err: any = new Error('Name conflict');
-    err.status = 409;
-    throw err;
+  try {
+    const data = await httpJson(`${API_BASE_URL}/users/${userId}/views/${viewId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    return mapView(data);
+  } catch (e: any) {
+    if (e?.status === 409) throw e;
+    throw e;
   }
-  if (!res.ok) throw new Error('Failed to update saved view');
-  return mapView(await res.json());
 };
 
 export const deleteSavedView = async (userId: string, viewId: string): Promise<void> => {
@@ -226,7 +224,6 @@ export const deleteSavedView = async (userId: string, viewId: string): Promise<v
 };
 
 export const setDefaultSavedView = async (userId: string, viewId: string): Promise<SavedFilter> => {
-  const res = await fetch(`${API_BASE_URL}/users/${userId}/views/${viewId}/default`, { method: 'PUT' });
-  if (!res.ok) throw new Error('Failed to set default view');
-  return mapView(await res.json());
+  const data = await httpJson(`${API_BASE_URL}/users/${userId}/views/${viewId}/default`, { method: 'PUT' });
+  return mapView(data);
 };

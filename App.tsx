@@ -77,8 +77,6 @@ const App: React.FC = () => {
     }
   }, []);
   
-//console.log('SavedViews API mode:', import.meta.env.VITE_SAVED_VIEWS_API);
-
   // --- Saved Views hydration ---
   useEffect(() => {
     if (USE_SAVED_VIEWS_API) return; // handled by API effect below
@@ -104,9 +102,11 @@ const App: React.FC = () => {
   }, [savedFilters, USE_SAVED_VIEWS_API]);
 
   // API-backed saved views hydration
+  const [savedViewsApiOnline, setSavedViewsApiOnline] = useState(true);
   const refreshSavedViews = useCallback(async (uid: string) => {
     const list = await fetchSavedViews(uid);
     setSavedFilters(list);
+    setSavedViewsApiOnline(true);
     return list;
   }, []);
 
@@ -122,7 +122,8 @@ const App: React.FC = () => {
           setActiveViewId(def.id);
         }
       } catch (e) {
-        console.error('Failed to load saved views:', e);
+        setSavedViewsApiOnline(false);
+        showToast('Failed to load saved views. Please try again.', 'error');
       }
     })();
   }, [USE_SAVED_VIEWS_API, currentUser?.user_id, refreshSavedViews]);
@@ -424,7 +425,7 @@ const App: React.FC = () => {
         if (USE_SAVED_VIEWS_API && currentUser) {
           updateSavedView(currentUser.user_id, dupe.id, { name: trimmed, criteria: filters, origin })
             .then(() => refreshSavedViews(currentUser.user_id))
-            .catch(e => console.error(e));
+            .catch(() => showToast('Failed to save view.', 'error'));
         } else {
           setSavedFilters(prev => prev.map(v => v.id === dupe.id ? { ...v, name: trimmed, criteria: filters, updatedAt: now, origin } : v));
         }
@@ -441,7 +442,7 @@ const App: React.FC = () => {
       if (USE_SAVED_VIEWS_API && currentUser) {
         createSavedView(currentUser.user_id, { name: finalName, criteria: filters, origin })
           .then(v => { setActiveViewId(v.id); return refreshSavedViews(currentUser.user_id); })
-          .catch(e => console.error(e));
+          .catch(() => showToast('Failed to save view.', 'error'));
       } else {
         const newView: SavedFilter = { id: Date.now().toString(), name: finalName, criteria: filters, createdAt: now, updatedAt: now, origin };
         setSavedFilters(prev => [...prev, newView]);
@@ -452,7 +453,7 @@ const App: React.FC = () => {
     if (USE_SAVED_VIEWS_API && currentUser) {
       createSavedView(currentUser.user_id, { name: trimmed, criteria: filters, origin })
         .then(v => { setActiveViewId(v.id); return refreshSavedViews(currentUser.user_id); })
-        .catch(e => console.error(e));
+        .catch(() => showToast('Failed to save view.', 'error'));
     } else {
       const newView: SavedFilter = { id: Date.now().toString(), name: trimmed, criteria: filters, createdAt: now, updatedAt: now, origin };
       setSavedFilters(prev => [...prev, newView]);
@@ -480,7 +481,7 @@ const App: React.FC = () => {
     if (USE_SAVED_VIEWS_API && currentUser) {
       updateSavedView(currentUser.user_id, id, { name: trimmed })
         .then(() => refreshSavedViews(currentUser.user_id))
-        .catch(e => console.error(e));
+        .catch(() => showToast('Failed to rename view.', 'error'));
     } else {
       setSavedFilters(prev => prev.map(v => v.id === id ? { ...v, name: trimmed, updatedAt: new Date().toISOString() } : v));
     }
@@ -493,7 +494,7 @@ const App: React.FC = () => {
     if (USE_SAVED_VIEWS_API && currentUser) {
       deleteSavedViewApi(currentUser.user_id, id)
         .then(() => refreshSavedViews(currentUser.user_id))
-        .catch(e => console.error(e));
+        .catch(() => showToast('Failed to delete view.', 'error'));
     } else {
       setSavedFilters(prev => prev.filter(v => v.id !== id));
     }
@@ -504,7 +505,7 @@ const App: React.FC = () => {
     if (USE_SAVED_VIEWS_API && currentUser) {
       setDefaultSavedView(currentUser.user_id, id)
         .then(() => refreshSavedViews(currentUser.user_id))
-        .catch(e => console.error(e));
+        .catch(() => showToast('Failed to set default view.', 'error'));
     } else {
       setSavedFilters(prev => prev.map(v => ({ ...v, isDefault: v.id === id })));
     }
@@ -660,7 +661,7 @@ const App: React.FC = () => {
           onOpenOrgChart={() => setIsOrgChartModalOpen(true)}
           activeFilterCount={filters.rules.length}
           onOpenManageSavedViews={() => setIsManageViewsOpen(true)}
-          apiModeInfo={USE_SAVED_VIEWS_API ? `API • ${currentUser?.email ?? (currentUser?.user_id || '').slice(0,8)}` : 'Local'}
+          apiModeInfo={USE_SAVED_VIEWS_API ? (savedViewsApiOnline ? `API • ${currentUser?.email ?? (currentUser?.user_id || '').slice(0,8)}` : 'API • offline') : 'Local'}
         />
       </>
     );
