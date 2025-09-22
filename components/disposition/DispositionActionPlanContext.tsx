@@ -6,7 +6,7 @@ import { useToast } from '../Toast';
 interface DispositionActionPlanProviderProps {
     opportunity: Opportunity;
     currentUser: User;
-    onSaveDisposition: (disposition: Disposition) => Promise<void> | void;
+    onSaveDisposition: (disposition: Disposition) => Promise<Disposition | void> | Disposition | void;
     onActionItemCreate: (
         opportunityId: string,
         item: Omit<ActionItem, 'action_item_id' | 'created_by_user_id'>
@@ -32,7 +32,13 @@ interface DispositionActionPlanContextValue {
     changeDispositionStatus: (status: DispositionStatus) => boolean;
     resetDraft: () => void;
     saveDisposition: () => Promise<void> | void;
+    commitDraft: () => Promise<void>;
+    confirmDiscardChanges: () => boolean;
     isDispositioned: boolean;
+    isDirty: boolean;
+    hasUnsavedDispositionChanges: boolean;
+    hasStagedActionPlanChanges: boolean;
+    isCommittingDraft: boolean;
     actionItems: ActionItem[];
     stagedActionItems: StagedActionItem[];
     addStagedActionItem: (item: Partial<StagedActionItem>) => void;
@@ -69,19 +75,46 @@ export const DispositionActionPlanProvider: React.FC<DispositionActionPlanProvid
     children,
 }) => {
     const { showToast } = useToast();
+    const [baselineDisposition, setBaselineDisposition] = useState<Disposition>({ ...opportunity.disposition });
     const [draftDisposition, setDraftDisposition] = useState<Disposition>({ ...opportunity.disposition });
     const [stagedActionItems, setStagedActionItems] = useState<StagedActionItem[]>([]);
     const [isStagePersisting, setIsStagePersisting] = useState(false);
+    const [isCommittingDraft, setIsCommittingDraft] = useState(false);
     const saveQueue = useRef<Promise<void>>(Promise.resolve());
 
     useEffect(() => {
+        setBaselineDisposition({ ...opportunity.disposition });
         setDraftDisposition({ ...opportunity.disposition });
         setStagedActionItems([]);
-    }, [opportunity.opportunities_id, opportunity.disposition]);
+    }, [opportunity.opportunities_id, opportunity.disposition.version]);
 
     const actionItems = useMemo(() => {
         return (opportunity.actionItems || []).map(item => ({ ...item, documents: item.documents || [] }));
     }, [opportunity.actionItems]);
+
+    const normalizeDispositionForCompare = useCallback((disposition: Disposition) => ({
+        status: disposition.status,
+        notes: disposition.notes ?? '',
+        reason: disposition.reason ?? '',
+        services_amount_override: disposition.services_amount_override ?? null,
+        forecast_category_override: disposition.forecast_category_override ?? '',
+    }), []);
+
+    const hasUnsavedDispositionChanges = useMemo(() => {
+        const normalizedDraft = normalizeDispositionForCompare(draftDisposition);
+        const normalizedBaseline = normalizeDispositionForCompare(baselineDisposition);
+        return (
+            normalizedDraft.status !== normalizedBaseline.status ||
+            normalizedDraft.notes !== normalizedBaseline.notes ||
+            normalizedDraft.reason !== normalizedBaseline.reason ||
+            normalizedDraft.services_amount_override !== normalizedBaseline.services_amount_override ||
+            normalizedDraft.forecast_category_override !== normalizedBaseline.forecast_category_override
+        );
+    }, [baselineDisposition, draftDisposition, normalizeDispositionForCompare]);
+
+    const hasStagedActionPlanChanges = stagedActionItems.length > 0;
+
+    const isDirty = hasUnsavedDispositionChanges || hasStagedActionPlanChanges;
 
     const queueSaveOperation = useCallback((operation: () => Promise<void> | void) => {
         saveQueue.current = saveQueue.current
@@ -144,14 +177,97 @@ export const DispositionActionPlanProvider: React.FC<DispositionActionPlanProvid
     }, []);
 
     const resetDraft = useCallback(() => {
-        setDraftDisposition({ ...opportunity.disposition });
+        setDraftDisposition({ ...baselineDisposition });
         setStagedActionItems([]);
-    }, [opportunity.disposition]);
+    }, [baselineDisposition]);
+
+    const confirmDiscardChanges = useCallback(() => {
+        if (!isDirty) return true;
+
+        const parts: string[] = [];
+        if (hasUnsavedDispositionChanges) parts.push('disposition changes');
+        if (hasStagedActionPlanChanges) parts.push('action plan tasks');
+        const message = `You have unsaved ${parts.join(' and ')}. Save your work or choose OK to discard them.`;
+        const confirmed = window.confirm(message);
+        if (confirmed) {
+            resetDraft();
+        }
+        return confirmed;
+    }, [hasStagedActionPlanChanges, hasUnsavedDispositionChanges, isDirty, resetDraft]);
 
     const saveDisposition = useCallback(() => {
         const payload = { ...draftDisposition };
         return queueSaveOperation(() => Promise.resolve(onSaveDisposition(payload)));
     }, [draftDisposition, onSaveDisposition, queueSaveOperation]);
+
+    const persistStagedItems = useCallback(async () => {
+        for (const item of stagedActionItems) {
+            await onActionItemCreate(opportunity.opportunities_id, {
+                opportunity_id: opportunity.opportunities_id,
+                name: item.name,
+                status: item.status,
+                due_date: item.due_date,
+                notes: item.notes,
+                documents: item.documents ?? [],
+                assigned_to_user_id: currentUser.user_id,
+            });
+        }
+        setStagedActionItems([]);
+        showToast('Action plan saved', 'success');
+    }, [
+        currentUser.user_id,
+        onActionItemCreate,
+        opportunity.opportunities_id,
+        showToast,
+        stagedActionItems,
+    ]);
+
+    const commitDraft = useCallback(async () => {
+        const shouldSaveDisposition = hasUnsavedDispositionChanges;
+        const shouldPersistStaged = stagedActionItems.length > 0;
+        if (!shouldSaveDisposition && !shouldPersistStaged) return;
+
+        setIsCommittingDraft(true);
+        if (shouldPersistStaged) {
+            setIsStagePersisting(true);
+        }
+
+        try {
+            await queueSaveOperation(async () => {
+                if (shouldSaveDisposition) {
+                    const payload = { ...draftDisposition };
+                    const result = await onSaveDisposition(payload);
+                    const savedDisposition = (result ?? payload) as Disposition;
+                    setBaselineDisposition({ ...savedDisposition });
+                    setDraftDisposition({ ...savedDisposition });
+                }
+
+                if (shouldPersistStaged) {
+                    await persistStagedItems();
+                }
+            });
+        } catch (error: any) {
+            if (error?.status === 409) {
+                showToast('Save conflict: another user updated this opportunity. Refresh to continue.', 'error');
+            } else {
+                showToast('Failed to save changes', 'error');
+            }
+            throw error;
+        } finally {
+            if (shouldPersistStaged) {
+                setIsStagePersisting(false);
+            }
+            setIsCommittingDraft(false);
+        }
+    }, [
+        draftDisposition,
+        hasUnsavedDispositionChanges,
+        onSaveDisposition,
+        persistStagedItems,
+        queueSaveOperation,
+        stagedActionItems.length,
+        showToast,
+    ]);
 
     const addStagedActionItem = useCallback((item: Partial<StagedActionItem>) => {
         setStagedActionItems(prev => [
@@ -180,21 +296,7 @@ export const DispositionActionPlanProvider: React.FC<DispositionActionPlanProvid
         if (stagedActionItems.length === 0 || isStagePersisting) return;
         setIsStagePersisting(true);
         try {
-            await queueSaveOperation(async () => {
-                for (const item of stagedActionItems) {
-                    await onActionItemCreate(opportunity.opportunities_id, {
-                        opportunity_id: opportunity.opportunities_id,
-                        name: item.name,
-                        status: item.status,
-                        due_date: item.due_date,
-                        notes: item.notes,
-                        documents: item.documents ?? [],
-                        assigned_to_user_id: currentUser.user_id,
-                    });
-                }
-            });
-            setStagedActionItems([]);
-            showToast('Action plan saved', 'success');
+            await queueSaveOperation(persistStagedItems);
         } catch (error) {
             console.error('Failed to save staged action plan', error);
             showToast('Failed to save action plan', 'error');
@@ -202,15 +304,7 @@ export const DispositionActionPlanProvider: React.FC<DispositionActionPlanProvid
         } finally {
             setIsStagePersisting(false);
         }
-    }, [
-        currentUser.user_id,
-        onActionItemCreate,
-        opportunity.opportunities_id,
-        queueSaveOperation,
-        showToast,
-        stagedActionItems,
-        isStagePersisting,
-    ]);
+    }, [isStagePersisting, persistStagedItems, queueSaveOperation, showToast]);
 
     const createActionItem = useCallback(
         (item: Omit<ActionItem, 'action_item_id' | 'created_by_user_id'>) =>
@@ -237,8 +331,14 @@ export const DispositionActionPlanProvider: React.FC<DispositionActionPlanProvid
             updateDisposition,
             changeDispositionStatus,
             resetDraft,
+            commitDraft,
+            confirmDiscardChanges,
             saveDisposition,
             isDispositioned: draftDisposition.status === 'Services Fit',
+            isDirty,
+            hasUnsavedDispositionChanges,
+            hasStagedActionPlanChanges,
+            isCommittingDraft,
             actionItems,
             stagedActionItems,
             addStagedActionItem,
@@ -257,14 +357,20 @@ export const DispositionActionPlanProvider: React.FC<DispositionActionPlanProvid
             addStagedActionItem,
             changeDispositionStatus,
             confirmDiscardStaged,
+            confirmDiscardChanges,
             createActionItem,
             currentUser,
             deleteActionItem,
             draftDisposition,
+            hasStagedActionPlanChanges,
+            hasUnsavedDispositionChanges,
+            isCommittingDraft,
+            isDirty,
             persistStagedActionItems,
             queueSaveOperation,
             removeStagedActionItem,
             resetDraft,
+            commitDraft,
             saveDisposition,
             stagedActionItems,
             updateActionItem,

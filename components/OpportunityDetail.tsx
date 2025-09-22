@@ -7,6 +7,7 @@ import DispositionForm from './DispositionForm';
 import ActionItemsManager from './ActionItemsManager';
 import { ICONS } from '../constants';
 import { DispositionActionPlanProvider, useDispositionActionPlan } from './disposition/DispositionActionPlanContext';
+import SaveBar from './disposition/SaveBar';
 
 interface OpportunityDetailProps {
   opportunity: Opportunity;
@@ -531,6 +532,7 @@ const OpportunityDetailInner: React.FC<OpportunityDetailInnerProps> = ({ opportu
     const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
     const {
         confirmDiscardStaged,
+        confirmDiscardChanges,
         draftDisposition,
         changeDispositionStatus,
         updateDisposition,
@@ -579,7 +581,7 @@ const OpportunityDetailInner: React.FC<OpportunityDetailInnerProps> = ({ opportu
     // Future: consider a router-level anchor strategy or an observer that
     // scrolls once both refs and data are confirmed ready.
     const scrollToSection = useCallback((id: string) => {
-        if (id !== 'disposition' && !confirmDiscardStaged()) {
+        if (id !== 'disposition' && !confirmDiscardChanges()) {
             return;
         }
         const el = sectionRefs.current[id];
@@ -588,7 +590,7 @@ const OpportunityDetailInner: React.FC<OpportunityDetailInnerProps> = ({ opportu
         const rect = el.getBoundingClientRect();
         const absoluteTop = rect.top + window.scrollY - headerOffset;
         window.scrollTo({ top: absoluteTop, behavior: 'smooth' });
-    }, [confirmDiscardStaged]);
+    }, [confirmDiscardChanges]);
     
     const assignRef = (id: string) => (el: HTMLElement | null) => {
         sectionRefs.current[id] = el;
@@ -651,7 +653,7 @@ const OpportunityDetailInner: React.FC<OpportunityDetailInnerProps> = ({ opportu
     }, [opportunity.disposition?.last_updated_by_user_id, users]);
 
     const handleBack = () => {
-        if (!confirmDiscardStaged()) return;
+        if (!confirmDiscardChanges()) return;
         onBack();
     };
 
@@ -724,6 +726,8 @@ const OpportunityDetailInner: React.FC<OpportunityDetailInnerProps> = ({ opportu
                     <span>SE POV App</span>
                 </a>
             </div>
+
+            <SaveBar />
 
             {/* Main Content */}
             <div>

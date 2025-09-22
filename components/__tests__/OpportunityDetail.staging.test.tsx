@@ -54,7 +54,7 @@ describe('OpportunityDetail staging defaults', () => {
     window.scrollTo = vi.fn();
   });
 
-  it('stages default tasks when Services Fit is selected', () => {
+  const renderDetail = (overrides: Partial<React.ComponentProps<typeof OpportunityDetail>> = {}) =>
     render(
       <OpportunityDetail
         opportunity={baseOpp}
@@ -67,8 +67,12 @@ describe('OpportunityDetail staging defaults', () => {
         onActionItemCreate={() => {}}
         onActionItemUpdate={() => {}}
         onActionItemDelete={() => {}}
+        {...overrides}
       />
     );
+
+  it('stages default tasks when Services Fit is selected', () => {
+    renderDetail();
 
     // Click Services Fit button
     const servicesFitBtn = screen.getByRole('button', { name: /services fit/i });
@@ -84,20 +88,7 @@ describe('OpportunityDetail staging defaults', () => {
   it('persists staged defaults via the save CTA and shows a success toast', async () => {
     const createSpy = vi.fn().mockResolvedValue(undefined);
 
-    render(
-      <OpportunityDetail
-        opportunity={baseOpp}
-        details={details}
-        historicalOpportunities={[baseOpp]}
-        onBack={() => {}}
-        onSave={() => {}}
-        users={[user]}
-        currentUser={user}
-        onActionItemCreate={createSpy}
-        onActionItemUpdate={() => {}}
-        onActionItemDelete={() => {}}
-      />
-    );
+    renderDetail({ onActionItemCreate: createSpy });
 
     fireEvent.click(screen.getByRole('button', { name: /services fit/i }));
 
@@ -117,20 +108,7 @@ describe('OpportunityDetail staging defaults', () => {
     const onBack = vi.fn();
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
 
-    render(
-      <OpportunityDetail
-        opportunity={baseOpp}
-        details={details}
-        historicalOpportunities={[baseOpp]}
-        onBack={onBack}
-        onSave={() => {}}
-        users={[user]}
-        currentUser={user}
-        onActionItemCreate={() => Promise.resolve()}
-        onActionItemUpdate={() => {}}
-        onActionItemDelete={() => {}}
-      />
-    );
+    renderDetail({ onBack, onActionItemCreate: () => Promise.resolve() });
 
     fireEvent.click(screen.getByRole('button', { name: /services fit/i }));
 
@@ -145,20 +123,7 @@ describe('OpportunityDetail staging defaults', () => {
   it('prompts before changing disposition away from Services Fit when staged defaults exist', () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
 
-    render(
-      <OpportunityDetail
-        opportunity={baseOpp}
-        details={details}
-        historicalOpportunities={[baseOpp]}
-        onBack={() => {}}
-        onSave={() => {}}
-        users={[user]}
-        currentUser={user}
-        onActionItemCreate={() => Promise.resolve()}
-        onActionItemUpdate={() => {}}
-        onActionItemDelete={() => {}}
-      />
-    );
+    renderDetail({ onActionItemCreate: () => Promise.resolve() });
 
     fireEvent.click(screen.getByRole('button', { name: /services fit/i }));
 
@@ -172,20 +137,7 @@ describe('OpportunityDetail staging defaults', () => {
   it('prompts before switching tabs away from disposition when staged defaults exist', () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
 
-    render(
-      <OpportunityDetail
-        opportunity={baseOpp}
-        details={details}
-        historicalOpportunities={[baseOpp]}
-        onBack={() => {}}
-        onSave={() => {}}
-        users={[user]}
-        currentUser={user}
-        onActionItemCreate={() => Promise.resolve()}
-        onActionItemUpdate={() => {}}
-        onActionItemDelete={() => {}}
-      />
-    );
+    renderDetail({ onActionItemCreate: () => Promise.resolve() });
 
     fireEvent.click(screen.getByRole('button', { name: /services fit/i }));
 
@@ -194,5 +146,42 @@ describe('OpportunityDetail staging defaults', () => {
     expect(confirmSpy).toHaveBeenCalled();
     expect(screen.getAllByText(/Pending save/i).length).toBeGreaterThan(0);
     confirmSpy.mockRestore();
+  });
+  it('shows save bar for disposition edits and hides after commit', async () => {
+    const saveSpy = vi.fn().mockResolvedValue({ ...baseOpp.disposition, notes: 'updated', version: 2 });
+
+    renderDetail({ onSave: saveSpy });
+
+    const notes = screen.getByLabelText(/general notes/i);
+    fireEvent.change(notes, { target: { value: 'Updated notes' } });
+
+    expect(await screen.findByText(/unsaved disposition changes/i)).toBeInTheDocument();
+
+    const saveButton = screen.getByRole('button', { name: /save changes/i });
+    fireEvent.click(saveButton);
+
+    await waitFor(() => {
+      expect(saveSpy).toHaveBeenCalled();
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: /save changes/i })).not.toBeInTheDocument();
+    });
+  });
+
+  it('discard button clears staged defaults and restores original state', async () => {
+    renderDetail();
+
+    fireEvent.click(screen.getByRole('button', { name: /services fit/i }));
+
+    expect(await screen.findByText(/unsaved disposition and action plan changes/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/pending save/i).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole('button', { name: /discard changes/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByText(/pending save/i)).not.toBeInTheDocument();
+    });
+    expect(screen.queryByText(/unsaved/i)).not.toBeInTheDocument();
   });
 });
