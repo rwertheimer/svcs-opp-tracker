@@ -153,11 +153,12 @@ interface OpportunityListProps {
   activeFilterCount: number;
   onOpenManageSavedViews: () => void;
   apiModeInfo?: string;
+  searchResetToken: number;
 }
 
-const OpportunityList: React.FC<OpportunityListProps> = ({ 
-    opportunities, 
-    onSelect, 
+const OpportunityList: React.FC<OpportunityListProps> = ({
+    opportunities,
+    onSelect,
     savedFilters, 
     onSaveFilter, 
     onApplyFilter, 
@@ -167,10 +168,15 @@ const OpportunityList: React.FC<OpportunityListProps> = ({
     onOpenOrgChart,
     activeFilterCount,
     onOpenManageSavedViews,
-    apiModeInfo
+    apiModeInfo,
+    searchResetToken
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [newViewName, setNewViewName] = useState('');
+
+  useEffect(() => {
+    setSearchTerm('');
+  }, [searchResetToken]);
 
   // Initial column widths
   const initialWidths = useMemo(() => ({

@@ -33,6 +33,7 @@ const App: React.FC = () => {
   const [filters, setFilters] = useState<FilterGroup>(initialFilterGroup);
   const [savedFilters, setSavedFilters] = useState<SavedFilter[]>([]);
   const [activeViewId, setActiveViewId] = useState<string | null>(null);
+  const [searchResetToken, setSearchResetToken] = useState(0);
   const [isManageViewsOpen, setIsManageViewsOpen] = useState(false);
   const [activeView, setActiveView] = useState<'opportunities' | 'tasks'>('opportunities');
   const [isScopingModalOpen, setIsScopingModalOpen] = useState(false);
@@ -466,10 +467,15 @@ const App: React.FC = () => {
     if (savedFilter) {
       setFilters(savedFilter.criteria);
       setActiveViewId(id);
+      setSearchResetToken(prev => prev + 1);
     }
   };
 
-  const handleClearFilters = () => { setFilters(initialFilterGroup); setActiveViewId(null); };
+  const handleClearFilters = () => {
+    setFilters(initialFilterGroup);
+    setActiveViewId(null);
+    setSearchResetToken(prev => prev + 1);
+  };
 
   const handleRenameSavedFilter = (id: string, newName: string) => {
     const trimmed = newName.trim();
@@ -575,6 +581,7 @@ const App: React.FC = () => {
   const handleRevertActiveView = () => {
     if (!activeSavedView) return;
     setFilters(activeSavedView.criteria);
+    setSearchResetToken(prev => prev + 1);
   };
 
   const renderContent = () => {
@@ -662,6 +669,7 @@ const App: React.FC = () => {
           activeFilterCount={filters.rules.length}
           onOpenManageSavedViews={() => setIsManageViewsOpen(true)}
           apiModeInfo={USE_SAVED_VIEWS_API ? (savedViewsApiOnline ? `API • ${currentUser?.email ?? (currentUser?.user_id || '').slice(0,8)}` : 'API • offline') : 'Local'}
+          searchResetToken={searchResetToken}
         />
       </>
     );
