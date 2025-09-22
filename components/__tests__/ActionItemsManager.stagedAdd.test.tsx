@@ -2,6 +2,7 @@ import React, { useLayoutEffect } from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import ActionItemsManager from '../../components/ActionItemsManager';
 import type { Opportunity, User } from '../../types';
+import { ActionItemStatus } from '../../types';
 import { DispositionActionPlanProvider, useDispositionActionPlan } from '../../components/disposition/DispositionActionPlanContext';
 
 const users: User[] = [{ user_id: 'u1', name: 'Alice', email: 'a@x.com' }];
@@ -48,6 +49,52 @@ const PrimeStaging: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   return <>{children}</>;
 };
 
+const ManagerHarness: React.FC = () => {
+  const {
+    isDispositioned,
+    actionItems,
+    stagedActionItems,
+    addStagedActionItem,
+    updateStagedActionItem,
+    removeStagedActionItem,
+    persistStagedActionItems,
+    isStagePersisting,
+    createActionItem,
+    updateActionItem,
+    deleteActionItem,
+    currentUser,
+    opportunity,
+  } = useDispositionActionPlan();
+
+  const handleCreate = (name: string) =>
+    createActionItem({
+      opportunity_id: opportunity.opportunities_id,
+      name,
+      status: ActionItemStatus.NotStarted,
+      due_date: '',
+      notes: '',
+      documents: [],
+      assigned_to_user_id: currentUser.user_id,
+    });
+
+  return (
+    <ActionItemsManager
+      users={users}
+      isDispositioned={isDispositioned}
+      actionItems={actionItems}
+      stagedActionItems={stagedActionItems}
+      isStagePersisting={isStagePersisting}
+      onAddStagedActionItem={addStagedActionItem}
+      onUpdateStagedActionItem={updateStagedActionItem}
+      onRemoveStagedActionItem={removeStagedActionItem}
+      onPersistStagedActionItems={persistStagedActionItems}
+      onCreateActionItem={handleCreate}
+      onUpdateActionItem={updateActionItem}
+      onDeleteActionItem={deleteActionItem}
+    />
+  );
+};
+
 vi.mock('../../components/Toast', () => ({
   ToastProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   useToast: () => ({ showToast: vi.fn() }),
@@ -67,7 +114,7 @@ describe('ActionItemsManager - staged add', () => {
         onActionItemDelete={vi.fn()}
       >
         <PrimeStaging>
-          <ActionItemsManager users={users} />
+          <ManagerHarness />
         </PrimeStaging>
       </DispositionActionPlanProvider>
     );
@@ -95,7 +142,7 @@ describe('ActionItemsManager - staged add', () => {
         onActionItemDelete={vi.fn()}
       >
         <PrimeStaging>
-          <ActionItemsManager users={users} />
+          <ManagerHarness />
         </PrimeStaging>
       </DispositionActionPlanProvider>
     );
