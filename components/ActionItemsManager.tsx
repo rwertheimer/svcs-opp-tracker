@@ -3,42 +3,31 @@ import React, { useMemo, useState } from 'react';
 import type { ActionItem, User } from '../types';
 import { ActionItemStatus } from '../types';
 import { ICONS } from '../constants';
-
-type StagedItem = { name: string; status: ActionItemStatus; due_date: string; notes: string };
+import { useDispositionActionPlan, type StagedActionItem } from './disposition/DispositionActionPlanContext';
 
 interface ActionItemsManagerProps {
-    opportunityId: string;
-    actionItems: ActionItem[];
     users: User[];
-    currentUser: User;
-    onCreate: (opportunityId: string, item: Omit<ActionItem, 'action_item_id' | 'created_by_user_id'>) => void;
-    onUpdate: (opportunityId: string, itemId: string, updates: Partial<ActionItem>) => void;
-    onDelete: (opportunityId: string, itemId: string) => void;
-    isDispositioned: boolean;
-    stagedDefaults?: StagedItem[];
-    onStageChange?: (index: number, updates: Partial<StagedItem>) => void;
-    onStageRemove?: (index: number) => void;
-    onStageAdd?: (item: StagedItem) => void;
-    onStagePersist?: () => void;
-    isStagePersisting?: boolean;
 }
 
 const ActionItemsManager: React.FC<ActionItemsManagerProps> = ({
-    opportunityId,
-    actionItems,
     users,
-    currentUser,
-    onCreate,
-    onUpdate,
-    onDelete,
-    isDispositioned,
-    stagedDefaults,
-    onStageChange,
-    onStageRemove,
-    onStageAdd,
-    onStagePersist,
-    isStagePersisting
+    
 }) => {
+    const {
+        opportunity,
+        actionItems,
+        currentUser,
+        isDispositioned,
+        stagedActionItems,
+        addStagedActionItem,
+        updateStagedActionItem,
+        removeStagedActionItem,
+        persistStagedActionItems,
+        isStagePersisting,
+        createActionItem,
+        updateActionItem,
+        deleteActionItem,
+    } = useDispositionActionPlan();
     const [newActionText, setNewActionText] = useState('');
     const [editingItemId, setEditingItemId] = useState<string | null>(null);
     const [expandedStagedIdx, setExpandedStagedIdx] = useState<number | null>(null);
@@ -47,14 +36,14 @@ const ActionItemsManager: React.FC<ActionItemsManagerProps> = ({
         e.preventDefault();
         if (newActionText.trim()) {
             // If we're staging defaults (pre-save), add to staged list instead of persisting
-            if (stagedDefaults && onStageAdd && (actionItems?.length || 0) === 0) {
+            if (stagedActionItems && stagedActionItems.length > 0 && (actionItems?.length || 0) === 0) {
                 // Append staged item and expand it for editing
-                onStageAdd({ name: newActionText.trim(), status: ActionItemStatus.NotStarted, due_date: '', notes: '' });
+                addStagedActionItem({ name: newActionText.trim(), status: ActionItemStatus.NotStarted, due_date: '', notes: '' });
                 setEditingItemId(null);
-                setExpandedStagedIdx((stagedDefaults?.length || 0));
+                setExpandedStagedIdx(stagedActionItems.length);
             } else {
                 const newAction: Omit<ActionItem, 'action_item_id' | 'created_by_user_id'> = {
-                    opportunity_id: opportunityId,
+                    opportunity_id: opportunity.opportunities_id,
                     name: newActionText.trim(),
                     status: ActionItemStatus.NotStarted,
                     due_date: '',
@@ -62,14 +51,14 @@ const ActionItemsManager: React.FC<ActionItemsManagerProps> = ({
                     documents: [],
                     assigned_to_user_id: currentUser.user_id,
                 };
-                onCreate(opportunityId, newAction);
+                createActionItem(newAction);
             }
             setNewActionText('');
         }
     };
 
     const handleUpdate = (itemId: string, updates: Partial<ActionItem>) => {
-        onUpdate(opportunityId, itemId, updates);
+        updateActionItem(itemId, updates);
     };
 
     const renderActionItem = (item: ActionItem) => {
@@ -98,7 +87,7 @@ const ActionItemsManager: React.FC<ActionItemsManagerProps> = ({
                             }}
                             className="text-slate-400 hover:text-indigo-600 p-1"
                          >{ICONS.edit}</button>
-                         <button onClick={() => onDelete(opportunityId, item.action_item_id)} className="text-slate-400 hover:text-red-500 p-1">{ICONS.trash}</button>
+                         <button onClick={() => deleteActionItem(item.action_item_id)} className="text-slate-400 hover:text-red-500 p-1">{ICONS.trash}</button>
                     </div>
                 </div>
                  {isEditing && (
@@ -154,7 +143,7 @@ const ActionItemsManager: React.FC<ActionItemsManagerProps> = ({
         return items;
     }, [actionItems, DEFAULT_ORDER]);
 
-    const renderStagedItem = (item: StagedItem, idx: number) => {
+    const renderStagedItem = (item: StagedActionItem, idx: number) => {
         const expanded = expandedStagedIdx === idx;
         return (
             <div key={`staged-${idx}`} className="p-3 bg-white rounded-md shadow-sm border border-dashed">
@@ -165,7 +154,7 @@ const ActionItemsManager: React.FC<ActionItemsManagerProps> = ({
                             <input
                                 type="text"
                                 value={item.name}
-                                onChange={(e) => onStageChange && onStageChange(idx, { name: e.target.value })}
+                                onChange={(e) => updateStagedActionItem(idx, { name: e.target.value })}
                                 className="ml-3 flex-grow min-w-0 p-1 text-sm border border-slate-300 rounded-md"
                                 placeholder="Task title"
                             />
@@ -185,11 +174,9 @@ const ActionItemsManager: React.FC<ActionItemsManagerProps> = ({
                         >
                             {ICONS.edit}
                         </button>
-                        {onStageRemove && (
-                            <button type="button" onClick={() => onStageRemove(idx)} className="text-slate-400 hover:text-red-500 p-1" title="Remove">
-                                {ICONS.trash}
-                            </button>
-                        )}
+                        <button type="button" onClick={() => removeStagedActionItem(idx)} className="text-slate-400 hover:text-red-500 p-1" title="Remove">
+                            {ICONS.trash}
+                        </button>
                         <span className="text-xs text-slate-500">Pending save</span>
                     </div>
                 </div>
@@ -199,7 +186,7 @@ const ActionItemsManager: React.FC<ActionItemsManagerProps> = ({
                             <label className="text-xs font-medium text-slate-600">Status</label>
                             <select
                                 value={item.status}
-                                onChange={(e) => onStageChange && onStageChange(idx, { status: e.target.value as ActionItemStatus })}
+                                onChange={(e) => updateStagedActionItem(idx, { status: e.target.value as ActionItemStatus })}
                                 className="mt-1 w-full p-1 text-sm border-slate-300 rounded-md"
                             >
                                 {Object.values(ActionItemStatus).map(s => <option key={s} value={s}>{s}</option>)}
@@ -210,7 +197,7 @@ const ActionItemsManager: React.FC<ActionItemsManagerProps> = ({
                             <input
                                 type="date"
                                 value={item.due_date}
-                                onChange={(e) => onStageChange && onStageChange(idx, { due_date: e.target.value })}
+                                onChange={(e) => updateStagedActionItem(idx, { due_date: e.target.value })}
                                 className="mt-1 w-full p-1 text-sm border-slate-300 rounded-md"
                             />
                         </div>
@@ -219,7 +206,7 @@ const ActionItemsManager: React.FC<ActionItemsManagerProps> = ({
                             <textarea
                                 rows={2}
                                 value={item.notes}
-                                onChange={(e) => onStageChange && onStageChange(idx, { notes: e.target.value })}
+                                onChange={(e) => updateStagedActionItem(idx, { notes: e.target.value })}
                                 className="w-full p-1 text-sm border-slate-300 rounded-md mt-1"
                                 placeholder="Add notes..."
                             />
@@ -237,22 +224,20 @@ const ActionItemsManager: React.FC<ActionItemsManagerProps> = ({
                 <h3 className="text-lg font-semibold text-slate-700">Action Plan</h3>
             </div>
             <div className={`p-6 space-y-4 transition-opacity duration-300 ${isDispositioned ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
-                {stagedDefaults && stagedDefaults.length > 0 && (
+                {stagedActionItems && stagedActionItems.length > 0 && (
                     <div className="p-4 border border-indigo-300 bg-indigo-50 rounded-md flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                         <div>
                             <p className="text-sm font-semibold text-indigo-900">Action plan staged</p>
                             <p className="text-xs text-indigo-700">Review the pending tasks below, then save them to add to the action plan.</p>
                         </div>
-                        {onStagePersist && (
-                            <button
+                        <button
                                 type="button"
-                                onClick={onStagePersist}
+                                onClick={persistStagedActionItems}
                                 className="inline-flex items-center justify-center px-4 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-md shadow hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed"
                                 disabled={isStagePersisting}
                             >
                                 {isStagePersisting ? 'Saving…' : 'Save Action Plan'}
-                            </button>
-                        )}
+                        </button>
                     </div>
                 )}
                 <div>
@@ -269,8 +254,8 @@ const ActionItemsManager: React.FC<ActionItemsManagerProps> = ({
                     </form>
                 </div>
                 <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
-                    {stagedDefaults && stagedDefaults.length > 0 && stagedDefaults.map(renderStagedItem)}
-                    {(!stagedDefaults || stagedDefaults.length === 0) && displayed.length === 0 && (
+                    {stagedActionItems && stagedActionItems.length > 0 && stagedActionItems.map((item, idx) => renderStagedItem(item, idx))}
+                    {(!stagedActionItems || stagedActionItems.length === 0) && displayed.length === 0 && (
                         <div className="text-center py-10 text-slate-400 text-sm">
                             <p>No action items yet.</p>
                             <p>Set disposition to "Services Fit" to add tasks.</p>
