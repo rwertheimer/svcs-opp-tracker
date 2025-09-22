@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Opportunity, AccountDetails, Disposition, SavedFilter, TaskWithOpportunityContext, ActionItem, FilterGroup, User, FilterRule } from './types';
 import { fetchOpportunities, fetchOpportunityDetails, saveDisposition, fetchUsers, createActionItem, updateActionItem, deleteActionItem, fetchSavedViews, createSavedView, updateSavedView, deleteSavedView as deleteSavedViewApi, setDefaultSavedView } from './services/apiService';
+import { normalizeActionItemDueDate } from './services/actionPlanGenerator';
 import OpportunityList from './components/OpportunityList';
 import OpportunityDetail from './components/OpportunityDetail';
 import Header from './components/Header';
@@ -23,6 +24,13 @@ const initialFilterGroup: FilterGroup = {
 const getNestedValue = (obj: any, path: string): any => {
   return path.split('.').reduce((acc, part) => acc && acc[part], obj);
 };
+
+const normalizeActionItemsForState = (items: ActionItem[] | undefined): ActionItem[] =>
+    (items || []).map(item => ({
+        ...item,
+        due_date: normalizeActionItemDueDate(item.due_date),
+        documents: item.documents ?? [],
+    }));
 
 const App: React.FC = () => {
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
@@ -69,7 +77,12 @@ const App: React.FC = () => {
         const preferred = storedUserId ? fetchedUsers.find(u => u.user_id === storedUserId) : undefined;
         setCurrentUser(preferred ?? fetchedUsers[0]);
       }
-      setOpportunities(fetchedOpportunities);
+      setOpportunities(
+        fetchedOpportunities.map(opp => ({
+          ...opp,
+          actionItems: normalizeActionItemsForState(opp.actionItems),
+        }))
+      );
     } catch (err: any) {
       setError('Failed to fetch initial data. Please try again.');
       console.error(err);
@@ -321,43 +334,93 @@ const App: React.FC = () => {
   };
   
   // --- NEW: Action Item Handlers ---
-  const handleActionItemCreate = async (opportunityId: string, actionItem: Omit<ActionItem, 'action_item_id' | 'created_by_user_id'>) => {
+  const handleActionItemCreate = async (
+      opportunityId: string,
+      actionItem: Omit<ActionItem, 'action_item_id' | 'created_by_user_id'>
+  ) => {
       if (!currentUser) return;
-      
-      // Optimistic update
-      const tempId = `temp-${Date.now()}`;
-      const newItem: ActionItem = {
+
+      const normalizedInput = {
           ...actionItem,
-          action_item_id: tempId,
-          created_by_user_id: currentUser.user_id
+          due_date: normalizeActionItemDueDate(actionItem.due_date),
+          documents: actionItem.documents ?? [],
+          assigned_to_user_id: actionItem.assigned_to_user_id ?? currentUser.user_id,
       };
-      setOpportunities(prev => prev.map(opp => opp.opportunities_id === opportunityId ? {...opp, actionItems: [...(opp.actionItems || []), newItem]} : opp));
-      // Keep selectedOpportunity in sync so UI updates immediately
-      setSelectedOpportunity(prev => prev && prev.opportunities_id === opportunityId 
-        ? { ...prev, actionItems: [...(prev.actionItems || []), newItem] } 
-        : prev);
+
+      const tempId = `temp-${Date.now()}`;
+      const optimisticItem: ActionItem = {
+          ...normalizedInput,
+          action_item_id: tempId,
+          created_by_user_id: currentUser.user_id,
+      };
+
+      setOpportunities(prev =>
+          prev.map(opp =>
+              opp.opportunities_id === opportunityId
+                  ? { ...opp, actionItems: [...(opp.actionItems || []), optimisticItem] }
+                  : opp
+          )
+      );
+      setSelectedOpportunity(prev =>
+          prev && prev.opportunities_id === opportunityId
+              ? { ...prev, actionItems: [...(prev.actionItems || []), optimisticItem] }
+              : prev
+      );
 
       try {
-          const savedItem = await createActionItem(opportunityId, newItem);
-          // Replace temp item with saved item from server
-          setOpportunities(prev => prev.map(opp => opp.opportunities_id === opportunityId 
-              ? {...opp, actionItems: (opp.actionItems || []).map(item => item.action_item_id === tempId ? savedItem : item)} 
-              : opp
-          ));
-          setSelectedOpportunity(prev => prev && prev.opportunities_id === opportunityId 
-            ? { ...prev, actionItems: (prev.actionItems || []).map(item => item.action_item_id === tempId ? savedItem : item) } 
-            : prev);
+          const savedItemResponse = await createActionItem(opportunityId, {
+              ...normalizedInput,
+              created_by_user_id: currentUser.user_id,
+          });
+          const savedItem: ActionItem = {
+              ...savedItemResponse,
+              due_date: normalizeActionItemDueDate(savedItemResponse.due_date),
+              documents: savedItemResponse.documents ?? [],
+          };
+
+          setOpportunities(prev =>
+              prev.map(opp =>
+                  opp.opportunities_id === opportunityId
+                      ? {
+                            ...opp,
+                            actionItems: (opp.actionItems || []).map(item =>
+                                item.action_item_id === tempId ? savedItem : item
+                            ),
+                        }
+                      : opp
+              )
+          );
+          setSelectedOpportunity(prev =>
+              prev && prev.opportunities_id === opportunityId
+                  ? {
+                        ...prev,
+                        actionItems: (prev.actionItems || []).map(item =>
+                            item.action_item_id === tempId ? savedItem : item
+                        ),
+                    }
+                  : prev
+          );
       } catch (error) {
-          console.error("Failed to create action item:", error);
-          setError("Failed to save new action item. Reverting change.");
-          // Revert optimistic update
-          setOpportunities(prev => prev.map(opp => opp.opportunities_id === opportunityId 
-              ? {...opp, actionItems: (opp.actionItems || []).filter(item => item.action_item_id !== tempId)} 
-              : opp
-          ));
-          setSelectedOpportunity(prev => prev && prev.opportunities_id === opportunityId 
-            ? { ...prev, actionItems: (prev.actionItems || []).filter(item => item.action_item_id !== tempId) } 
-            : prev);
+          console.error('Failed to create action item:', error);
+          setError('Failed to save new action item. Reverting change.');
+          setOpportunities(prev =>
+              prev.map(opp =>
+                  opp.opportunities_id === opportunityId
+                      ? {
+                            ...opp,
+                            actionItems: (opp.actionItems || []).filter(item => item.action_item_id !== tempId),
+                        }
+                      : opp
+              )
+          );
+          setSelectedOpportunity(prev =>
+              prev && prev.opportunities_id === opportunityId
+                  ? {
+                        ...prev,
+                        actionItems: (prev.actionItems || []).filter(item => item.action_item_id !== tempId),
+                    }
+                  : prev
+          );
       }
   };
 

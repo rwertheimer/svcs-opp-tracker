@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ActionItem, Disposition, DispositionStatus, Opportunity, User, Document } from '../../types';
 import { ActionItemStatus } from '../../types';
+import { generateDefaultPlan, normalizeActionItemDueDate } from '../../services/actionPlanGenerator';
 import { useToast } from '../Toast';
 
 interface DispositionActionPlanProviderProps {
@@ -58,14 +59,6 @@ interface DispositionActionPlanContextValue {
 
 const DispositionActionPlanContext = createContext<DispositionActionPlanContextValue | null>(null);
 
-const DEFAULT_ACTION_TASKS: Omit<StagedActionItem, 'assigned_to_user_id'>[] = [
-    { name: 'Contact Opp Owner', status: ActionItemStatus.NotStarted, due_date: '', notes: '', documents: [] },
-    { name: 'Scope and develop proposal', status: ActionItemStatus.NotStarted, due_date: '', notes: '', documents: [] },
-    { name: 'Share proposal', status: ActionItemStatus.NotStarted, due_date: '', notes: '', documents: [] },
-    { name: 'Finalize proposal', status: ActionItemStatus.NotStarted, due_date: '', notes: '', documents: [] },
-    { name: 'Ironclad approval', status: ActionItemStatus.NotStarted, due_date: '', notes: '', documents: [] },
-];
-
 export const DispositionActionPlanProvider: React.FC<DispositionActionPlanProviderProps> = ({
     opportunity,
     currentUser,
@@ -90,8 +83,57 @@ export const DispositionActionPlanProvider: React.FC<DispositionActionPlanProvid
     }, [opportunity.opportunities_id, opportunity.disposition.version]);
 
     const actionItems = useMemo(() => {
-        return (opportunity.actionItems || []).map(item => ({ ...item, documents: item.documents || [] }));
+        return (opportunity.actionItems || []).map(item => ({
+            ...item,
+            due_date: normalizeActionItemDueDate(item.due_date),
+            documents: item.documents || [],
+        }));
     }, [opportunity.actionItems]);
+
+    const seedActionPlanDefaults = useCallback(
+        (baselineDate: Date) => {
+            if (actionItems.length > 0) {
+                return;
+            }
+
+            const generatedPlan = generateDefaultPlan(opportunity, baselineDate);
+
+            setStagedActionItems(prev => {
+                if (prev.length === 0) {
+                    return generatedPlan.map(item => ({
+                        ...item,
+                        assigned_to_user_id: currentUser.user_id,
+                    }));
+                }
+
+                let updated = false;
+                const merged = prev.map(item => {
+                    if (item.due_date) {
+                        return item;
+                    }
+
+                    const template = generatedPlan.find(planItem => planItem.name === item.name);
+                    if (template?.due_date) {
+                        updated = true;
+                        return { ...item, due_date: template.due_date };
+                    }
+
+                    return item;
+                });
+
+                return updated ? merged : prev;
+            });
+        },
+        [actionItems.length, currentUser.user_id, opportunity]
+    );
+
+    useEffect(() => {
+        if (draftDisposition.status !== 'Services Fit') {
+            return;
+        }
+
+        seedActionPlanDefaults(new Date());
+    }, [draftDisposition.status, seedActionPlanDefaults]);
 
     const normalizeDispositionForCompare = useCallback((disposition: Disposition) => ({
         status: disposition.status,
@@ -160,23 +202,19 @@ export const DispositionActionPlanProvider: React.FC<DispositionActionPlanProvid
             });
 
             if (status === 'Services Fit') {
-                const hasPersisted = actionItems.length > 0;
-                if (!hasPersisted && stagedActionItems.length === 0) {
-                    setStagedActionItems(
-                        DEFAULT_ACTION_TASKS.map(item => ({ ...item, assigned_to_user_id: currentUser.user_id }))
-                    );
-                }
-            } else {
+                seedActionPlanDefaults(new Date());
+            }
+
+            if (status !== 'Services Fit') {
                 setStagedActionItems([]);
             }
 
             return true;
         },
         [
-            actionItems.length,
             confirmDiscardStaged,
-            currentUser.user_id,
             opportunity.opportunities_has_services_flag,
+            seedActionPlanDefaults,
             stagedActionItems.length,
         ]
     );
@@ -215,7 +253,7 @@ export const DispositionActionPlanProvider: React.FC<DispositionActionPlanProvid
                 opportunity_id: opportunity.opportunities_id,
                 name: item.name,
                 status: item.status,
-                due_date: item.due_date,
+                due_date: normalizeActionItemDueDate(item.due_date),
                 notes: item.notes,
                 documents: item.documents ?? [],
                 assigned_to_user_id: item.assigned_to_user_id || currentUser.user_id,

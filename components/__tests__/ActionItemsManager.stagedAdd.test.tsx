@@ -1,5 +1,5 @@
 import React, { useLayoutEffect } from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import ActionItemsManager from '../../components/ActionItemsManager';
 import SaveBar from '../../components/disposition/SaveBar';
 import type { Opportunity, User } from '../../types';
@@ -116,6 +116,46 @@ describe('ActionItemsManager - staged add', () => {
       expect(onCreate).toHaveBeenCalled();
       expect(onSaveDisposition).toHaveBeenCalled();
     });
+  });
+
+  it('flags seeded defaults as dirty immediately for discard confirmation', async () => {
+    const onCreate = vi.fn();
+    const onSaveDisposition = vi.fn();
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    let captured: ReturnType<typeof useDispositionActionPlan> | null = null;
+
+    const CaptureContext: React.FC = () => {
+      captured = useDispositionActionPlan();
+      return null;
+    };
+
+    render(
+      <DispositionActionPlanProvider
+        opportunity={baseOpportunity}
+        currentUser={users[0]}
+        onSaveDisposition={onSaveDisposition}
+        onActionItemCreate={onCreate}
+        onActionItemUpdate={vi.fn()}
+        onActionItemDelete={vi.fn()}
+      >
+        <CaptureContext />
+      </DispositionActionPlanProvider>
+    );
+
+    expect(captured).not.toBeNull();
+
+    act(() => {
+      expect(captured!.changeDispositionStatus('Services Fit')).toBe(true);
+    });
+
+    act(() => {
+      captured!.confirmDiscardChanges();
+    });
+
+    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('action plan tasks'));
+
+    confirmSpy.mockRestore();
   });
 });
 
