@@ -78,11 +78,10 @@ describe('OpportunityDetail staging defaults', () => {
     const servicesFitBtn = screen.getByRole('button', { name: /services fit/i });
     fireEvent.click(servicesFitBtn);
 
-    // Expect staged defaults to appear (collapsed rows with Pending save label)
-    // Use one of the canonical defaults
-    expect(screen.getAllByText(/Pending save/i).length).toBeGreaterThan(0);
-    // The staged task title input may be collapsed; ensure the text exists in the DOM
-    expect(screen.getAllByText(/Contact Opp Owner/i).length).toBeGreaterThan(0);
+    // Expect staged defaults to appear with unsaved indicator
+    expect(screen.getAllByText(/unsaved task/i).length).toBeGreaterThan(0);
+    // The staged task title appears as an editable input
+    expect(screen.getAllByDisplayValue(/Contact Opp Owner/i).length).toBeGreaterThan(0);
   });
 
   it('persists staged defaults via the save CTA and shows a success toast', async () => {
@@ -92,7 +91,7 @@ describe('OpportunityDetail staging defaults', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /services fit/i }));
 
-    const saveButton = await screen.findByRole('button', { name: /save action plan/i });
+    const saveButton = await screen.findByRole('button', { name: /save changes/i });
     fireEvent.click(saveButton);
 
     await waitFor(() => {
@@ -100,7 +99,7 @@ describe('OpportunityDetail staging defaults', () => {
     });
     expect(showToastSpy).toHaveBeenCalledWith('Action plan saved', 'success');
     await waitFor(() => {
-      expect(screen.queryByText(/Pending save/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/unsaved task/i)).not.toBeInTheDocument();
     });
   });
 
@@ -116,7 +115,7 @@ describe('OpportunityDetail staging defaults', () => {
 
     expect(confirmSpy).toHaveBeenCalled();
     expect(onBack).not.toHaveBeenCalled();
-    expect(screen.getAllByText(/Pending save/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/unsaved task/i).length).toBeGreaterThan(0);
     confirmSpy.mockRestore();
   });
 
@@ -130,7 +129,7 @@ describe('OpportunityDetail staging defaults', () => {
     fireEvent.click(screen.getByRole('button', { name: /no action needed/i }));
 
     expect(confirmSpy).toHaveBeenCalled();
-    expect(screen.getAllByText(/Pending save/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/unsaved task/i).length).toBeGreaterThan(0);
     confirmSpy.mockRestore();
   });
 
@@ -144,7 +143,7 @@ describe('OpportunityDetail staging defaults', () => {
     fireEvent.click(screen.getByRole('button', { name: /support/i }));
 
     expect(confirmSpy).toHaveBeenCalled();
-    expect(screen.getAllByText(/Pending save/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/unsaved task/i).length).toBeGreaterThan(0);
     confirmSpy.mockRestore();
   });
   it('shows save bar for disposition edits and hides after commit', async () => {
@@ -175,12 +174,12 @@ describe('OpportunityDetail staging defaults', () => {
     fireEvent.click(screen.getByRole('button', { name: /services fit/i }));
 
     expect(await screen.findByText(/unsaved disposition and action plan changes/i)).toBeInTheDocument();
-    expect(screen.getAllByText(/pending save/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/unsaved task/i).length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole('button', { name: /discard changes/i }));
 
     await waitFor(() => {
-      expect(screen.queryByText(/pending save/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/unsaved task/i)).not.toBeInTheDocument();
     });
     expect(screen.queryByText(/unsaved/i)).not.toBeInTheDocument();
   });

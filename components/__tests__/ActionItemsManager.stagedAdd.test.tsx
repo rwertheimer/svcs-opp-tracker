@@ -1,8 +1,8 @@
 import React, { useLayoutEffect } from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import ActionItemsManager from '../../components/ActionItemsManager';
+import SaveBar from '../../components/disposition/SaveBar';
 import type { Opportunity, User } from '../../types';
-import { ActionItemStatus } from '../../types';
 import { DispositionActionPlanProvider, useDispositionActionPlan } from '../../components/disposition/DispositionActionPlanContext';
 
 const users: User[] = [{ user_id: 'u1', name: 'Alice', email: 'a@x.com' }];
@@ -49,51 +49,12 @@ const PrimeStaging: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   return <>{children}</>;
 };
 
-const ManagerHarness: React.FC = () => {
-  const {
-    isDispositioned,
-    actionItems,
-    stagedActionItems,
-    addStagedActionItem,
-    updateStagedActionItem,
-    removeStagedActionItem,
-    persistStagedActionItems,
-    isStagePersisting,
-    createActionItem,
-    updateActionItem,
-    deleteActionItem,
-    currentUser,
-    opportunity,
-  } = useDispositionActionPlan();
-
-  const handleCreate = (name: string) =>
-    createActionItem({
-      opportunity_id: opportunity.opportunities_id,
-      name,
-      status: ActionItemStatus.NotStarted,
-      due_date: '',
-      notes: '',
-      documents: [],
-      assigned_to_user_id: currentUser.user_id,
-    });
-
-  return (
-    <ActionItemsManager
-      users={users}
-      isDispositioned={isDispositioned}
-      actionItems={actionItems}
-      stagedActionItems={stagedActionItems}
-      isStagePersisting={isStagePersisting}
-      onAddStagedActionItem={addStagedActionItem}
-      onUpdateStagedActionItem={updateStagedActionItem}
-      onRemoveStagedActionItem={removeStagedActionItem}
-      onPersistStagedActionItems={persistStagedActionItems}
-      onCreateActionItem={handleCreate}
-      onUpdateActionItem={updateActionItem}
-      onDeleteActionItem={deleteActionItem}
-    />
-  );
-};
+const ManagerHarness: React.FC = () => (
+  <>
+    <SaveBar />
+    <ActionItemsManager users={users} />
+  </>
+);
 
 vi.mock('../../components/Toast', () => ({
   ToastProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -119,11 +80,11 @@ describe('ActionItemsManager - staged add', () => {
       </DispositionActionPlanProvider>
     );
 
-    await screen.findAllByText(/Pending save/i);
+    await screen.findByText(/Unsaved action plan tasks/i);
 
-    const input = screen.getByPlaceholderText('Add a new task...');
+    const input = screen.getByPlaceholderText('Add a new task');
     fireEvent.change(input, { target: { value: 'Follow-up email' } });
-    fireEvent.click(screen.getByRole('button', { name: /add/i }));
+    fireEvent.click(screen.getByRole('button', { name: /add task/i }));
 
     expect(onCreate).not.toHaveBeenCalled();
     expect(screen.getByDisplayValue('Follow-up email')).toBeInTheDocument();
@@ -131,12 +92,13 @@ describe('ActionItemsManager - staged add', () => {
 
   it('persists staged defaults when save CTA is clicked', async () => {
     const onCreate = vi.fn().mockResolvedValue(undefined);
+    const onSaveDisposition = vi.fn().mockResolvedValue(baseOpportunity.disposition);
 
     render(
       <DispositionActionPlanProvider
         opportunity={baseOpportunity}
         currentUser={users[0]}
-        onSaveDisposition={vi.fn()}
+        onSaveDisposition={onSaveDisposition}
         onActionItemCreate={onCreate}
         onActionItemUpdate={vi.fn()}
         onActionItemDelete={vi.fn()}
@@ -147,11 +109,12 @@ describe('ActionItemsManager - staged add', () => {
       </DispositionActionPlanProvider>
     );
 
-    const saveButton = await screen.findByRole('button', { name: /save action plan/i });
+    const saveButton = await screen.findByRole('button', { name: /save changes/i });
     fireEvent.click(saveButton);
 
     await waitFor(() => {
       expect(onCreate).toHaveBeenCalled();
+      expect(onSaveDisposition).toHaveBeenCalled();
     });
   });
 });
