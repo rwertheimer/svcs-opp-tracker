@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ActionItem, Disposition, DispositionStatus, Opportunity, User, Document } from '../../types';
 import { ActionItemStatus } from '../../types';
+import { generateDefaultPlan } from '../../services/actionPlanGenerator';
 import { useToast } from '../Toast';
 
 interface DispositionActionPlanProviderProps {
@@ -58,14 +59,6 @@ interface DispositionActionPlanContextValue {
 
 const DispositionActionPlanContext = createContext<DispositionActionPlanContextValue | null>(null);
 
-const DEFAULT_ACTION_TASKS: Omit<StagedActionItem, 'assigned_to_user_id'>[] = [
-    { name: 'Contact Opp Owner', status: ActionItemStatus.NotStarted, due_date: '', notes: '', documents: [] },
-    { name: 'Scope and develop proposal', status: ActionItemStatus.NotStarted, due_date: '', notes: '', documents: [] },
-    { name: 'Share proposal', status: ActionItemStatus.NotStarted, due_date: '', notes: '', documents: [] },
-    { name: 'Finalize proposal', status: ActionItemStatus.NotStarted, due_date: '', notes: '', documents: [] },
-    { name: 'Ironclad approval', status: ActionItemStatus.NotStarted, due_date: '', notes: '', documents: [] },
-];
-
 export const DispositionActionPlanProvider: React.FC<DispositionActionPlanProviderProps> = ({
     opportunity,
     currentUser,
@@ -92,6 +85,51 @@ export const DispositionActionPlanProvider: React.FC<DispositionActionPlanProvid
     const actionItems = useMemo(() => {
         return (opportunity.actionItems || []).map(item => ({ ...item, documents: item.documents || [] }));
     }, [opportunity.actionItems]);
+
+    useEffect(() => {
+        if (draftDisposition.status !== 'Services Fit') {
+            return;
+        }
+
+        if (actionItems.length > 0) {
+            return;
+        }
+
+        const generatedPlan = generateDefaultPlan(opportunity, new Date());
+
+        if (stagedActionItems.length === 0) {
+            setStagedActionItems(
+                generatedPlan.map(item => ({
+                    ...item,
+                    assigned_to_user_id: currentUser.user_id,
+                }))
+            );
+            return;
+        }
+
+        if (!stagedActionItems.some(item => !item.due_date)) {
+            return;
+        }
+
+        setStagedActionItems(prev => {
+            let updated = false;
+            const merged = prev.map(item => {
+                if (item.due_date) {
+                    return item;
+                }
+
+                const template = generatedPlan.find(planItem => planItem.name === item.name);
+                if (template?.due_date) {
+                    updated = true;
+                    return { ...item, due_date: template.due_date };
+                }
+
+                return item;
+            });
+
+            return updated ? merged : prev;
+        });
+    }, [actionItems.length, currentUser.user_id, draftDisposition.status, opportunity]);
 
     const normalizeDispositionForCompare = useCallback((disposition: Disposition) => ({
         status: disposition.status,
@@ -159,26 +197,13 @@ export const DispositionActionPlanProvider: React.FC<DispositionActionPlanProvid
                 return next;
             });
 
-            if (status === 'Services Fit') {
-                const hasPersisted = actionItems.length > 0;
-                if (!hasPersisted && stagedActionItems.length === 0) {
-                    setStagedActionItems(
-                        DEFAULT_ACTION_TASKS.map(item => ({ ...item, assigned_to_user_id: currentUser.user_id }))
-                    );
-                }
-            } else {
+            if (status !== 'Services Fit') {
                 setStagedActionItems([]);
             }
 
             return true;
         },
-        [
-            actionItems.length,
-            confirmDiscardStaged,
-            currentUser.user_id,
-            opportunity.opportunities_has_services_flag,
-            stagedActionItems.length,
-        ]
+        [confirmDiscardStaged, opportunity.opportunities_has_services_flag, stagedActionItems.length]
     );
 
     const updateDisposition = useCallback((updates: Partial<Disposition>) => {
