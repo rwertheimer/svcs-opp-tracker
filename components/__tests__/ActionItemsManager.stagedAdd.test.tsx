@@ -37,7 +37,7 @@ const baseOpportunity: Opportunity = {
   opportunities_amount: 0,
   opportunities_forecast_category: 'Pipeline',
   opportunities_services_forecast_sfdc: 0,
-  disposition: { status: 'Not Reviewed', notes: '', version: 1, last_updated_by_user_id: users[0].user_id },
+  disposition: { status: 'Not Reviewed', notes: '', version: 1, last_updated_by_user_id: users[0].user_id, documents: [] },
   actionItems: [],
 };
 

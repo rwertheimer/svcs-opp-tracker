@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import OpportunityDetail from '../../components/OpportunityDetail';
 import type { Opportunity, AccountDetails, User, ActionItem } from '../../types';
 
@@ -42,7 +42,7 @@ const baseOpp: Opportunity = {
   opportunities_amount: 0,
   opportunities_forecast_category: 'Pipeline',
   opportunities_services_forecast_sfdc: 0,
-  disposition: { status: 'Not Reviewed', notes: '', version: 1, last_updated_by_user_id: user.user_id },
+  disposition: { status: 'Not Reviewed', notes: '', version: 1, last_updated_by_user_id: user.user_id, documents: [] },
   actionItems: [] as ActionItem[],
 };
 
@@ -182,5 +182,18 @@ describe('OpportunityDetail staging defaults', () => {
       expect(screen.queryByText(/unsaved task/i)).not.toBeInTheDocument();
     });
     expect(screen.queryByText(/unsaved/i)).not.toBeInTheDocument();
+  });
+
+  it('shows save bar when supporting documents are edited', async () => {
+    renderDetail();
+
+    const documentsHeader = screen.getByText(/supporting documents/i);
+    const addButton = within(documentsHeader.parentElement as HTMLElement).getByRole('button', { name: /add/i });
+    fireEvent.click(addButton);
+
+    const titleInput = await screen.findByLabelText(/title/i);
+    fireEvent.change(titleInput, { target: { value: 'Proposal Link' } });
+
+    expect(await screen.findByText(/unsaved disposition changes/i)).toBeInTheDocument();
   });
 });

@@ -291,7 +291,10 @@ const App: React.FC = () => {
     const originalOpportunity = opportunities.find(opp => opp.opportunities_id === selectedOpportunity.opportunities_id);
     if (!originalOpportunity) return;
 
-    const updatedOpportunity = { ...originalOpportunity, disposition: { ...disposition, last_updated_by_user_id: currentUser.user_id }};
+    const updatedOpportunity = {
+      ...originalOpportunity,
+      disposition: { ...disposition, documents: disposition.documents ?? [], last_updated_by_user_id: currentUser.user_id }
+    };
     
     // Optimistically update local state and keep user on the detail view
     setOpportunities(prevOpps => prevOpps.map(opp => opp.opportunities_id === updatedOpportunity.opportunities_id ? updatedOpportunity : opp));
@@ -553,7 +556,8 @@ const App: React.FC = () => {
         status: 'Not Reviewed',
         notes: `Initial Contact: ${data.contact}\n\nDescription:\n${data.description}`,
         version: 1,
-        last_updated_by_user_id: currentUser?.user_id ?? ''
+        last_updated_by_user_id: currentUser?.user_id ?? '',
+        documents: [],
       }
     };
     setOpportunities(prev => [newScopingOpp, ...prev]);

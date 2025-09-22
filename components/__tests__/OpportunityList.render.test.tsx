@@ -34,7 +34,7 @@ const { sampleOpp } = vi.hoisted(() => ({ sampleOpp: {
   opportunities_amount: 100000,
   opportunities_forecast_category: 'Pipeline',
   opportunities_services_forecast_sfdc: 0,
-  disposition: { status: 'Not Reviewed', notes: '', version: 1, last_updated_by_user_id: 'u1' },
+  disposition: { status: 'Not Reviewed', notes: '', version: 1, last_updated_by_user_id: 'u1', documents: [] },
   actionItems: [],
 } }));
 

@@ -348,6 +348,7 @@ apiRouter.post('/opportunities/:opportunityId/disposition', async (req: expressT
         const changeDetails = {
             status: updatedDisposition.status,
             notes: updatedDisposition.notes,
+            documents: updatedDisposition.documents,
         };
         await client.query(
             'INSERT INTO disposition_history (opportunity_id, updated_by_user_id, change_details) VALUES ($1, $2, $3)',

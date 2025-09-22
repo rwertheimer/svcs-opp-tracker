@@ -38,6 +38,7 @@ const makeOpportunity = (overrides: Partial<Opportunity> = {}): Opportunity => {
             notes: '',
             version: 1,
             last_updated_by_user_id: 'user-1',
+            documents: [],
         },
         actionItems: [],
     };

@@ -3,6 +3,7 @@ import React from 'react';
 import type { Disposition, Opportunity } from '../types';
 import { DispositionStatus } from '../types';
 import { ICONS, FORECAST_CATEGORIES } from '../constants';
+import DocumentLinksEditor from './DocumentLinksEditor';
 
 interface DispositionFormProps {
     opportunity: Opportunity;
@@ -84,9 +85,24 @@ const DispositionForm: React.FC<DispositionFormProps> = ({
                 </div>
             )}
 
-            <div>
-                <label htmlFor="notes" className="block text-sm font-medium text-slate-700 mb-2">General Notes</label>
-                <textarea id="notes" rows={8} className="w-full p-2 border border-slate-300 rounded-md shadow-sm" placeholder="e.g., Customer is planning a major migration..." value={disposition.notes || ''} onChange={e => onDispositionChange({ notes: e.target.value })} />
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)]">
+                <div>
+                    <label htmlFor="notes" className="mb-2 block text-sm font-medium text-slate-700">
+                        General Notes
+                    </label>
+                    <textarea
+                        id="notes"
+                        rows={8}
+                        className="w-full rounded-md border border-slate-300 p-2 shadow-sm"
+                        placeholder="e.g., Customer is planning a major migration..."
+                        value={disposition.notes || ''}
+                        onChange={e => onDispositionChange({ notes: e.target.value })}
+                    />
+                </div>
+                <DocumentLinksEditor
+                    documents={disposition.documents ?? []}
+                    onChange={docs => onDispositionChange({ documents: docs })}
+                />
             </div>
         </div>
     </div>

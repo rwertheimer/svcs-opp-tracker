@@ -182,6 +182,7 @@ async function seedDatabase() {
             reason: '',
             version: 1,
             last_updated_by_user_id: insertedUsers[0].user_id,
+            documents: [],
         };
 
         for (const row of batchRows) {

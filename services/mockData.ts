@@ -195,6 +195,7 @@ const generatePreDispositionedOpp = (): Opportunity => {
             // FIX: Removed `actionItems` from `disposition` as it belongs on the Opportunity object.
             version: 1,
             last_updated_by_user_id: MOCK_USERS[0].user_id,
+            documents: [],
         },
         // FIX: Added `actionItems` to the top-level Opportunity object.
         actionItems: defaultActionItems
@@ -253,6 +254,7 @@ export const generateOpportunities = (count: number): Opportunity[] => {
                 notes: '',
                 version: 1,
                 last_updated_by_user_id: MOCK_USERS[0].user_id,
+                documents: [],
             },
             // FIX: Added `actionItems` to the top-level Opportunity object.
             actionItems: []

@@ -4,6 +4,39 @@ import { ActionItemStatus } from '../../types';
 import { generateDefaultPlan } from '../../services/actionPlanGenerator';
 import { useToast } from '../Toast';
 
+const cloneDocuments = (documents?: Document[] | null): Document[] =>
+    Array.isArray(documents) ? documents.map(document => ({ ...document })) : [];
+
+const cloneDisposition = (source: Disposition): Disposition => ({
+    ...source,
+    notes: source.notes ?? '',
+    reason: source.reason ?? '',
+    documents: cloneDocuments(source.documents),
+});
+
+const mergeDispositionWithTaskDocuments = (opportunity: Opportunity, source: Disposition): Disposition => {
+    const base = cloneDisposition(source);
+    const taskDocuments = (opportunity.actionItems || []).flatMap(item => cloneDocuments(item.documents));
+    if (taskDocuments.length === 0) {
+        return base;
+    }
+
+    const existingIds = new Set(base.documents.map(doc => doc.id));
+    const mergedDocuments = [...base.documents];
+
+    taskDocuments.forEach(doc => {
+        if (!doc.id || !existingIds.has(doc.id)) {
+            mergedDocuments.push(doc);
+            if (doc.id) existingIds.add(doc.id);
+        }
+    });
+
+    return {
+        ...base,
+        documents: mergedDocuments,
+    };
+};
+
 interface DispositionActionPlanProviderProps {
     opportunity: Opportunity;
     currentUser: User;
@@ -69,16 +102,21 @@ export const DispositionActionPlanProvider: React.FC<DispositionActionPlanProvid
     children,
 }) => {
     const { showToast } = useToast();
-    const [baselineDisposition, setBaselineDisposition] = useState<Disposition>({ ...opportunity.disposition });
-    const [draftDisposition, setDraftDisposition] = useState<Disposition>({ ...opportunity.disposition });
+    const [baselineDisposition, setBaselineDisposition] = useState<Disposition>(() =>
+        mergeDispositionWithTaskDocuments(opportunity, opportunity.disposition)
+    );
+    const [draftDisposition, setDraftDisposition] = useState<Disposition>(() =>
+        mergeDispositionWithTaskDocuments(opportunity, opportunity.disposition)
+    );
     const [stagedActionItems, setStagedActionItems] = useState<StagedActionItem[]>([]);
     const [isStagePersisting, setIsStagePersisting] = useState(false);
     const [isCommittingDraft, setIsCommittingDraft] = useState(false);
     const saveQueue = useRef<Promise<void>>(Promise.resolve());
 
     useEffect(() => {
-        setBaselineDisposition({ ...opportunity.disposition });
-        setDraftDisposition({ ...opportunity.disposition });
+        const hydrated = mergeDispositionWithTaskDocuments(opportunity, opportunity.disposition);
+        setBaselineDisposition(hydrated);
+        setDraftDisposition(hydrated);
         setStagedActionItems([]);
     }, [opportunity.opportunities_id, opportunity.disposition.version]);
 
@@ -137,17 +175,31 @@ export const DispositionActionPlanProvider: React.FC<DispositionActionPlanProvid
         reason: disposition.reason ?? '',
         services_amount_override: disposition.services_amount_override ?? null,
         forecast_category_override: disposition.forecast_category_override ?? '',
+        documents: cloneDocuments(disposition.documents).map(doc => ({
+            id: doc.id ?? '',
+            text: doc.text ?? '',
+            url: doc.url ?? '',
+        })),
     }), []);
 
     const hasUnsavedDispositionChanges = useMemo(() => {
         const normalizedDraft = normalizeDispositionForCompare(draftDisposition);
         const normalizedBaseline = normalizeDispositionForCompare(baselineDisposition);
+        const documentsChanged =
+            normalizedDraft.documents.length !== normalizedBaseline.documents.length ||
+            normalizedDraft.documents.some((doc, index) => {
+                const baselineDoc = normalizedBaseline.documents[index];
+                return (
+                    !baselineDoc || doc.id !== baselineDoc.id || doc.text !== baselineDoc.text || doc.url !== baselineDoc.url
+                );
+            });
         return (
             normalizedDraft.status !== normalizedBaseline.status ||
             normalizedDraft.notes !== normalizedBaseline.notes ||
             normalizedDraft.reason !== normalizedBaseline.reason ||
             normalizedDraft.services_amount_override !== normalizedBaseline.services_amount_override ||
-            normalizedDraft.forecast_category_override !== normalizedBaseline.forecast_category_override
+            normalizedDraft.forecast_category_override !== normalizedBaseline.forecast_category_override ||
+            documentsChanged
         );
     }, [baselineDisposition, draftDisposition, normalizeDispositionForCompare]);
 
@@ -207,11 +259,15 @@ export const DispositionActionPlanProvider: React.FC<DispositionActionPlanProvid
     );
 
     const updateDisposition = useCallback((updates: Partial<Disposition>) => {
-        setDraftDisposition(prev => ({ ...prev, ...updates }));
+        setDraftDisposition(prev => ({
+            ...prev,
+            ...updates,
+            documents: updates.documents ? cloneDocuments(updates.documents) : prev.documents,
+        }));
     }, []);
 
     const resetDraft = useCallback(() => {
-        setDraftDisposition({ ...baselineDisposition });
+        setDraftDisposition(cloneDisposition(baselineDisposition));
         setStagedActionItems([]);
     }, [baselineDisposition]);
 
@@ -230,7 +286,7 @@ export const DispositionActionPlanProvider: React.FC<DispositionActionPlanProvid
     }, [hasStagedActionPlanChanges, hasUnsavedDispositionChanges, isDirty, resetDraft]);
 
     const saveDisposition = useCallback(() => {
-        const payload = { ...draftDisposition };
+        const payload = cloneDisposition(draftDisposition);
         return queueSaveOperation(() => Promise.resolve(onSaveDisposition(payload)));
     }, [draftDisposition, onSaveDisposition, queueSaveOperation]);
 
@@ -269,11 +325,12 @@ export const DispositionActionPlanProvider: React.FC<DispositionActionPlanProvid
         try {
             await queueSaveOperation(async () => {
                 if (shouldSaveDisposition) {
-                    const payload = { ...draftDisposition };
+                    const payload = cloneDisposition(draftDisposition);
                     const result = await onSaveDisposition(payload);
-                    const savedDisposition = (result ?? payload) as Disposition;
-                    setBaselineDisposition({ ...savedDisposition });
-                    setDraftDisposition({ ...savedDisposition });
+                    const savedDisposition = cloneDisposition((result ?? payload) as Disposition);
+                    const hydratedSaved = mergeDispositionWithTaskDocuments(opportunity, savedDisposition);
+                    setBaselineDisposition(hydratedSaved);
+                    setDraftDisposition(hydratedSaved);
                 }
 
                 if (shouldPersistStaged) {
@@ -297,6 +354,7 @@ export const DispositionActionPlanProvider: React.FC<DispositionActionPlanProvid
         draftDisposition,
         hasUnsavedDispositionChanges,
         onSaveDisposition,
+        opportunity,
         persistStagedItems,
         queueSaveOperation,
         stagedActionItems.length,

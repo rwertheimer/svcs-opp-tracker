@@ -92,7 +92,8 @@ export interface Disposition {
     reason?: string;
     services_amount_override?: number;
     forecast_category_override?: string;
-    
+    documents: Document[];
+
     // --- Multi-User & Concurrency Control ---
     version: number;
     last_updated_by_user_id: string;
