@@ -1,26 +1,27 @@
 import React, { useMemo, useState, useEffect, useRef, useLayoutEffect, useCallback } from 'react';
 import type { Opportunity, AccountDetails, SupportTicket, UsageData, ProjectHistory, Disposition, User, ActionItem } from '../types';
-import { ActionItemStatus } from '../types';
 import Card from './Card';
 import Tag from './Tag';
 import DispositionForm from './DispositionForm';
 import ActionItemsManager from './ActionItemsManager';
 import { ICONS } from '../constants';
-import { useToast } from './Toast';
+import { DispositionActionPlanProvider, useDispositionActionPlan } from './disposition/DispositionActionPlanContext';
 
 interface OpportunityDetailProps {
   opportunity: Opportunity;
   details: AccountDetails;
   historicalOpportunities: Opportunity[];
   onBack: () => void;
-  onSave: (disposition: Disposition) => void;
+  onSave: (disposition: Disposition) => Promise<void> | void;
   users: User[];
   currentUser: User;
-  onActionItemCreate: (opportunityId: string, item: Omit<ActionItem, 'action_item_id' | 'created_by_user_id'>) => void;
-  onActionItemUpdate: (opportunityId: string, itemId: string, updates: Partial<ActionItem>) => void;
-  onActionItemDelete: (opportunityId: string, itemId: string) => void;
+  onActionItemCreate: (opportunityId: string, item: Omit<ActionItem, 'action_item_id' | 'created_by_user_id'>) => Promise<void> | void;
+  onActionItemUpdate: (opportunityId: string, itemId: string, updates: Partial<ActionItem>) => Promise<void> | void;
+  onActionItemDelete: (opportunityId: string, itemId: string) => Promise<void> | void;
   initialSectionId?: string;
 }
+
+type OpportunityDetailInnerProps = Omit<OpportunityDetailProps, 'onSave' | 'onActionItemCreate' | 'onActionItemUpdate' | 'onActionItemDelete' | 'currentUser'>;
 
 const SECTIONS = [
     { id: 'usage-history', label: 'Usage', icon: ICONS.table },
@@ -524,13 +525,10 @@ const HistoricalOpportunitiesList: React.FC<{ opportunities: Opportunity[] }> = 
     );
 };
 
-const OpportunityDetail: React.FC<OpportunityDetailProps> = ({ opportunity, details, historicalOpportunities, onBack, onSave, users, currentUser, onActionItemCreate, onActionItemUpdate, onActionItemDelete, initialSectionId }) => {
+const OpportunityDetailInner: React.FC<OpportunityDetailInnerProps> = ({ opportunity, details, historicalOpportunities, onBack, users, initialSectionId }) => {
     const [activeSection, setActiveSection] = useState(initialSectionId || 'usage-history');
-    const [draftDispositionStatus, setDraftDispositionStatus] = useState(opportunity.disposition?.status);
-    const [stagedDefaults, setStagedDefaults] = useState<{ name: string; status: ActionItemStatus; due_date: string; notes: string }[]>([]);
-    const [isPersistingStage, setIsPersistingStage] = useState(false);
     const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
-    const { showToast } = useToast();
+    const { confirmDiscardStaged } = useDispositionActionPlan();
 
     useEffect(() => {
         const observer = new IntersectionObserver(
@@ -555,15 +553,6 @@ const OpportunityDetail: React.FC<OpportunityDetailProps> = ({ opportunity, deta
             });
         };
     }, []);
-
-    const confirmDiscardStaged = useCallback(() => {
-        if (stagedDefaults.length === 0) return true;
-        const confirmed = window.confirm('You have staged action plan tasks that are not saved. Save Action Plan to keep them, or choose OK to discard.');
-        if (confirmed) {
-            setStagedDefaults([]);
-        }
-        return confirmed;
-    }, [stagedDefaults.length]);
 
     // TODO(UX): Scroll anchoring remains inconsistent in some environments.
     // - StrictMode double-mount + async detail loading can delay ref attachment
@@ -623,68 +612,11 @@ const OpportunityDetail: React.FC<OpportunityDetailProps> = ({ opportunity, deta
         return () => { cancelled = true; };
     }, [initialSectionId, opportunity.opportunities_id, scrollToSection]);
 
-    useEffect(() => {
-        setDraftDispositionStatus(opportunity.disposition?.status);
-        setStagedDefaults([]);
-    }, [opportunity.opportunities_id, opportunity.disposition?.status]);
-
     const lastUpdatedByName = useMemo(() => {
         const id = opportunity.disposition?.last_updated_by_user_id;
         const found = users?.find(u => u.user_id === id);
         return found ? found.name : undefined;
     }, [opportunity.disposition?.last_updated_by_user_id, users]);
-
-    const DEFAULT_ACTION_TASKS = useMemo(() => ([
-        { name: 'Contact Opp Owner', status: ActionItemStatus.NotStarted, due_date: '', notes: '' },
-        { name: 'Scope and develop proposal', status: ActionItemStatus.NotStarted, due_date: '', notes: '' },
-        { name: 'Share proposal', status: ActionItemStatus.NotStarted, due_date: '', notes: '' },
-        { name: 'Finalize proposal', status: ActionItemStatus.NotStarted, due_date: '', notes: '' },
-        { name: 'Ironclad approval', status: ActionItemStatus.NotStarted, due_date: '', notes: '' },
-    ]), []);
-
-    const handleStatusChange = (status: Disposition['status']) => {
-        if (status !== 'Services Fit' && stagedDefaults.length > 0) {
-            const confirmed = confirmDiscardStaged();
-            if (!confirmed) {
-                return false;
-            }
-        }
-        setDraftDispositionStatus(status);
-        if (status === 'Services Fit') {
-            const hasPersisted = (opportunity.actionItems?.length || 0) > 0;
-            if (!hasPersisted && stagedDefaults.length === 0) {
-                setStagedDefaults(DEFAULT_ACTION_TASKS);
-            }
-        } else {
-            setStagedDefaults([]);
-        }
-        return true;
-    };
-
-    const handleStagePersist = async () => {
-        if (stagedDefaults.length === 0 || isPersistingStage) return;
-        setIsPersistingStage(true);
-        try {
-            for (const item of stagedDefaults) {
-                await onActionItemCreate(opportunity.opportunities_id, {
-                    opportunity_id: opportunity.opportunities_id,
-                    name: item.name,
-                    status: item.status,
-                    due_date: item.due_date,
-                    notes: item.notes,
-                    documents: [],
-                    assigned_to_user_id: currentUser.user_id,
-                });
-            }
-            setStagedDefaults([]);
-            showToast('Action plan saved', 'success');
-        } catch (error) {
-            console.error('Failed to save staged action plan', error);
-            showToast('Failed to save action plan', 'error');
-        } finally {
-            setIsPersistingStage(false);
-        }
-    };
 
     const handleBack = () => {
         if (!confirmDiscardStaged()) return;
@@ -803,33 +735,11 @@ const OpportunityDetail: React.FC<OpportunityDetailProps> = ({ opportunity, deta
                     <div id="disposition" ref={assignRef('disposition')} style={{ scrollMarginTop: 90 }}>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                             <DispositionForm
-                                onSave={onSave}
-                                opportunity={opportunity}
                                 lastUpdatedBy={lastUpdatedByName}
-                                onStatusChange={handleStatusChange}
                             />
                             <div id="action-items" style={{ scrollMarginTop: 90 }}>
                                 <ActionItemsManager
-                                    opportunityId={opportunity.opportunities_id}
-                                    actionItems={opportunity.actionItems || []}
                                     users={users}
-                                    currentUser={currentUser}
-                                    onCreate={onActionItemCreate}
-                                    onUpdate={onActionItemUpdate}
-                                    onDelete={onActionItemDelete}
-                                    isDispositioned={draftDispositionStatus === 'Services Fit'}
-                                    stagedDefaults={stagedDefaults}
-                                    onStageChange={(index, updates) => {
-                                        setStagedDefaults(prev => prev.map((it, i) => i === index ? { ...it, ...updates } : it));
-                                    }}
-                                    onStageRemove={(index) => {
-                                        setStagedDefaults(prev => prev.filter((_, i) => i !== index));
-                                    }}
-                                    onStageAdd={(item) => {
-                                        setStagedDefaults(prev => [...prev, item]);
-                                    }}
-                                    onStagePersist={handleStagePersist}
-                                    isStagePersisting={isPersistingStage}
                                 />
                             </div>
                         </div>
@@ -837,6 +747,40 @@ const OpportunityDetail: React.FC<OpportunityDetailProps> = ({ opportunity, deta
                 </div>
             </div>
         </div>
+    );
+};
+
+const OpportunityDetail: React.FC<OpportunityDetailProps> = ({
+    opportunity,
+    details,
+    historicalOpportunities,
+    onBack,
+    onSave,
+    users,
+    currentUser,
+    onActionItemCreate,
+    onActionItemUpdate,
+    onActionItemDelete,
+    initialSectionId,
+}) => {
+    return (
+        <DispositionActionPlanProvider
+            opportunity={opportunity}
+            currentUser={currentUser}
+            onSaveDisposition={onSave}
+            onActionItemCreate={onActionItemCreate}
+            onActionItemUpdate={onActionItemUpdate}
+            onActionItemDelete={onActionItemDelete}
+        >
+            <OpportunityDetailInner
+                opportunity={opportunity}
+                details={details}
+                historicalOpportunities={historicalOpportunities}
+                onBack={onBack}
+                users={users}
+                initialSectionId={initialSectionId}
+            />
+        </DispositionActionPlanProvider>
     );
 };
 
