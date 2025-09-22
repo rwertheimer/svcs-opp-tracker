@@ -27,6 +27,7 @@ describe('ActionItemsManager - staged add', () => {
         onStageChange={vi.fn()}
         onStageRemove={vi.fn()}
         onStageAdd={onStageAdd}
+        onStagePersist={vi.fn()}
       />
     );
 
@@ -36,6 +37,36 @@ describe('ActionItemsManager - staged add', () => {
 
     expect(onCreate).not.toHaveBeenCalled();
     expect(onStageAdd).toHaveBeenCalledWith({ name: 'Follow-up email', status: ActionItemStatus.NotStarted, due_date: '', notes: '' });
+  });
+
+  it('shows a save CTA when staged defaults exist', () => {
+    const onStagePersist = vi.fn();
+
+    render(
+      <ActionItemsManager
+        opportunityId="opp1"
+        actionItems={[] as ActionItem[]}
+        users={users}
+        currentUser={users[0]}
+        onCreate={vi.fn()}
+        onUpdate={vi.fn()}
+        onDelete={vi.fn()}
+        isDispositioned={true}
+        stagedDefaults={[
+          { name: 'Contact Opp Owner', status: ActionItemStatus.NotStarted, due_date: '', notes: '' },
+          { name: 'Share proposal', status: ActionItemStatus.NotStarted, due_date: '', notes: '' },
+        ]}
+        onStageChange={vi.fn()}
+        onStageRemove={vi.fn()}
+        onStageAdd={vi.fn()}
+        onStagePersist={onStagePersist}
+      />
+    );
+
+    const saveButton = screen.getByRole('button', { name: /save action plan/i });
+    expect(saveButton).toBeInTheDocument();
+    fireEvent.click(saveButton);
+    expect(onStagePersist).toHaveBeenCalled();
   });
 });
 

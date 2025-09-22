@@ -5,6 +5,18 @@ import type { Opportunity, AccountDetails, User, ActionItem } from '../../types'
 
 const user: User = { user_id: 'u1', name: 'Tester', email: 't@example.com' };
 
+const showToastSpy = vi.fn();
+
+vi.mock('../../components/Toast', () => ({
+  ToastProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  useToast: () => ({ showToast: showToastSpy }),
+}));
+
+beforeEach(() => {
+  showToastSpy.mockClear();
+  window.scrollTo = vi.fn();
+});
+
 const opp = (overrides: Partial<Opportunity>): Opportunity => ({
   opportunities_id: 'id-' + Math.random(),
   opportunities_name: 'Opp',

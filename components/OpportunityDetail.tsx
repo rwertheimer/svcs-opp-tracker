@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect, useRef, useLayoutEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef, useLayoutEffect, useCallback } from 'react';
 import type { Opportunity, AccountDetails, SupportTicket, UsageData, ProjectHistory, Disposition, User, ActionItem } from '../types';
 import { ActionItemStatus } from '../types';
 import Card from './Card';
@@ -6,6 +6,7 @@ import Tag from './Tag';
 import DispositionForm from './DispositionForm';
 import ActionItemsManager from './ActionItemsManager';
 import { ICONS } from '../constants';
+import { useToast } from './Toast';
 
 interface OpportunityDetailProps {
   opportunity: Opportunity;
@@ -527,7 +528,9 @@ const OpportunityDetail: React.FC<OpportunityDetailProps> = ({ opportunity, deta
     const [activeSection, setActiveSection] = useState(initialSectionId || 'usage-history');
     const [draftDispositionStatus, setDraftDispositionStatus] = useState(opportunity.disposition?.status);
     const [stagedDefaults, setStagedDefaults] = useState<{ name: string; status: ActionItemStatus; due_date: string; notes: string }[]>([]);
+    const [isPersistingStage, setIsPersistingStage] = useState(false);
     const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
+    const { showToast } = useToast();
 
     useEffect(() => {
         const observer = new IntersectionObserver(
@@ -553,20 +556,32 @@ const OpportunityDetail: React.FC<OpportunityDetailProps> = ({ opportunity, deta
         };
     }, []);
 
+    const confirmDiscardStaged = useCallback(() => {
+        if (stagedDefaults.length === 0) return true;
+        const confirmed = window.confirm('You have staged action plan tasks that are not saved. Save Action Plan to keep them, or choose OK to discard.');
+        if (confirmed) {
+            setStagedDefaults([]);
+        }
+        return confirmed;
+    }, [stagedDefaults.length]);
+
     // TODO(UX): Scroll anchoring remains inconsistent in some environments.
     // - StrictMode double-mount + async detail loading can delay ref attachment
     // - Sticky header offset varies with viewport / zoom
     // - Hash + programmatic scrolling not always honored on first paint
     // Future: consider a router-level anchor strategy or an observer that
     // scrolls once both refs and data are confirmed ready.
-    const scrollToSection = (id: string) => {
+    const scrollToSection = useCallback((id: string) => {
+        if (id !== 'disposition' && !confirmDiscardStaged()) {
+            return;
+        }
         const el = sectionRefs.current[id];
         if (!el) return;
         const headerOffset = 90; // sticky header + padding
         const rect = el.getBoundingClientRect();
         const absoluteTop = rect.top + window.scrollY - headerOffset;
         window.scrollTo({ top: absoluteTop, behavior: 'smooth' });
-    };
+    }, [confirmDiscardStaged]);
     
     const assignRef = (id: string) => (el: HTMLElement | null) => {
         sectionRefs.current[id] = el;
@@ -606,8 +621,7 @@ const OpportunityDetail: React.FC<OpportunityDetailProps> = ({ opportunity, deta
         // Kick off on next frame so layout is ready
         requestAnimationFrame(tryScroll);
         return () => { cancelled = true; };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [initialSectionId, opportunity.opportunities_id]);
+    }, [initialSectionId, opportunity.opportunities_id, scrollToSection]);
 
     useEffect(() => {
         setDraftDispositionStatus(opportunity.disposition?.status);
@@ -629,6 +643,12 @@ const OpportunityDetail: React.FC<OpportunityDetailProps> = ({ opportunity, deta
     ]), []);
 
     const handleStatusChange = (status: Disposition['status']) => {
+        if (status !== 'Services Fit' && stagedDefaults.length > 0) {
+            const confirmed = confirmDiscardStaged();
+            if (!confirmed) {
+                return false;
+            }
+        }
         setDraftDispositionStatus(status);
         if (status === 'Services Fit') {
             const hasPersisted = (opportunity.actionItems?.length || 0) > 0;
@@ -638,6 +658,37 @@ const OpportunityDetail: React.FC<OpportunityDetailProps> = ({ opportunity, deta
         } else {
             setStagedDefaults([]);
         }
+        return true;
+    };
+
+    const handleStagePersist = async () => {
+        if (stagedDefaults.length === 0 || isPersistingStage) return;
+        setIsPersistingStage(true);
+        try {
+            for (const item of stagedDefaults) {
+                await onActionItemCreate(opportunity.opportunities_id, {
+                    opportunity_id: opportunity.opportunities_id,
+                    name: item.name,
+                    status: item.status,
+                    due_date: item.due_date,
+                    notes: item.notes,
+                    documents: [],
+                    assigned_to_user_id: currentUser.user_id,
+                });
+            }
+            setStagedDefaults([]);
+            showToast('Action plan saved', 'success');
+        } catch (error) {
+            console.error('Failed to save staged action plan', error);
+            showToast('Failed to save action plan', 'error');
+        } finally {
+            setIsPersistingStage(false);
+        }
+    };
+
+    const handleBack = () => {
+        if (!confirmDiscardStaged()) return;
+        onBack();
     };
 
     return (
@@ -645,7 +696,7 @@ const OpportunityDetail: React.FC<OpportunityDetailProps> = ({ opportunity, deta
             {/* Header */}
             <div className="flex justify-between items-start mb-4">
                 <div>
-                    <button onClick={onBack} className="text-sm font-semibold text-indigo-600 hover:text-indigo-800 flex items-center mb-2">
+                    <button onClick={handleBack} className="text-sm font-semibold text-indigo-600 hover:text-indigo-800 flex items-center mb-2">
                         {ICONS.arrowLeft}
                         <span className="ml-2">Back to List</span>
                     </button>
@@ -752,23 +803,7 @@ const OpportunityDetail: React.FC<OpportunityDetailProps> = ({ opportunity, deta
                     <div id="disposition" ref={assignRef('disposition')} style={{ scrollMarginTop: 90 }}>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                             <DispositionForm
-                                onSave={(d) => {
-                                    onSave(d);
-                                    if ((opportunity.actionItems?.length || 0) === 0 && stagedDefaults.length > 0) {
-                                        stagedDefaults.forEach(item => {
-                                            onActionItemCreate(opportunity.opportunities_id, {
-                                                opportunity_id: opportunity.opportunities_id,
-                                                name: item.name,
-                                                status: item.status,
-                                                due_date: item.due_date,
-                                                notes: item.notes,
-                                                documents: [],
-                                                assigned_to_user_id: currentUser.user_id,
-                                            });
-                                        });
-                                        setStagedDefaults([]);
-                                    }
-                                }}
+                                onSave={onSave}
                                 opportunity={opportunity}
                                 lastUpdatedBy={lastUpdatedByName}
                                 onStatusChange={handleStatusChange}
@@ -793,6 +828,8 @@ const OpportunityDetail: React.FC<OpportunityDetailProps> = ({ opportunity, deta
                                     onStageAdd={(item) => {
                                         setStagedDefaults(prev => [...prev, item]);
                                     }}
+                                    onStagePersist={handleStagePersist}
+                                    isStagePersisting={isPersistingStage}
                                 />
                             </div>
                         </div>

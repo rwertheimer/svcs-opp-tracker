@@ -1,9 +1,16 @@
 import React from 'react';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import OpportunityDetail from '../../components/OpportunityDetail';
 import type { Opportunity, AccountDetails, User, ActionItem } from '../../types';
 
 const user: User = { user_id: 'u1', name: 'Alice', email: 'a@x.com' };
+
+const showToastSpy = vi.fn();
+
+vi.mock('../../components/Toast', () => ({
+  ToastProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  useToast: () => ({ showToast: showToastSpy }),
+}));
 
 const baseOpp: Opportunity = {
   opportunities_id: 'opp1',
@@ -42,6 +49,11 @@ const baseOpp: Opportunity = {
 const details: AccountDetails = { supportTickets: [], usageHistory: [], projectHistory: [] };
 
 describe('OpportunityDetail staging defaults', () => {
+  beforeEach(() => {
+    showToastSpy.mockClear();
+    window.scrollTo = vi.fn();
+  });
+
   it('stages default tasks when Services Fit is selected', () => {
     render(
       <OpportunityDetail
@@ -67,5 +79,120 @@ describe('OpportunityDetail staging defaults', () => {
     expect(screen.getAllByText(/Pending save/i).length).toBeGreaterThan(0);
     // The staged task title input may be collapsed; ensure the text exists in the DOM
     expect(screen.getAllByText(/Contact Opp Owner/i).length).toBeGreaterThan(0);
+  });
+
+  it('persists staged defaults via the save CTA and shows a success toast', async () => {
+    const createSpy = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <OpportunityDetail
+        opportunity={baseOpp}
+        details={details}
+        historicalOpportunities={[baseOpp]}
+        onBack={() => {}}
+        onSave={() => {}}
+        users={[user]}
+        currentUser={user}
+        onActionItemCreate={createSpy}
+        onActionItemUpdate={() => {}}
+        onActionItemDelete={() => {}}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /services fit/i }));
+
+    const saveButton = await screen.findByRole('button', { name: /save action plan/i });
+    fireEvent.click(saveButton);
+
+    await waitFor(() => {
+      expect(createSpy).toHaveBeenCalledTimes(5);
+    });
+    expect(showToastSpy).toHaveBeenCalledWith('Action plan saved', 'success');
+    await waitFor(() => {
+      expect(screen.queryByText(/Pending save/i)).not.toBeInTheDocument();
+    });
+  });
+
+  it('prompts before navigating back with staged defaults', () => {
+    const onBack = vi.fn();
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+
+    render(
+      <OpportunityDetail
+        opportunity={baseOpp}
+        details={details}
+        historicalOpportunities={[baseOpp]}
+        onBack={onBack}
+        onSave={() => {}}
+        users={[user]}
+        currentUser={user}
+        onActionItemCreate={() => Promise.resolve()}
+        onActionItemUpdate={() => {}}
+        onActionItemDelete={() => {}}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /services fit/i }));
+
+    fireEvent.click(screen.getByRole('button', { name: /back to list/i }));
+
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(onBack).not.toHaveBeenCalled();
+    expect(screen.getAllByText(/Pending save/i).length).toBeGreaterThan(0);
+    confirmSpy.mockRestore();
+  });
+
+  it('prompts before changing disposition away from Services Fit when staged defaults exist', () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+
+    render(
+      <OpportunityDetail
+        opportunity={baseOpp}
+        details={details}
+        historicalOpportunities={[baseOpp]}
+        onBack={() => {}}
+        onSave={() => {}}
+        users={[user]}
+        currentUser={user}
+        onActionItemCreate={() => Promise.resolve()}
+        onActionItemUpdate={() => {}}
+        onActionItemDelete={() => {}}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /services fit/i }));
+
+    fireEvent.click(screen.getByRole('button', { name: /no action needed/i }));
+
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(screen.getAllByText(/Pending save/i).length).toBeGreaterThan(0);
+    confirmSpy.mockRestore();
+  });
+
+  it('prompts before switching tabs away from disposition when staged defaults exist', () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+
+    render(
+      <OpportunityDetail
+        opportunity={baseOpp}
+        details={details}
+        historicalOpportunities={[baseOpp]}
+        onBack={() => {}}
+        onSave={() => {}}
+        users={[user]}
+        currentUser={user}
+        onActionItemCreate={() => Promise.resolve()}
+        onActionItemUpdate={() => {}}
+        onActionItemDelete={() => {}}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /services fit/i }));
+
+    fireEvent.click(screen.getByRole('button', { name: /support/i }));
+
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(screen.getAllByText(/Pending save/i).length).toBeGreaterThan(0);
+    confirmSpy.mockRestore();
   });
 });
