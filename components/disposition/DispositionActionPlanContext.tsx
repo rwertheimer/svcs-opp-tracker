@@ -22,6 +22,7 @@ export type StagedActionItem = {
     due_date: string;
     notes: string;
     documents: Document[];
+    assigned_to_user_id: string;
 };
 
 interface DispositionActionPlanContextValue {
@@ -57,7 +58,7 @@ interface DispositionActionPlanContextValue {
 
 const DispositionActionPlanContext = createContext<DispositionActionPlanContextValue | null>(null);
 
-const DEFAULT_ACTION_TASKS: StagedActionItem[] = [
+const DEFAULT_ACTION_TASKS: Omit<StagedActionItem, 'assigned_to_user_id'>[] = [
     { name: 'Contact Opp Owner', status: ActionItemStatus.NotStarted, due_date: '', notes: '', documents: [] },
     { name: 'Scope and develop proposal', status: ActionItemStatus.NotStarted, due_date: '', notes: '', documents: [] },
     { name: 'Share proposal', status: ActionItemStatus.NotStarted, due_date: '', notes: '', documents: [] },
@@ -161,7 +162,9 @@ export const DispositionActionPlanProvider: React.FC<DispositionActionPlanProvid
             if (status === 'Services Fit') {
                 const hasPersisted = actionItems.length > 0;
                 if (!hasPersisted && stagedActionItems.length === 0) {
-                    setStagedActionItems(DEFAULT_ACTION_TASKS.map(item => ({ ...item })));
+                    setStagedActionItems(
+                        DEFAULT_ACTION_TASKS.map(item => ({ ...item, assigned_to_user_id: currentUser.user_id }))
+                    );
                 }
             } else {
                 setStagedActionItems([]);
@@ -169,7 +172,13 @@ export const DispositionActionPlanProvider: React.FC<DispositionActionPlanProvid
 
             return true;
         },
-        [actionItems.length, confirmDiscardStaged, opportunity.opportunities_has_services_flag, stagedActionItems.length]
+        [
+            actionItems.length,
+            confirmDiscardStaged,
+            currentUser.user_id,
+            opportunity.opportunities_has_services_flag,
+            stagedActionItems.length,
+        ]
     );
 
     const updateDisposition = useCallback((updates: Partial<Disposition>) => {
@@ -209,7 +218,7 @@ export const DispositionActionPlanProvider: React.FC<DispositionActionPlanProvid
                 due_date: item.due_date,
                 notes: item.notes,
                 documents: item.documents ?? [],
-                assigned_to_user_id: currentUser.user_id,
+                assigned_to_user_id: item.assigned_to_user_id || currentUser.user_id,
             });
         }
         setStagedActionItems([]);
@@ -269,22 +278,35 @@ export const DispositionActionPlanProvider: React.FC<DispositionActionPlanProvid
         showToast,
     ]);
 
-    const addStagedActionItem = useCallback((item: Partial<StagedActionItem>) => {
-        setStagedActionItems(prev => [
-            ...prev,
-            {
-                name: item.name ?? '',
-                status: item.status ?? ActionItemStatus.NotStarted,
-                due_date: item.due_date ?? '',
-                notes: item.notes ?? '',
-                documents: item.documents ?? [],
-            },
-        ]);
-    }, []);
+    const addStagedActionItem = useCallback(
+        (item: Partial<StagedActionItem>) => {
+            setStagedActionItems(prev => [
+                ...prev,
+                {
+                    name: item.name ?? '',
+                    status: item.status ?? ActionItemStatus.NotStarted,
+                    due_date: item.due_date ?? '',
+                    notes: item.notes ?? '',
+                    documents: item.documents ?? [],
+                    assigned_to_user_id: item.assigned_to_user_id ?? currentUser.user_id,
+                },
+            ]);
+        },
+        [currentUser.user_id]
+    );
 
     const updateStagedActionItem = useCallback((index: number, updates: Partial<StagedActionItem>) => {
         setStagedActionItems(prev =>
-            prev.map((item, idx) => (idx === index ? { ...item, ...updates, documents: updates.documents ?? item.documents } : item))
+            prev.map((item, idx) =>
+                idx === index
+                    ? {
+                          ...item,
+                          ...updates,
+                          documents: updates.documents ?? item.documents,
+                          assigned_to_user_id: updates.assigned_to_user_id ?? item.assigned_to_user_id,
+                      }
+                    : item
+            )
         );
     }, []);
 

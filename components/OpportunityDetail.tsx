@@ -1,6 +1,5 @@
 import React, { useMemo, useState, useEffect, useRef, useLayoutEffect, useCallback } from 'react';
 import type { Opportunity, AccountDetails, SupportTicket, UsageData, ProjectHistory, Disposition, User, ActionItem } from '../types';
-import { ActionItemStatus } from '../types';
 import Card from './Card';
 import Tag from './Tag';
 import DispositionForm from './DispositionForm';
@@ -530,25 +529,7 @@ const HistoricalOpportunitiesList: React.FC<{ opportunities: Opportunity[] }> = 
 const OpportunityDetailInner: React.FC<OpportunityDetailInnerProps> = ({ opportunity, details, historicalOpportunities, onBack, users, initialSectionId }) => {
     const [activeSection, setActiveSection] = useState(initialSectionId || 'usage-history');
     const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
-    const {
-        confirmDiscardStaged,
-        confirmDiscardChanges,
-        draftDisposition,
-        changeDispositionStatus,
-        updateDisposition,
-        actionItems,
-        stagedActionItems,
-        addStagedActionItem,
-        updateStagedActionItem,
-        removeStagedActionItem,
-        persistStagedActionItems,
-        isStagePersisting,
-        isDispositioned,
-        createActionItem,
-        updateActionItem,
-        deleteActionItem,
-        currentUser,
-    } = useDispositionActionPlan();
+    const { confirmDiscardChanges, draftDisposition, changeDispositionStatus, updateDisposition } = useDispositionActionPlan();
 
     useEffect(() => {
         const observer = new IntersectionObserver(
@@ -598,20 +579,6 @@ const OpportunityDetailInner: React.FC<OpportunityDetailInnerProps> = ({ opportu
 
     const lookerUrl = `https://fivetran.looker.com/dashboards/1328?Salesforce+Account+Name=&Salesforce+Account+ID=${opportunity.accounts_salesforce_account_id}&Fivetran+Account+ID=`;
     const sePovUrl = `https://pov-app.fivetran-internal-sales.com/opportunity/${opportunity.opportunities_id}`;
-
-    const handleCreateActionItem = useCallback(
-        (name: string) =>
-            createActionItem({
-                opportunity_id: opportunity.opportunities_id,
-                name,
-                status: ActionItemStatus.NotStarted,
-                due_date: '',
-                notes: '',
-                documents: [],
-                assigned_to_user_id: currentUser.user_id,
-            }),
-        [createActionItem, currentUser.user_id, opportunity.opportunities_id]
-    );
 
     const usageHistoryTitle = (
         <a href={lookerUrl} target="_blank" rel="noopener noreferrer" className="flex items-center space-x-2 group text-slate-700 hover:text-indigo-600 transition-colors">
@@ -778,20 +745,7 @@ const OpportunityDetailInner: React.FC<OpportunityDetailInnerProps> = ({ opportu
                                 lastUpdatedBy={lastUpdatedByName}
                             />
                             <div id="action-items" style={{ scrollMarginTop: 90 }}>
-                                <ActionItemsManager
-                                    users={users}
-                                    isDispositioned={isDispositioned}
-                                    actionItems={actionItems}
-                                    stagedActionItems={stagedActionItems}
-                                    isStagePersisting={isStagePersisting}
-                                    onAddStagedActionItem={addStagedActionItem}
-                                    onUpdateStagedActionItem={updateStagedActionItem}
-                                    onRemoveStagedActionItem={removeStagedActionItem}
-                                    onPersistStagedActionItems={persistStagedActionItems}
-                                    onCreateActionItem={handleCreateActionItem}
-                                    onUpdateActionItem={updateActionItem}
-                                    onDeleteActionItem={deleteActionItem}
-                                />
+                                <ActionItemsManager users={users} />
                             </div>
                         </div>
                     </div>
