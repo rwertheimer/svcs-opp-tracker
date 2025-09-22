@@ -19,10 +19,25 @@ interface ActionItemsManagerProps {
     onStageChange?: (index: number, updates: Partial<StagedItem>) => void;
     onStageRemove?: (index: number) => void;
     onStageAdd?: (item: StagedItem) => void;
+    onStagePersist?: () => void;
+    isStagePersisting?: boolean;
 }
 
-const ActionItemsManager: React.FC<ActionItemsManagerProps> = ({ 
-    opportunityId, actionItems, users, currentUser, onCreate, onUpdate, onDelete, isDispositioned, stagedDefaults, onStageChange, onStageRemove, onStageAdd 
+const ActionItemsManager: React.FC<ActionItemsManagerProps> = ({
+    opportunityId,
+    actionItems,
+    users,
+    currentUser,
+    onCreate,
+    onUpdate,
+    onDelete,
+    isDispositioned,
+    stagedDefaults,
+    onStageChange,
+    onStageRemove,
+    onStageAdd,
+    onStagePersist,
+    isStagePersisting
 }) => {
     const [newActionText, setNewActionText] = useState('');
     const [editingItemId, setEditingItemId] = useState<string | null>(null);
@@ -222,6 +237,24 @@ const ActionItemsManager: React.FC<ActionItemsManagerProps> = ({
                 <h3 className="text-lg font-semibold text-slate-700">Action Plan</h3>
             </div>
             <div className={`p-6 space-y-4 transition-opacity duration-300 ${isDispositioned ? 'opacity-100' : 'opacity-40 pointer-events-none'}`}>
+                {stagedDefaults && stagedDefaults.length > 0 && (
+                    <div className="p-4 border border-indigo-300 bg-indigo-50 rounded-md flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                        <div>
+                            <p className="text-sm font-semibold text-indigo-900">Action plan staged</p>
+                            <p className="text-xs text-indigo-700">Review the pending tasks below, then save them to add to the action plan.</p>
+                        </div>
+                        {onStagePersist && (
+                            <button
+                                type="button"
+                                onClick={onStagePersist}
+                                className="inline-flex items-center justify-center px-4 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-md shadow hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                                disabled={isStagePersisting}
+                            >
+                                {isStagePersisting ? 'Saving…' : 'Save Action Plan'}
+                            </button>
+                        )}
+                    </div>
+                )}
                 <div>
                     <form onSubmit={handleActionItemAdd} className="flex space-x-2">
                         <input

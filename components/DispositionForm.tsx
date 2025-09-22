@@ -7,7 +7,7 @@ interface DispositionFormProps {
     onSave: (disposition: Disposition) => void;
     opportunity: Opportunity;
     lastUpdatedBy?: string;
-    onStatusChange?: (status: DispositionStatus) => void;
+    onStatusChange?: (status: DispositionStatus) => boolean | void;
 }
 
 const DispositionForm: React.FC<DispositionFormProps> = ({ onSave, opportunity, lastUpdatedBy, onStatusChange }) => {
@@ -18,7 +18,8 @@ const DispositionForm: React.FC<DispositionFormProps> = ({ onSave, opportunity, 
   }, [opportunity.disposition]);
 
   const handleSetDispositionStatus = (status: DispositionStatus) => {
-    if (onStatusChange) onStatusChange(status);
+    const allowChange = onStatusChange ? onStatusChange(status) : true;
+    if (allowChange === false) return;
     setDisposition(prev => {
         const newState = {...prev, status};
         if (status === 'Services Fit') {

@@ -24,6 +24,6 @@ describe('App initial spinner', () => {
         <App />
       </ToastProvider>
     );
-    expect(await screen.findByText(/Loading Data.../i)).toBeInTheDocument();
+    expect(screen.getByText(/Loading Data.../i)).toBeInTheDocument();
   });
 });
