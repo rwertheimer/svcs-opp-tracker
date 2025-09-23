@@ -157,5 +157,52 @@ describe('ActionItemsManager - staged add', () => {
     expect(documentLink).toHaveAttribute('target', '_blank');
     expect(documentLink).toHaveAttribute('rel', expect.stringContaining('noopener'));
   });
+
+  it('renders newly saved documents as links after persisting', async () => {
+    const onSaveActionPlan = vi.fn().mockImplementation(async payload => ({
+      disposition: {
+        ...baseOpportunity.disposition,
+        status: payload.disposition.status,
+        version: baseOpportunity.disposition.version + 1,
+      },
+      actionItems: [
+        {
+          action_item_id: 'ai-returned',
+          opportunity_id: baseOpportunity.opportunities_id,
+          name: payload.actionItems[0]?.name ?? 'Contact Opp Owner',
+          status: payload.actionItems[0]?.status ?? ActionItemStatus.NotStarted,
+          due_date: payload.actionItems[0]?.due_date ?? '',
+          documents: [
+            { id: 'doc-new', text: 'Implementation Plan', url: 'https://example.com/plan' },
+          ],
+          created_by_user_id: users[0].user_id,
+          assigned_to_user_id: payload.actionItems[0]?.assigned_to_user_id ?? users[0].user_id,
+        },
+      ],
+    }));
+
+    render(
+      <DispositionActionPlanProvider
+        opportunity={baseOpportunity}
+        currentUser={users[0]}
+        onSaveActionPlan={onSaveActionPlan}
+      >
+        <PrimeStaging>
+          <ManagerHarness />
+        </PrimeStaging>
+      </DispositionActionPlanProvider>
+    );
+
+    const saveButton = await screen.findByRole('button', { name: /save changes/i });
+    fireEvent.click(saveButton);
+
+    await waitFor(() => {
+      expect(onSaveActionPlan).toHaveBeenCalledTimes(1);
+    });
+
+    const documentLink = await screen.findByRole('link', { name: /implementation plan/i });
+    expect(documentLink).toHaveAttribute('href', 'https://example.com/plan');
+    expect(documentLink).toHaveAttribute('target', '_blank');
+  });
 });
 

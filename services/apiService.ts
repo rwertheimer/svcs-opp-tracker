@@ -118,7 +118,7 @@ export interface SaveDispositionActionPlanPayload {
     services_amount_override?: Disposition['services_amount_override'] | null;
     forecast_category_override?: Disposition['forecast_category_override'] | null;
     version: number;
-    notesSnapshot?: string;
+    notes?: string;
   };
   actionItems: Array<{
     action_item_id?: string;
@@ -168,7 +168,7 @@ export const saveDispositionActionPlan = async (
 
     const disposition: Disposition = {
       status: payload.disposition.status,
-      notes: payload.disposition.notesSnapshot ?? '',
+      notes: payload.disposition.notes ?? '',
       reason: payload.disposition.reason ?? '',
       services_amount_override: payload.disposition.services_amount_override ?? undefined,
       forecast_category_override: payload.disposition.forecast_category_override ?? undefined,
@@ -193,6 +193,7 @@ export const saveDispositionActionPlan = async (
           ? null
           : payload.disposition.forecast_category_override,
       version: payload.disposition.version,
+      notes: payload.disposition.notes ?? '',
     },
     actionItems: payload.actionItems.map(item => ({
       action_item_id: item.action_item_id,

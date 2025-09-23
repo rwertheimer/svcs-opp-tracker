@@ -338,7 +338,7 @@ export const DispositionActionPlanProvider: React.FC<DispositionActionPlanProvid
                             ? null
                             : draftDisposition.forecast_category_override,
                     version: draftDisposition.version,
-                    notesSnapshot: draftDisposition.notes ?? '',
+                    notes: draftDisposition.notes ?? '',
                 };
 
                 const result = await onSaveActionPlan({ disposition: dispositionPayload, actionItems: mergedActionItems });
