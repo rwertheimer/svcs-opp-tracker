@@ -36,7 +36,6 @@ export interface ActionItem {
     name: string;
     status: ActionItemStatus;
     due_date: string; // Stored as 'YYYY-MM-DD'
-    notes: string;
     documents: Document[]; // Stored as JSONB in the database
     created_by_user_id: string;
     assigned_to_user_id: string;

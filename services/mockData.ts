@@ -149,12 +149,59 @@ export const generateAccountDetails = (accountId: string): AccountDetails => {
 const generatePreDispositionedOpp = (): Opportunity => {
     const opportunityId = 'demo-fit-opp-123';
     // FIX: Corrected ActionItem structure to use `action_item_id`, `due_date`, and added required fields.
-     const defaultActionItems: ActionItem[] = [
-        { action_item_id: 'task-1', opportunity_id: opportunityId, name: 'Initial Scoping Call', status: ActionItemStatus.Completed, due_date: createPastDate(10), notes: 'Completed initial call, customer is very interested.', documents: [], created_by_user_id: MOCK_USERS[0].user_id, assigned_to_user_id: MOCK_USERS[0].user_id },
-        { action_item_id: 'task-2', opportunity_id: opportunityId, name: 'Develop Initial Proposal', status: ActionItemStatus.InProgress, due_date: createFutureDate(2), notes: 'Working on the proposal draft.', documents: [{id: 'doc-1', text: 'Proposal Template', url: 'http://example.com/template'}], created_by_user_id: MOCK_USERS[0].user_id, assigned_to_user_id: MOCK_USERS[0].user_id },
-        { action_item_id: 'task-3', opportunity_id: opportunityId, name: 'Share Initial Proposal', status: ActionItemStatus.NotStarted, due_date: createFutureDate(7), notes: '', documents: [], created_by_user_id: MOCK_USERS[0].user_id, assigned_to_user_id: MOCK_USERS[0].user_id },
-        { action_item_id: 'task-4', opportunity_id: opportunityId, name: 'Revise and Finalize Proposal', status: ActionItemStatus.NotStarted, due_date: createFutureDate(14), notes: '', documents: [], created_by_user_id: MOCK_USERS[0].user_id, assigned_to_user_id: MOCK_USERS[0].user_id },
-        { action_item_id: 'task-5', opportunity_id: opportunityId, name: 'Approvals', status: ActionItemStatus.NotStarted, due_date: createFutureDate(21), notes: '', documents: [], created_by_user_id: MOCK_USERS[0].user_id, assigned_to_user_id: MOCK_USERS[0].user_id },
+    const defaultActionItems: ActionItem[] = [
+        {
+            action_item_id: 'task-1',
+            opportunity_id: opportunityId,
+            name: 'Initial Scoping Call',
+            status: ActionItemStatus.Completed,
+            due_date: createPastDate(10),
+            documents: [],
+            created_by_user_id: MOCK_USERS[0].user_id,
+            assigned_to_user_id: MOCK_USERS[0].user_id,
+        },
+        {
+            action_item_id: 'task-2',
+            opportunity_id: opportunityId,
+            name: 'Develop Initial Proposal',
+            status: ActionItemStatus.InProgress,
+            due_date: createFutureDate(2),
+            documents: [
+                { id: 'doc-1', text: 'Proposal Template', url: 'http://example.com/template' },
+            ],
+            created_by_user_id: MOCK_USERS[0].user_id,
+            assigned_to_user_id: MOCK_USERS[0].user_id,
+        },
+        {
+            action_item_id: 'task-3',
+            opportunity_id: opportunityId,
+            name: 'Share Initial Proposal',
+            status: ActionItemStatus.NotStarted,
+            due_date: createFutureDate(7),
+            documents: [],
+            created_by_user_id: MOCK_USERS[0].user_id,
+            assigned_to_user_id: MOCK_USERS[0].user_id,
+        },
+        {
+            action_item_id: 'task-4',
+            opportunity_id: opportunityId,
+            name: 'Revise and Finalize Proposal',
+            status: ActionItemStatus.NotStarted,
+            due_date: createFutureDate(14),
+            documents: [],
+            created_by_user_id: MOCK_USERS[0].user_id,
+            assigned_to_user_id: MOCK_USERS[0].user_id,
+        },
+        {
+            action_item_id: 'task-5',
+            opportunity_id: opportunityId,
+            name: 'Approvals',
+            status: ActionItemStatus.NotStarted,
+            due_date: createFutureDate(21),
+            documents: [],
+            created_by_user_id: MOCK_USERS[0].user_id,
+            assigned_to_user_id: MOCK_USERS[0].user_id,
+        },
     ];
     const closeDate = createFutureDate(45);
     const servicesAmount = 25000;

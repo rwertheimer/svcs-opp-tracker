@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import ActionItemsManager from '../../components/ActionItemsManager';
 import SaveBar from '../../components/disposition/SaveBar';
 import type { Opportunity, User } from '../../types';
+import { ActionItemStatus } from '../../types';
 import { DispositionActionPlanProvider, useDispositionActionPlan } from '../../components/disposition/DispositionActionPlanContext';
 
 const users: User[] = [{ user_id: 'u1', name: 'Alice', email: 'a@x.com' }];
@@ -116,6 +117,43 @@ describe('ActionItemsManager - staged add', () => {
       expect(onCreate).toHaveBeenCalled();
       expect(onSaveDisposition).toHaveBeenCalled();
     });
+  });
+
+  it('renders persisted documents as external links', async () => {
+    const opportunityWithDocs: Opportunity = {
+      ...baseOpportunity,
+      disposition: { ...baseOpportunity.disposition, status: 'Services Fit' },
+      actionItems: [
+        {
+          action_item_id: 'ai-1',
+          opportunity_id: baseOpportunity.opportunities_id,
+          name: 'Review spec',
+          status: ActionItemStatus.NotStarted,
+          due_date: '2024-05-01',
+          documents: [{ id: 'doc-1', text: 'Spec Sheet', url: 'https://example.com/spec' }],
+          created_by_user_id: users[0].user_id,
+          assigned_to_user_id: users[0].user_id,
+        },
+      ],
+    };
+
+    render(
+      <DispositionActionPlanProvider
+        opportunity={opportunityWithDocs}
+        currentUser={users[0]}
+        onSaveDisposition={vi.fn()}
+        onActionItemCreate={vi.fn()}
+        onActionItemUpdate={vi.fn()}
+        onActionItemDelete={vi.fn()}
+      >
+        <ActionItemsManager users={users} />
+      </DispositionActionPlanProvider>
+    );
+
+    const documentLink = await screen.findByRole('link', { name: /spec sheet/i });
+    expect(documentLink).toHaveAttribute('href', 'https://example.com/spec');
+    expect(documentLink).toHaveAttribute('target', '_blank');
+    expect(documentLink).toHaveAttribute('rel', expect.stringContaining('noopener'));
   });
 });
 

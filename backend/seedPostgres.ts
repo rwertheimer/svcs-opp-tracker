@@ -111,7 +111,6 @@ const CREATE_SCHEMA_SQL = `
         name TEXT NOT NULL,
         status VARCHAR(50) NOT NULL,
         due_date DATE,
-        notes TEXT,
         documents JSONB,
         created_by_user_id UUID REFERENCES users(user_id),
         assigned_to_user_id UUID REFERENCES users(user_id)
