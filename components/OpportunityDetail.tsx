@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect, useRef, useLayoutEffect, useCallback } from 'react';
-import type { Opportunity, AccountDetails, SupportTicket, UsageData, ProjectHistory, Disposition, User, ActionItem } from '../types';
+import type { Opportunity, AccountDetails, SupportTicket, UsageData, ProjectHistory, Disposition, User } from '../types';
 import Card from './Card';
 import Tag from './Tag';
 import DispositionForm from './DispositionForm';
@@ -7,22 +7,20 @@ import ActionItemsManager from './ActionItemsManager';
 import { ICONS } from '../constants';
 import { DispositionActionPlanProvider, useDispositionActionPlan } from './disposition/DispositionActionPlanContext';
 import SaveBar from './disposition/SaveBar';
+import type { SaveDispositionActionPlanPayload, SaveDispositionActionPlanResponse } from '../services/apiService';
 
 interface OpportunityDetailProps {
   opportunity: Opportunity;
   details: AccountDetails;
   historicalOpportunities: Opportunity[];
   onBack: () => void;
-  onSave: (disposition: Disposition) => Promise<void> | void;
+  onSaveActionPlan: (payload: SaveDispositionActionPlanPayload) => Promise<SaveDispositionActionPlanResponse>;
   users: User[];
   currentUser: User;
-  onActionItemCreate: (opportunityId: string, item: Omit<ActionItem, 'action_item_id' | 'created_by_user_id'>) => Promise<void> | void;
-  onActionItemUpdate: (opportunityId: string, itemId: string, updates: Partial<ActionItem>) => Promise<void> | void;
-  onActionItemDelete: (opportunityId: string, itemId: string) => Promise<void> | void;
   initialSectionId?: string;
 }
 
-type OpportunityDetailInnerProps = Omit<OpportunityDetailProps, 'onSave' | 'onActionItemCreate' | 'onActionItemUpdate' | 'onActionItemDelete' | 'currentUser'>;
+type OpportunityDetailInnerProps = Omit<OpportunityDetailProps, 'onSaveActionPlan' | 'currentUser'>;
 
 const SECTIONS = [
     { id: 'usage-history', label: 'Usage', icon: ICONS.table },
@@ -760,22 +758,16 @@ const OpportunityDetail: React.FC<OpportunityDetailProps> = ({
     details,
     historicalOpportunities,
     onBack,
-    onSave,
+    onSaveActionPlan,
     users,
     currentUser,
-    onActionItemCreate,
-    onActionItemUpdate,
-    onActionItemDelete,
     initialSectionId,
 }) => {
     return (
         <DispositionActionPlanProvider
             opportunity={opportunity}
             currentUser={currentUser}
-            onSaveDisposition={onSave}
-            onActionItemCreate={onActionItemCreate}
-            onActionItemUpdate={onActionItemUpdate}
-            onActionItemDelete={onActionItemDelete}
+            onSaveActionPlan={onSaveActionPlan}
         >
             <OpportunityDetailInner
                 opportunity={opportunity}
