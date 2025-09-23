@@ -94,11 +94,51 @@ describe('generateDefaultPlan', () => {
         expect(shareTask?.due_date).toBe('2024-07-04');
     });
 
+    it('leaves existing tasks without due dates untouched even when a start date is provided', () => {
+        const opportunity = makeOpportunity({
+            actionItems: [
+                {
+                    action_item_id: 'ai-1',
+                    opportunity_id: 'opp-1',
+                    name: 'Finalize proposal',
+                    status: ActionItemStatus.NotStarted,
+                    due_date: '',
+                    documents: [],
+                    created_by_user_id: 'user-1',
+                    assigned_to_user_id: 'user-1',
+                },
+            ],
+        });
+
+        const plan = generateDefaultPlan(opportunity, '2024-06-01');
+        const finalizeTask = plan.find(item => item.name === 'Finalize proposal');
+
+        expect(finalizeTask?.due_date).toBe('');
+    });
+
     it('leaves due dates blank when the start date is missing or invalid', () => {
         const opportunity = makeOpportunity();
 
         expect(generateDefaultPlan(opportunity, '').every(item => item.due_date === '')).toBe(true);
         expect(generateDefaultPlan(opportunity, 'not-a-date').every(item => item.due_date === '')).toBe(true);
         expect(generateDefaultPlan(opportunity, null).every(item => item.due_date === '')).toBe(true);
+    });
+
+    it('is idempotent across invocations with the same inputs', () => {
+        const opportunity = makeOpportunity();
+
+        const first = generateDefaultPlan(opportunity, '2024-06-01');
+        first[0].documents.push({ id: 'doc-1', text: 'Spec', url: 'https://example.com/spec' });
+        expect(first[0].documents).toEqual([
+            { id: 'doc-1', text: 'Spec', url: 'https://example.com/spec' },
+        ]);
+
+        const second = generateDefaultPlan(opportunity, '2024-06-01');
+        const third = generateDefaultPlan(opportunity, '2024-06-01');
+
+        expect(second).toEqual(third);
+        expect(second).not.toBe(third);
+        expect(second[0].documents).toEqual([]);
+        expect(third[0].documents).toEqual([]);
     });
 });

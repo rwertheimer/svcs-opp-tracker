@@ -157,6 +157,7 @@ describe('persistOpportunityActionPlan', () => {
                 services_amount_override: 12000,
                 forecast_category_override: 'Commit',
                 version: 1,
+                notes: 'Updated note',
             },
             actionItems: [
                 {
@@ -181,7 +182,7 @@ describe('persistOpportunityActionPlan', () => {
         expect(result.disposition.status).toBe('Services Fit');
         expect(result.disposition.version).toBe(2);
         expect(result.disposition.last_updated_by_user_id).toBe(userId);
-        expect(result.disposition.notes).toBe('Initial note');
+        expect(result.disposition.notes).toBe('Updated note');
         expect(result.actionItems).toHaveLength(2);
 
         const updatedItem = result.actionItems.find(item => item.action_item_id === existingId);
@@ -198,8 +199,47 @@ describe('persistOpportunityActionPlan', () => {
         expect(newItem?.created_by_user_id).toBeDefined();
 
         expect(state.actionItems.size).toBe(2);
+        const storedItems = Array.from(state.actionItems.values());
+        const storedExisting = storedItems.find(item => item.name === 'Existing Task Updated');
+        expect(storedExisting?.documents).toEqual([
+            { id: 'doc-1', text: 'Call notes', url: 'https://example.com/doc-1' },
+        ]);
+        const storedNew = storedItems.find(item => item.name === 'New Kickoff');
+        expect(storedNew?.documents).toEqual([
+            { id: 'doc-2', text: 'Deck', url: 'https://example.com/deck' },
+        ]);
         expect(Array.from(state.actionItems.values()).some(item => item.name === 'Removable Task')).toBe(false);
         expect(state.history).toHaveLength(1);
+        expect(state.history[0]).toMatchObject({ notes: 'Updated note' });
+    });
+
+    it('updates disposition notes when only the text changes', async () => {
+        const existingItems = Array.from(state.actionItems.values()).map(item => ({
+            action_item_id: item.action_item_id,
+            name: item.name,
+            status: item.status,
+            due_date: item.due_date,
+            documents: item.documents,
+            assigned_to_user_id: item.assigned_to_user_id,
+            created_by_user_id: item.created_by_user_id,
+        }));
+
+        const result = await persistOpportunityActionPlan(client as any, oppId, userId, {
+            disposition: {
+                status: 'Not Reviewed',
+                notes: 'Latest general notes',
+                version: 1,
+                reason: undefined,
+                services_amount_override: undefined,
+                forecast_category_override: undefined,
+            },
+            actionItems: existingItems,
+        });
+
+        expect(result.disposition.notes).toBe('Latest general notes');
+        expect(state.opportunity.disposition.notes).toBe('Latest general notes');
+        expect(state.history).toHaveLength(1);
+        expect(state.history[0]).toMatchObject({ notes: 'Latest general notes' });
     });
 
     it('throws a validation error when required fields are missing', async () => {

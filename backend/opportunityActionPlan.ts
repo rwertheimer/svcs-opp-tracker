@@ -21,8 +21,11 @@ export const sanitizeActionItemCollection = (items: unknown): ActionItem[] => {
     return items.map(item => stripActionItemNotes(item as LegacyActionItemRow));
 };
 
-export type ActionPlanDispositionInput = Omit<Disposition, 'notes' | 'last_updated_by_user_id' | 'last_updated_at'> & {
-    notes?: never;
+export type ActionPlanDispositionInput = Pick<
+    Disposition,
+    'status' | 'reason' | 'services_amount_override' | 'forecast_category_override' | 'version'
+> & {
+    notes?: string;
     last_updated_by_user_id?: never;
     last_updated_at?: never;
 };
@@ -107,6 +110,10 @@ const ensureDispositionPayload = (payload: ActionPlanDispositionInput | undefine
         throw new ActionPlanValidationError('Disposition version is required.');
     }
 
+    if (payload.notes !== undefined && typeof payload.notes !== 'string') {
+        throw new ActionPlanValidationError('Disposition notes must be a string.');
+    }
+
     return payload;
 };
 
@@ -146,7 +153,7 @@ const persistDisposition = async (
     const updatedDisposition: Disposition = {
         ...current,
         ...updates,
-        notes: current.notes ?? '',
+        notes: updates.notes ?? current.notes ?? '',
         version: currentVersion + 1,
         last_updated_by_user_id: userId,
         last_updated_at: new Date().toISOString(),
