@@ -24,6 +24,18 @@ const getNestedValue = (obj: any, path: string): any => {
   return path.split('.').reduce((acc, part) => acc && acc[part], obj);
 };
 
+type LegacyActionItem = ActionItem & { notes?: unknown };
+
+const stripActionItemNotes = (item: LegacyActionItem): ActionItem => {
+  const { notes: _legacyNotes, ...rest } = item;
+  return rest;
+};
+
+const sanitizeOpportunity = (opportunity: Opportunity): Opportunity => ({
+  ...opportunity,
+  actionItems: (opportunity.actionItems || []).map(item => stripActionItemNotes(item as LegacyActionItem)),
+});
+
 const App: React.FC = () => {
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
@@ -69,7 +81,8 @@ const App: React.FC = () => {
         const preferred = storedUserId ? fetchedUsers.find(u => u.user_id === storedUserId) : undefined;
         setCurrentUser(preferred ?? fetchedUsers[0]);
       }
-      setOpportunities(fetchedOpportunities);
+      const sanitizedOpportunities = fetchedOpportunities.map(sanitizeOpportunity);
+      setOpportunities(sanitizedOpportunities);
     } catch (err: any) {
       setError('Failed to fetch initial data. Please try again.');
       console.error(err);
@@ -339,13 +352,14 @@ const App: React.FC = () => {
 
       try {
           const savedItem = await createActionItem(opportunityId, newItem);
+          const sanitizedSavedItem = stripActionItemNotes(savedItem as LegacyActionItem);
           // Replace temp item with saved item from server
-          setOpportunities(prev => prev.map(opp => opp.opportunities_id === opportunityId 
-              ? {...opp, actionItems: (opp.actionItems || []).map(item => item.action_item_id === tempId ? savedItem : item)} 
+          setOpportunities(prev => prev.map(opp => opp.opportunities_id === opportunityId
+              ? {...opp, actionItems: (opp.actionItems || []).map(item => item.action_item_id === tempId ? sanitizedSavedItem : item)}
               : opp
           ));
-          setSelectedOpportunity(prev => prev && prev.opportunities_id === opportunityId 
-            ? { ...prev, actionItems: (prev.actionItems || []).map(item => item.action_item_id === tempId ? savedItem : item) } 
+          setSelectedOpportunity(prev => prev && prev.opportunities_id === opportunityId
+            ? { ...prev, actionItems: (prev.actionItems || []).map(item => item.action_item_id === tempId ? sanitizedSavedItem : item) }
             : prev);
       } catch (error) {
           console.error("Failed to create action item:", error);
@@ -556,7 +570,8 @@ const App: React.FC = () => {
         last_updated_by_user_id: currentUser?.user_id ?? ''
       }
     };
-    setOpportunities(prev => [newScopingOpp, ...prev]);
+    const sanitizedScopingOpp = sanitizeOpportunity(newScopingOpp);
+    setOpportunities(prev => [sanitizedScopingOpp, ...prev]);
     setIsScopingModalOpen(false);
   };
 

@@ -12,6 +12,22 @@ import type { User, Opportunity, ActionItem, Disposition } from '../types';
 
 dotenv.config();
 
+type LegacyActionItemRow = ActionItem & { notes?: unknown };
+type OpportunityRow = Omit<Opportunity, 'actionItems'> & { actionItems: LegacyActionItemRow[] };
+
+const stripActionItemNotes = (item: LegacyActionItemRow): ActionItem => {
+    const { notes: _legacyNotes, ...rest } = item;
+    return rest;
+};
+
+const sanitizeActionItemCollection = (items: unknown): ActionItem[] => {
+    if (!Array.isArray(items)) {
+        return [];
+    }
+
+    return items.map(item => stripActionItemNotes(item as LegacyActionItemRow));
+};
+
 const app = express();
 const PORT = process.env.PORT || 8080;
 
@@ -142,7 +158,10 @@ apiRouter.get('/opportunities', async (req: expressTypes.Request, res: expressTy
             o.disposition,
             -- Subquery to aggregate action items for each opportunity
             (
-                SELECT COALESCE(jsonb_agg(ai.* ORDER BY ai.due_date ASC NULLS LAST), '[]'::jsonb)
+                SELECT COALESCE(
+                    jsonb_agg((to_jsonb(ai) - 'notes') ORDER BY ai.due_date ASC NULLS LAST),
+                    '[]'::jsonb
+                )
                 FROM action_items ai
                 WHERE ai.opportunity_id = o.opportunities_id
             ) as "actionItems"
@@ -150,8 +169,12 @@ apiRouter.get('/opportunities', async (req: expressTypes.Request, res: expressTy
         ORDER BY o.opportunities_close_date ASC;
     `;
     try {
-        const result = await pgPool.query<Opportunity>(GET_OPPS_QUERY);
-        res.status(200).json(result.rows);
+        const result = await pgPool.query<OpportunityRow>(GET_OPPS_QUERY);
+        const sanitizedRows = result.rows.map(row => ({
+            ...row,
+            actionItems: sanitizeActionItemCollection(row.actionItems),
+        }));
+        res.status(200).json(sanitizedRows);
     } catch (error) {
         console.error('Error fetching opportunities:', error);
         res.status(500).send('Internal Server Error');
@@ -369,13 +392,24 @@ apiRouter.post('/opportunities/:opportunityId/disposition', async (req: expressT
 
 // --- NEW Action Item CRUD Endpoints ---
 apiRouter.post('/action-items', async (req: expressTypes.Request, res: expressTypes.Response) => {
+    if (Object.prototype.hasOwnProperty.call(req.body, 'notes')) {
+        console.warn('Rejected action item create request containing deprecated notes field.');
+        return res.status(400).send('The action item notes field has been removed.');
+    }
+
     const { opportunity_id, name, status, due_date, documents, created_by_user_id, assigned_to_user_id } = req.body;
+    if (!opportunity_id || !name || !status || !created_by_user_id || !assigned_to_user_id) {
+        return res.status(400).send('Missing required action item fields.');
+    }
+
+    const normalizedDocuments = Array.isArray(documents) ? documents : [];
     try {
-        const result = await pgPool.query<ActionItem>(
+        const result = await pgPool.query<LegacyActionItemRow>(
             'INSERT INTO action_items (opportunity_id, name, status, due_date, documents, created_by_user_id, assigned_to_user_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
-            [opportunity_id, name, status, due_date || null, documents || [], created_by_user_id, assigned_to_user_id]
+            [opportunity_id, name, status, due_date || null, normalizedDocuments, created_by_user_id, assigned_to_user_id]
         );
-        res.status(201).json(result.rows[0]);
+        const savedItem = stripActionItemNotes(result.rows[0]);
+        res.status(201).json(savedItem);
     } catch (error) {
         console.error('Error creating action item:', error);
         res.status(500).send('Internal Server Error');
@@ -384,19 +418,33 @@ apiRouter.post('/action-items', async (req: expressTypes.Request, res: expressTy
 
 apiRouter.put('/action-items/:itemId', async (req: expressTypes.Request, res: expressTypes.Response) => {
     const { itemId } = req.params;
-    const fields = Object.keys(req.body).filter(field => field !== 'notes');
-    const setClause = fields.map((field, index) => `"${field}" = $${index + 1}`).join(', ');
-    const values = fields.map(field => req.body[field]);
+    if (Object.prototype.hasOwnProperty.call(req.body, 'notes')) {
+        console.warn(`Rejected action item update for ${itemId} containing deprecated notes field.`);
+        return res.status(400).send('The action item notes field has been removed.');
+    }
+
+    const allowedFields = new Set(['name', 'status', 'due_date', 'documents', 'assigned_to_user_id']);
+    const fields = Object.keys(req.body).filter(field => allowedFields.has(field));
 
     if (fields.length === 0) return res.status(400).send('No update fields provided.');
 
+    const values = fields.map(field => {
+        if (field === 'documents') {
+            return Array.isArray(req.body[field]) ? req.body[field] : [];
+        }
+        return req.body[field];
+    });
+
+    const setClause = fields.map((field, index) => `"${field}" = $${index + 1}`).join(', ');
+
     try {
-        const result = await pgPool.query<ActionItem>(
+        const result = await pgPool.query<LegacyActionItemRow>(
             `UPDATE action_items SET ${setClause} WHERE action_item_id = $${fields.length + 1} RETURNING *`,
             [...values, itemId]
         );
         if (result.rows.length === 0) return res.status(404).send('Action item not found.');
-        res.status(200).json(result.rows[0]);
+        const updatedItem = stripActionItemNotes(result.rows[0]);
+        res.status(200).json(updatedItem);
     } catch (error) {
         console.error(`Error updating action item ${itemId}:`, error);
         res.status(500).send('Internal Server Error');
