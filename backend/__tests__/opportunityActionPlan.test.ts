@@ -198,6 +198,15 @@ describe('persistOpportunityActionPlan', () => {
         expect(newItem?.created_by_user_id).toBeDefined();
 
         expect(state.actionItems.size).toBe(2);
+        const storedItems = Array.from(state.actionItems.values());
+        const storedExisting = storedItems.find(item => item.name === 'Existing Task Updated');
+        expect(storedExisting?.documents).toEqual([
+            { id: 'doc-1', text: 'Call notes', url: 'https://example.com/doc-1' },
+        ]);
+        const storedNew = storedItems.find(item => item.name === 'New Kickoff');
+        expect(storedNew?.documents).toEqual([
+            { id: 'doc-2', text: 'Deck', url: 'https://example.com/deck' },
+        ]);
         expect(Array.from(state.actionItems.values()).some(item => item.name === 'Removable Task')).toBe(false);
         expect(state.history).toHaveLength(1);
     });

@@ -104,12 +104,13 @@ export const generateDefaultPlan = (
     const actionItems = opportunity.actionItems || [];
 
     return DEFAULT_PLAN_TEMPLATES.map(template => {
-        const existing = actionItems.find(item => item.name === template.name && item.due_date);
-        const due_date = existing?.due_date
-            ? existing.due_date
-            : baselineDate
-            ? formatAsIsoDate(addDays(baselineDate, template.offsetDays))
-            : '';
+        const existing = actionItems.find(item => item.name === template.name);
+        const due_date =
+            existing && 'due_date' in existing
+                ? existing.due_date ?? ''
+                : baselineDate
+                ? formatAsIsoDate(addDays(baselineDate, template.offsetDays))
+                : '';
 
         return {
             name: template.name,
