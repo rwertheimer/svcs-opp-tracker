@@ -206,7 +206,7 @@ describe('DispositionActionPlanProvider commitDraft', () => {
             services_amount_override: 2500,
             forecast_category_override: 'Best Case',
             version: 1,
-            notesSnapshot: 'Committed notes',
+            notes: 'Committed notes',
         });
         expect(payload.actionItems).toEqual([
             expect.objectContaining({

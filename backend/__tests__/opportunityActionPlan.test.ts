@@ -157,6 +157,7 @@ describe('persistOpportunityActionPlan', () => {
                 services_amount_override: 12000,
                 forecast_category_override: 'Commit',
                 version: 1,
+                notes: 'Updated note',
             },
             actionItems: [
                 {
@@ -181,7 +182,7 @@ describe('persistOpportunityActionPlan', () => {
         expect(result.disposition.status).toBe('Services Fit');
         expect(result.disposition.version).toBe(2);
         expect(result.disposition.last_updated_by_user_id).toBe(userId);
-        expect(result.disposition.notes).toBe('Initial note');
+        expect(result.disposition.notes).toBe('Updated note');
         expect(result.actionItems).toHaveLength(2);
 
         const updatedItem = result.actionItems.find(item => item.action_item_id === existingId);
@@ -209,6 +210,7 @@ describe('persistOpportunityActionPlan', () => {
         ]);
         expect(Array.from(state.actionItems.values()).some(item => item.name === 'Removable Task')).toBe(false);
         expect(state.history).toHaveLength(1);
+        expect(state.history[0]).toMatchObject({ notes: 'Updated note' });
     });
 
     it('throws a validation error when required fields are missing', async () => {
