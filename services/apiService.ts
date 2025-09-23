@@ -9,7 +9,15 @@ declare global {
   }
 }
 
-import type { Opportunity, AccountDetails, Disposition, User, ActionItem, SavedFilter } from '../types';
+import type {
+  Opportunity,
+  AccountDetails,
+  Disposition,
+  User,
+  ActionItem,
+  SavedFilter,
+  Document,
+} from '../types';
 import { generateOpportunities, generateAccountDetails, MOCK_USERS } from './mockData';
 
 const USE_MOCK_DATA = (import.meta.env?.VITE_USE_MOCK_DATA ?? 'true') === 'true';
@@ -100,6 +108,117 @@ export const saveDisposition = async (opportunityId: string, disposition: Dispos
       err.status = 500;
       throw err;
     }
+  }
+};
+
+export interface SaveDispositionActionPlanPayload {
+  disposition: {
+    status: Disposition['status'];
+    reason?: Disposition['reason'];
+    services_amount_override?: Disposition['services_amount_override'] | null;
+    forecast_category_override?: Disposition['forecast_category_override'] | null;
+    version: number;
+    notesSnapshot?: string;
+  };
+  actionItems: Array<{
+    action_item_id?: string;
+    name: string;
+    status: ActionItem['status'];
+    due_date?: string | null;
+    documents?: Document[];
+    assigned_to_user_id: string;
+    created_by_user_id?: string;
+  }>;
+}
+
+export interface SaveDispositionActionPlanResponse {
+  disposition: Disposition;
+  actionItems: ActionItem[];
+}
+
+const sanitizeActionPlanDocuments = (documents?: Document[]): Document[] => {
+  if (!Array.isArray(documents)) {
+    return [];
+  }
+  return documents;
+};
+
+const sanitizeActionPlanDueDate = (due?: string | null): string | null => {
+  if (!due) return null;
+  return due;
+};
+
+export const saveDispositionActionPlan = async (
+  opportunityId: string,
+  payload: SaveDispositionActionPlanPayload,
+  userId: string
+): Promise<SaveDispositionActionPlanResponse> => {
+  if (USE_MOCK_DATA) {
+    const now = new Date().toISOString();
+    const normalizedItems = payload.actionItems.map((item, index) => ({
+      action_item_id: item.action_item_id ?? `mock-ai-${Date.now()}-${index}`,
+      opportunity_id: opportunityId,
+      name: item.name,
+      status: item.status,
+      due_date: sanitizeActionPlanDueDate(item.due_date) ?? '',
+      documents: sanitizeActionPlanDocuments(item.documents),
+      assigned_to_user_id: item.assigned_to_user_id,
+      created_by_user_id: item.created_by_user_id ?? userId,
+    }));
+
+    const disposition: Disposition = {
+      status: payload.disposition.status,
+      notes: payload.disposition.notesSnapshot ?? '',
+      reason: payload.disposition.reason ?? '',
+      services_amount_override: payload.disposition.services_amount_override ?? undefined,
+      forecast_category_override: payload.disposition.forecast_category_override ?? undefined,
+      version: payload.disposition.version + 1,
+      last_updated_by_user_id: userId,
+      last_updated_at: now,
+    };
+
+    return Promise.resolve({ disposition, actionItems: normalizedItems });
+  }
+
+  const body = {
+    disposition: {
+      status: payload.disposition.status,
+      reason: payload.disposition.reason ?? '',
+      services_amount_override:
+        payload.disposition.services_amount_override === undefined
+          ? null
+          : payload.disposition.services_amount_override,
+      forecast_category_override:
+        payload.disposition.forecast_category_override === undefined
+          ? null
+          : payload.disposition.forecast_category_override,
+      version: payload.disposition.version,
+    },
+    actionItems: payload.actionItems.map(item => ({
+      action_item_id: item.action_item_id,
+      name: item.name,
+      status: item.status,
+      due_date: sanitizeActionPlanDueDate(item.due_date),
+      documents: sanitizeActionPlanDocuments(item.documents),
+      assigned_to_user_id: item.assigned_to_user_id,
+      created_by_user_id: item.created_by_user_id,
+    })),
+  };
+
+  try {
+    return await httpJson(`${API_BASE_URL}/opportunities/${opportunityId}/action-plan`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-user-id': userId,
+      },
+      body: JSON.stringify(body),
+    });
+  } catch (e: any) {
+    if (e?.status) throw e;
+    const err: any = new Error('Failed to save action plan');
+    err.status = 500;
+    throw err;
   }
 };
 

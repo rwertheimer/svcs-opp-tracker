@@ -69,12 +69,9 @@ describe('HistorySummaryTiles', () => {
         details={details}
         historicalOpportunities={historical}
         onBack={() => {}}
-        onSave={() => {}}
+        onSaveActionPlan={vi.fn().mockResolvedValue({ disposition: historical[0].disposition, actionItems: [] })}
         users={[user]}
         currentUser={user}
-        onActionItemCreate={() => {}}
-        onActionItemUpdate={() => {}}
-        onActionItemDelete={() => {}}
       />
     );
 

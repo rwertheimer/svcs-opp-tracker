@@ -64,16 +64,13 @@ vi.mock('../../components/Toast', () => ({
 
 describe('ActionItemsManager - staged add', () => {
   it('adds to staged list (pre-save) instead of persisting', async () => {
-    const onCreate = vi.fn();
+    const onSave = vi.fn();
 
     render(
       <DispositionActionPlanProvider
         opportunity={baseOpportunity}
         currentUser={users[0]}
-        onSaveDisposition={vi.fn()}
-        onActionItemCreate={onCreate}
-        onActionItemUpdate={vi.fn()}
-        onActionItemDelete={vi.fn()}
+        onSaveActionPlan={onSave}
       >
         <PrimeStaging>
           <ManagerHarness />
@@ -87,22 +84,30 @@ describe('ActionItemsManager - staged add', () => {
     fireEvent.change(input, { target: { value: 'Follow-up email' } });
     fireEvent.click(screen.getByRole('button', { name: /add task/i }));
 
-    expect(onCreate).not.toHaveBeenCalled();
+    expect(onSave).not.toHaveBeenCalled();
     expect(screen.getByDisplayValue('Follow-up email')).toBeInTheDocument();
   });
 
   it('persists staged defaults when save CTA is clicked', async () => {
-    const onCreate = vi.fn().mockResolvedValue(undefined);
-    const onSaveDisposition = vi.fn().mockResolvedValue(baseOpportunity.disposition);
+    const onSaveActionPlan = vi.fn().mockImplementation(async payload => ({
+      disposition: { ...baseOpportunity.disposition, status: payload.disposition.status, version: baseOpportunity.disposition.version + 1 },
+      actionItems: payload.actionItems.map((item, index) => ({
+        action_item_id: item.action_item_id ?? `ai-${index}`,
+        opportunity_id: baseOpportunity.opportunities_id,
+        name: item.name,
+        status: item.status,
+        due_date: item.due_date ?? '',
+        documents: item.documents ?? [],
+        created_by_user_id: users[0].user_id,
+        assigned_to_user_id: item.assigned_to_user_id,
+      })),
+    }));
 
     render(
       <DispositionActionPlanProvider
         opportunity={baseOpportunity}
         currentUser={users[0]}
-        onSaveDisposition={onSaveDisposition}
-        onActionItemCreate={onCreate}
-        onActionItemUpdate={vi.fn()}
-        onActionItemDelete={vi.fn()}
+        onSaveActionPlan={onSaveActionPlan}
       >
         <PrimeStaging>
           <ManagerHarness />
@@ -114,8 +119,8 @@ describe('ActionItemsManager - staged add', () => {
     fireEvent.click(saveButton);
 
     await waitFor(() => {
-      expect(onCreate).toHaveBeenCalled();
-      expect(onSaveDisposition).toHaveBeenCalled();
+      expect(onSaveActionPlan).toHaveBeenCalledTimes(1);
+      expect(onSaveActionPlan.mock.calls[0][0].actionItems.length).toBeGreaterThan(0);
     });
   });
 
@@ -141,10 +146,7 @@ describe('ActionItemsManager - staged add', () => {
       <DispositionActionPlanProvider
         opportunity={opportunityWithDocs}
         currentUser={users[0]}
-        onSaveDisposition={vi.fn()}
-        onActionItemCreate={vi.fn()}
-        onActionItemUpdate={vi.fn()}
-        onActionItemDelete={vi.fn()}
+        onSaveActionPlan={vi.fn()}
       >
         <ActionItemsManager users={users} />
       </DispositionActionPlanProvider>

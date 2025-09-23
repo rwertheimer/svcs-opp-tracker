@@ -3,17 +3,12 @@ import type { ActionItem, Disposition, DispositionStatus, Opportunity, User, Doc
 import { ActionItemStatus } from '../../types';
 import { generateDefaultPlan } from '../../services/actionPlanGenerator';
 import { useToast } from '../Toast';
+import type { SaveDispositionActionPlanPayload, SaveDispositionActionPlanResponse } from '../../services/apiService';
 
 interface DispositionActionPlanProviderProps {
     opportunity: Opportunity;
     currentUser: User;
-    onSaveDisposition: (disposition: Disposition) => Promise<Disposition | void> | Disposition | void;
-    onActionItemCreate: (
-        opportunityId: string,
-        item: Omit<ActionItem, 'action_item_id' | 'created_by_user_id'>
-    ) => Promise<void> | void;
-    onActionItemUpdate: (opportunityId: string, itemId: string, updates: Partial<ActionItem>) => Promise<void> | void;
-    onActionItemDelete: (opportunityId: string, itemId: string) => Promise<void> | void;
+    onSaveActionPlan: (payload: SaveDispositionActionPlanPayload) => Promise<SaveDispositionActionPlanResponse>;
     children: React.ReactNode;
 }
 
@@ -25,6 +20,68 @@ export type StagedActionItem = {
     assigned_to_user_id: string;
 };
 
+const sanitizeActionItem = (item: ActionItem): ActionItem => ({
+    ...item,
+    due_date: item.due_date ?? '',
+    documents: Array.isArray(item.documents) ? item.documents : [],
+});
+
+const sanitizeActionItemCollection = (items: ActionItem[] | null | undefined): ActionItem[] => {
+    if (!Array.isArray(items)) {
+        return [];
+    }
+    return items.map(sanitizeActionItem);
+};
+
+const normalizeDocumentsForCompare = (documents: Document[] | undefined): Document[] => {
+    if (!Array.isArray(documents)) return [];
+    return documents.map(doc => ({ id: doc.id, text: doc.text, url: doc.url }));
+};
+
+const toComparableActionItems = (items: ActionItem[]): Array<{
+    action_item_id: string;
+    name: string;
+    status: ActionItemStatus;
+    due_date: string;
+    assigned_to_user_id: string;
+    documents: Document[];
+}> =>
+    items
+        .map(item => ({
+            action_item_id: item.action_item_id,
+            name: item.name,
+            status: item.status,
+            due_date: item.due_date || '',
+            assigned_to_user_id: item.assigned_to_user_id,
+            documents: normalizeDocumentsForCompare(item.documents),
+        }))
+        .sort((a, b) => a.action_item_id.localeCompare(b.action_item_id));
+
+const areActionItemCollectionsEqual = (a: ActionItem[], b: ActionItem[]): boolean => {
+    if (a.length !== b.length) return false;
+    const normA = toComparableActionItems(a);
+    const normB = toComparableActionItems(b);
+    return normA.every((item, index) => {
+        const other = normB[index];
+        if (!other) return false;
+        if (
+            item.name !== other.name ||
+            item.status !== other.status ||
+            item.due_date !== other.due_date ||
+            item.assigned_to_user_id !== other.assigned_to_user_id
+        ) {
+            return false;
+        }
+        const docsA = item.documents ?? [];
+        const docsB = other.documents ?? [];
+        if (docsA.length !== docsB.length) return false;
+        return docsA.every((doc, docIndex) => {
+            const counterpart = docsB[docIndex];
+            return counterpart && doc.id === counterpart.id && doc.text === counterpart.text && doc.url === counterpart.url;
+        });
+    });
+};
+
 interface DispositionActionPlanContextValue {
     opportunity: Opportunity;
     currentUser: User;
@@ -32,7 +89,6 @@ interface DispositionActionPlanContextValue {
     updateDisposition: (updates: Partial<Disposition>) => void;
     changeDispositionStatus: (status: DispositionStatus) => boolean;
     resetDraft: () => void;
-    saveDisposition: () => Promise<void> | void;
     commitDraft: () => Promise<void>;
     confirmDiscardChanges: () => boolean;
     isDispositioned: boolean;
@@ -45,14 +101,10 @@ interface DispositionActionPlanContextValue {
     addStagedActionItem: (item: Partial<StagedActionItem>) => void;
     updateStagedActionItem: (index: number, updates: Partial<StagedActionItem>) => void;
     removeStagedActionItem: (index: number) => void;
-    persistStagedActionItems: () => Promise<void>;
     isStagePersisting: boolean;
     confirmDiscardStaged: () => boolean;
-    createActionItem: (
-        item: Omit<ActionItem, 'action_item_id' | 'created_by_user_id'>
-    ) => Promise<void> | void;
-    updateActionItem: (itemId: string, updates: Partial<ActionItem>) => Promise<void> | void;
-    deleteActionItem: (itemId: string) => Promise<void> | void;
+    updateActionItem: (itemId: string, updates: Partial<ActionItem>) => void;
+    deleteActionItem: (itemId: string) => void;
     queueSaveOperation: (operation: () => Promise<void> | void) => Promise<void>;
 }
 
@@ -61,15 +113,18 @@ const DispositionActionPlanContext = createContext<DispositionActionPlanContextV
 export const DispositionActionPlanProvider: React.FC<DispositionActionPlanProviderProps> = ({
     opportunity,
     currentUser,
-    onSaveDisposition,
-    onActionItemCreate,
-    onActionItemUpdate,
-    onActionItemDelete,
+    onSaveActionPlan,
     children,
 }) => {
     const { showToast } = useToast();
     const [baselineDisposition, setBaselineDisposition] = useState<Disposition>({ ...opportunity.disposition });
     const [draftDisposition, setDraftDisposition] = useState<Disposition>({ ...opportunity.disposition });
+    const [baselineActionItems, setBaselineActionItems] = useState<ActionItem[]>(
+        sanitizeActionItemCollection(opportunity.actionItems)
+    );
+    const [draftActionItems, setDraftActionItems] = useState<ActionItem[]>(
+        sanitizeActionItemCollection(opportunity.actionItems)
+    );
     const [stagedActionItems, setStagedActionItems] = useState<StagedActionItem[]>([]);
     const [isStagePersisting, setIsStagePersisting] = useState(false);
     const [isCommittingDraft, setIsCommittingDraft] = useState(false);
@@ -78,12 +133,13 @@ export const DispositionActionPlanProvider: React.FC<DispositionActionPlanProvid
     useEffect(() => {
         setBaselineDisposition({ ...opportunity.disposition });
         setDraftDisposition({ ...opportunity.disposition });
+        const sanitized = sanitizeActionItemCollection(opportunity.actionItems);
+        setBaselineActionItems(sanitized);
+        setDraftActionItems(sanitized);
         setStagedActionItems([]);
-    }, [opportunity.opportunities_id, opportunity.disposition.version]);
+    }, [opportunity.actionItems, opportunity.disposition.version, opportunity.opportunities_id]);
 
-    const actionItems = useMemo(() => {
-        return (opportunity.actionItems || []).map(item => ({ ...item, documents: item.documents || [] }));
-    }, [opportunity.actionItems]);
+    const actionItems = useMemo(() => sanitizeActionItemCollection(draftActionItems), [draftActionItems]);
 
     useEffect(() => {
         if (draftDisposition.status !== 'Services Fit') {
@@ -150,7 +206,12 @@ export const DispositionActionPlanProvider: React.FC<DispositionActionPlanProvid
         );
     }, [baselineDisposition, draftDisposition, normalizeDispositionForCompare]);
 
-    const hasStagedActionPlanChanges = stagedActionItems.length > 0;
+    const hasDraftActionItemChanges = useMemo(
+        () => !areActionItemCollectionsEqual(draftActionItems, baselineActionItems),
+        [baselineActionItems, draftActionItems]
+    );
+
+    const hasStagedActionPlanChanges = hasDraftActionItemChanges || stagedActionItems.length > 0;
 
     const isDirty = hasUnsavedDispositionChanges || hasStagedActionPlanChanges;
 
@@ -165,19 +226,23 @@ export const DispositionActionPlanProvider: React.FC<DispositionActionPlanProvid
     }, []);
 
     const confirmDiscardStaged = useCallback(() => {
-        if (stagedActionItems.length === 0) return true;
+        if (!hasStagedActionPlanChanges) return true;
+        const hasNewTasks = stagedActionItems.length > 0;
         const confirmed = window.confirm(
-            'You have staged action plan tasks that are not saved. Save Action Plan to keep them, or choose OK to discard.'
+            hasNewTasks
+                ? 'You have staged action plan tasks that are not saved. Save Action Plan to keep them, or choose OK to discard.'
+                : 'You have unsaved changes to action plan tasks. Save Action Plan to keep them, or choose OK to discard.'
         );
         if (confirmed) {
             setStagedActionItems([]);
+            setDraftActionItems(sanitizeActionItemCollection(baselineActionItems));
         }
         return confirmed;
-    }, [stagedActionItems.length]);
+    }, [baselineActionItems, hasStagedActionPlanChanges, stagedActionItems.length]);
 
     const changeDispositionStatus = useCallback(
         (status: DispositionStatus) => {
-            if (status !== 'Services Fit' && stagedActionItems.length > 0) {
+            if (status !== 'Services Fit' && hasStagedActionPlanChanges) {
                 const confirmed = confirmDiscardStaged();
                 if (!confirmed) {
                     return false;
@@ -202,7 +267,7 @@ export const DispositionActionPlanProvider: React.FC<DispositionActionPlanProvid
 
             return true;
         },
-        [confirmDiscardStaged, opportunity.opportunities_has_services_flag, stagedActionItems.length]
+        [confirmDiscardStaged, hasStagedActionPlanChanges, opportunity.opportunities_has_services_flag]
     );
 
     const updateDisposition = useCallback((updates: Partial<Disposition>) => {
@@ -211,8 +276,9 @@ export const DispositionActionPlanProvider: React.FC<DispositionActionPlanProvid
 
     const resetDraft = useCallback(() => {
         setDraftDisposition({ ...baselineDisposition });
+        setDraftActionItems(sanitizeActionItemCollection(baselineActionItems));
         setStagedActionItems([]);
-    }, [baselineDisposition]);
+    }, [baselineActionItems, baselineDisposition]);
 
     const confirmDiscardChanges = useCallback(() => {
         if (!isDirty) return true;
@@ -228,55 +294,63 @@ export const DispositionActionPlanProvider: React.FC<DispositionActionPlanProvid
         return confirmed;
     }, [hasStagedActionPlanChanges, hasUnsavedDispositionChanges, isDirty, resetDraft]);
 
-    const saveDisposition = useCallback(() => {
-        const payload = { ...draftDisposition };
-        return queueSaveOperation(() => Promise.resolve(onSaveDisposition(payload)));
-    }, [draftDisposition, onSaveDisposition, queueSaveOperation]);
-
-    const persistStagedItems = useCallback(async () => {
-        for (const item of stagedActionItems) {
-            await onActionItemCreate(opportunity.opportunities_id, {
-                opportunity_id: opportunity.opportunities_id,
-                name: item.name,
-                status: item.status,
-                due_date: item.due_date,
-                documents: item.documents ?? [],
-                assigned_to_user_id: item.assigned_to_user_id || currentUser.user_id,
-            });
-        }
-        setStagedActionItems([]);
-        showToast('Action plan saved', 'success');
-    }, [
-        currentUser.user_id,
-        onActionItemCreate,
-        opportunity.opportunities_id,
-        showToast,
-        stagedActionItems,
-    ]);
-
     const commitDraft = useCallback(async () => {
         const shouldSaveDisposition = hasUnsavedDispositionChanges;
-        const shouldPersistStaged = stagedActionItems.length > 0;
-        if (!shouldSaveDisposition && !shouldPersistStaged) return;
+        const shouldSaveActionPlan = hasStagedActionPlanChanges;
+        if (!shouldSaveDisposition && !shouldSaveActionPlan) return;
 
         setIsCommittingDraft(true);
-        if (shouldPersistStaged) {
+        if (shouldSaveActionPlan) {
             setIsStagePersisting(true);
         }
 
         try {
             await queueSaveOperation(async () => {
-                if (shouldSaveDisposition) {
-                    const payload = { ...draftDisposition };
-                    const result = await onSaveDisposition(payload);
-                    const savedDisposition = (result ?? payload) as Disposition;
-                    setBaselineDisposition({ ...savedDisposition });
-                    setDraftDisposition({ ...savedDisposition });
-                }
+                const mergedActionItems: SaveDispositionActionPlanPayload['actionItems'] = [
+                    ...sanitizeActionItemCollection(draftActionItems).map(item => ({
+                        action_item_id: item.action_item_id,
+                        name: item.name,
+                        status: item.status,
+                        due_date: item.due_date ? item.due_date : null,
+                        documents: Array.isArray(item.documents) ? item.documents : [],
+                        assigned_to_user_id: item.assigned_to_user_id,
+                        created_by_user_id: item.created_by_user_id,
+                    })),
+                    ...stagedActionItems.map(item => ({
+                        name: item.name,
+                        status: item.status,
+                        due_date: item.due_date ? item.due_date : null,
+                        documents: Array.isArray(item.documents) ? item.documents : [],
+                        assigned_to_user_id: item.assigned_to_user_id || currentUser.user_id,
+                        created_by_user_id: currentUser.user_id,
+                    })),
+                ];
 
-                if (shouldPersistStaged) {
-                    await persistStagedItems();
-                }
+                const dispositionPayload: SaveDispositionActionPlanPayload['disposition'] = {
+                    status: draftDisposition.status,
+                    reason: draftDisposition.reason ?? '',
+                    services_amount_override:
+                        draftDisposition.services_amount_override === undefined
+                            ? null
+                            : draftDisposition.services_amount_override,
+                    forecast_category_override:
+                        draftDisposition.forecast_category_override === undefined
+                            ? null
+                            : draftDisposition.forecast_category_override,
+                    version: draftDisposition.version,
+                    notesSnapshot: draftDisposition.notes ?? '',
+                };
+
+                const result = await onSaveActionPlan({ disposition: dispositionPayload, actionItems: mergedActionItems });
+                const savedDisposition = result?.disposition ?? draftDisposition;
+                const savedActionItems = sanitizeActionItemCollection(result?.actionItems ?? draftActionItems);
+
+                setBaselineDisposition({ ...savedDisposition });
+                setDraftDisposition({ ...savedDisposition });
+                setBaselineActionItems(savedActionItems);
+                setDraftActionItems(savedActionItems);
+                setStagedActionItems([]);
+                showToast('Action plan saved', 'success');
             });
         } catch (error: any) {
             if (error?.status === 409) {
@@ -286,19 +360,21 @@ export const DispositionActionPlanProvider: React.FC<DispositionActionPlanProvid
             }
             throw error;
         } finally {
-            if (shouldPersistStaged) {
+            if (shouldSaveActionPlan) {
                 setIsStagePersisting(false);
             }
             setIsCommittingDraft(false);
         }
     }, [
+        currentUser.user_id,
+        draftActionItems,
         draftDisposition,
+        hasStagedActionPlanChanges,
         hasUnsavedDispositionChanges,
-        onSaveDisposition,
-        persistStagedItems,
+        onSaveActionPlan,
         queueSaveOperation,
-        stagedActionItems.length,
         showToast,
+        stagedActionItems,
     ]);
 
     const addStagedActionItem = useCallback(
@@ -336,36 +412,24 @@ export const DispositionActionPlanProvider: React.FC<DispositionActionPlanProvid
         setStagedActionItems(prev => prev.filter((_, idx) => idx !== index));
     }, []);
 
-    const persistStagedActionItems = useCallback(async () => {
-        if (stagedActionItems.length === 0 || isStagePersisting) return;
-        setIsStagePersisting(true);
-        try {
-            await queueSaveOperation(persistStagedItems);
-        } catch (error) {
-            console.error('Failed to save staged action plan', error);
-            showToast('Failed to save action plan', 'error');
-            throw error;
-        } finally {
-            setIsStagePersisting(false);
-        }
-    }, [isStagePersisting, persistStagedItems, queueSaveOperation, showToast]);
+    const updateActionItem = useCallback((itemId: string, updates: Partial<ActionItem>) => {
+        setDraftActionItems(prev =>
+            prev.map(item =>
+                item.action_item_id === itemId
+                    ? sanitizeActionItem({
+                          ...item,
+                          ...updates,
+                          documents: Array.isArray(updates.documents) ? updates.documents : item.documents,
+                          due_date: updates.due_date ?? item.due_date,
+                      })
+                    : item
+            )
+        );
+    }, []);
 
-    const createActionItem = useCallback(
-        (item: Omit<ActionItem, 'action_item_id' | 'created_by_user_id'>) =>
-            onActionItemCreate(opportunity.opportunities_id, item),
-        [onActionItemCreate, opportunity.opportunities_id]
-    );
-
-    const updateActionItem = useCallback(
-        (itemId: string, updates: Partial<ActionItem>) =>
-            onActionItemUpdate(opportunity.opportunities_id, itemId, updates),
-        [onActionItemUpdate, opportunity.opportunities_id]
-    );
-
-    const deleteActionItem = useCallback(
-        (itemId: string) => onActionItemDelete(opportunity.opportunities_id, itemId),
-        [onActionItemDelete, opportunity.opportunities_id]
-    );
+    const deleteActionItem = useCallback((itemId: string) => {
+        setDraftActionItems(prev => prev.filter(item => item.action_item_id !== itemId));
+    }, []);
 
     const value: DispositionActionPlanContextValue = useMemo(
         () => ({
@@ -377,7 +441,6 @@ export const DispositionActionPlanProvider: React.FC<DispositionActionPlanProvid
             resetDraft,
             commitDraft,
             confirmDiscardChanges,
-            saveDisposition,
             isDispositioned: draftDisposition.status === 'Services Fit',
             isDirty,
             hasUnsavedDispositionChanges,
@@ -388,10 +451,8 @@ export const DispositionActionPlanProvider: React.FC<DispositionActionPlanProvid
             addStagedActionItem,
             updateStagedActionItem,
             removeStagedActionItem,
-            persistStagedActionItems,
             isStagePersisting,
             confirmDiscardStaged,
-            createActionItem,
             updateActionItem,
             deleteActionItem,
             queueSaveOperation,
@@ -402,7 +463,6 @@ export const DispositionActionPlanProvider: React.FC<DispositionActionPlanProvid
             changeDispositionStatus,
             confirmDiscardStaged,
             confirmDiscardChanges,
-            createActionItem,
             currentUser,
             deleteActionItem,
             draftDisposition,
@@ -410,12 +470,10 @@ export const DispositionActionPlanProvider: React.FC<DispositionActionPlanProvid
             hasUnsavedDispositionChanges,
             isCommittingDraft,
             isDirty,
-            persistStagedActionItems,
             queueSaveOperation,
             removeStagedActionItem,
             resetDraft,
             commitDraft,
-            saveDisposition,
             stagedActionItems,
             updateActionItem,
             updateDisposition,

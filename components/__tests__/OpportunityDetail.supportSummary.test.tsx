@@ -89,12 +89,9 @@ describe('SupportSummaryTiles', () => {
         details={details}
         historicalOpportunities={[baseOpp()]}
         onBack={() => {}}
-        onSave={() => {}}
+        onSaveActionPlan={vi.fn().mockResolvedValue({ disposition: baseOpp().disposition, actionItems: [] })}
         users={[user]}
         currentUser={user}
-        onActionItemCreate={() => {}}
-        onActionItemUpdate={() => {}}
-        onActionItemDelete={() => {}}
       />
     );
     // Tiles exist

@@ -10,10 +10,13 @@ vi.mock('../../services/apiService', () => {
     // Delay opportunities to ensure spinner is visible while loading
     fetchOpportunities: vi.fn().mockImplementation(() => delayed([])),
     fetchOpportunityDetails: vi.fn(),
-    saveDisposition: vi.fn(),
-    createActionItem: vi.fn(),
+    saveDispositionActionPlan: vi.fn(),
     updateActionItem: vi.fn(),
-    deleteActionItem: vi.fn(),
+    fetchSavedViews: vi.fn().mockResolvedValue([]),
+    createSavedView: vi.fn(),
+    updateSavedView: vi.fn(),
+    deleteSavedView: vi.fn(),
+    setDefaultSavedView: vi.fn(),
   };
 });
 

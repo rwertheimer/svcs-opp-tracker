@@ -1,8 +1,29 @@
 
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import type { Opportunity, AccountDetails, Disposition, SavedFilter, TaskWithOpportunityContext, ActionItem, FilterGroup, User, FilterRule } from './types';
-import { fetchOpportunities, fetchOpportunityDetails, saveDisposition, fetchUsers, createActionItem, updateActionItem, deleteActionItem, fetchSavedViews, createSavedView, updateSavedView, deleteSavedView as deleteSavedViewApi, setDefaultSavedView } from './services/apiService';
+import type {
+  Opportunity,
+  AccountDetails,
+  SavedFilter,
+  TaskWithOpportunityContext,
+  ActionItem,
+  FilterGroup,
+  User,
+  FilterRule,
+} from './types';
+import {
+  fetchOpportunities,
+  fetchOpportunityDetails,
+  fetchUsers,
+  updateActionItem,
+  fetchSavedViews,
+  createSavedView,
+  updateSavedView,
+  deleteSavedView as deleteSavedViewApi,
+  setDefaultSavedView,
+  saveDispositionActionPlan,
+} from './services/apiService';
+import type { SaveDispositionActionPlanPayload, SaveDispositionActionPlanResponse } from './services/apiService';
 import OpportunityList from './components/OpportunityList';
 import OpportunityDetail from './components/OpportunityDetail';
 import Header from './components/Header';
@@ -298,81 +319,36 @@ const App: React.FC = () => {
     setSelectedOpportunityDetails(null);
   };
   
-  const handleSaveDisposition = async (disposition: Disposition) => {
-    if (!selectedOpportunity || !currentUser) return;
+  const handleSaveActionPlan = async (
+    payload: SaveDispositionActionPlanPayload
+  ): Promise<SaveDispositionActionPlanResponse> => {
+    if (!selectedOpportunity || !currentUser) {
+      throw new Error('No opportunity selected.');
+    }
 
-    const originalOpportunity = opportunities.find(opp => opp.opportunities_id === selectedOpportunity.opportunities_id);
-    if (!originalOpportunity) return;
-
-    const updatedOpportunity = { ...originalOpportunity, disposition: { ...disposition, last_updated_by_user_id: currentUser.user_id }};
-    
-    // Optimistically update local state and keep user on the detail view
-    setOpportunities(prevOpps => prevOpps.map(opp => opp.opportunities_id === updatedOpportunity.opportunities_id ? updatedOpportunity : opp));
-    setSelectedOpportunity(updatedOpportunity);
-    showToast('Saving disposition...', 'info', 1500);
+    const opportunityId = selectedOpportunity.opportunities_id;
+    const originalOpportunity = opportunities.find(opp => opp.opportunities_id === opportunityId);
+    if (!originalOpportunity) {
+      throw new Error('Opportunity not found.');
+    }
 
     try {
-      const savedDisposition = await saveDisposition(updatedOpportunity.opportunities_id, updatedOpportunity.disposition, currentUser.user_id);
-      // On success, update the opportunity with the new version from the server
-      const merged = { ...updatedOpportunity, disposition: savedDisposition };
-      setOpportunities(prevOpps => prevOpps.map(opp => opp.opportunities_id === updatedOpportunity.opportunities_id ? merged : opp));
-      setSelectedOpportunity(merged);
-      showToast('Disposition saved', 'success');
-    } catch (err: any) {
-        // FIX: Check for error status code 409 for optimistic locking conflicts.
-        if (err.status === 409) { // Optimistic locking conflict
-            showToast('Save conflict: another user updated this item', 'error');
-            alert("Conflict: This opportunity was updated by another user. Your changes could not be saved. The view will now refresh.");
-            window.location.reload(); // Force a refresh to get the latest data
-        } else {
-            console.error("Failed to save disposition:", err);
-            setError(`Failed to save disposition for ${originalOpportunity.opportunities_name}. Your changes have been reverted.`);
-            setOpportunities(prevOpps => prevOpps.map(opp => opp.opportunities_id === originalOpportunity.opportunities_id ? originalOpportunity : opp));
-            showToast('Failed to save disposition', 'error');
-        }
-    }
-  };
-  
-  // --- NEW: Action Item Handlers ---
-  const handleActionItemCreate = async (opportunityId: string, actionItem: Omit<ActionItem, 'action_item_id' | 'created_by_user_id'>) => {
-      if (!currentUser) return;
-      
-      // Optimistic update
-      const tempId = `temp-${Date.now()}`;
-      const newItem: ActionItem = {
-          ...actionItem,
-          action_item_id: tempId,
-          created_by_user_id: currentUser.user_id
+      const result = await saveDispositionActionPlan(opportunityId, payload, currentUser.user_id);
+      const sanitizedItems = result.actionItems.map(item => stripActionItemNotes(item as LegacyActionItem));
+      const merged: Opportunity = {
+        ...originalOpportunity,
+        disposition: result.disposition,
+        actionItems: sanitizedItems,
       };
-      setOpportunities(prev => prev.map(opp => opp.opportunities_id === opportunityId ? {...opp, actionItems: [...(opp.actionItems || []), newItem]} : opp));
-      // Keep selectedOpportunity in sync so UI updates immediately
-      setSelectedOpportunity(prev => prev && prev.opportunities_id === opportunityId 
-        ? { ...prev, actionItems: [...(prev.actionItems || []), newItem] } 
-        : prev);
 
-      try {
-          const savedItem = await createActionItem(opportunityId, newItem);
-          const sanitizedSavedItem = stripActionItemNotes(savedItem as LegacyActionItem);
-          // Replace temp item with saved item from server
-          setOpportunities(prev => prev.map(opp => opp.opportunities_id === opportunityId
-              ? {...opp, actionItems: (opp.actionItems || []).map(item => item.action_item_id === tempId ? sanitizedSavedItem : item)}
-              : opp
-          ));
-          setSelectedOpportunity(prev => prev && prev.opportunities_id === opportunityId
-            ? { ...prev, actionItems: (prev.actionItems || []).map(item => item.action_item_id === tempId ? sanitizedSavedItem : item) }
-            : prev);
-      } catch (error) {
-          console.error("Failed to create action item:", error);
-          setError("Failed to save new action item. Reverting change.");
-          // Revert optimistic update
-          setOpportunities(prev => prev.map(opp => opp.opportunities_id === opportunityId 
-              ? {...opp, actionItems: (opp.actionItems || []).filter(item => item.action_item_id !== tempId)} 
-              : opp
-          ));
-          setSelectedOpportunity(prev => prev && prev.opportunities_id === opportunityId 
-            ? { ...prev, actionItems: (prev.actionItems || []).filter(item => item.action_item_id !== tempId) } 
-            : prev);
-      }
+      setOpportunities(prev => prev.map(opp => (opp.opportunities_id === opportunityId ? merged : opp)));
+      setSelectedOpportunity(prev => (prev && prev.opportunities_id === opportunityId ? merged : prev));
+
+      return { disposition: result.disposition, actionItems: sanitizedItems };
+    } catch (err) {
+      console.error('Failed to save action plan:', err);
+      throw err;
+    }
   };
 
   const handleActionItemUpdate = async (opportunityId: string, actionItemId: string, updates: Partial<ActionItem>) => {
@@ -384,10 +360,10 @@ const App: React.FC = () => {
           }
           return opp;
       }));
-      setSelectedOpportunity(prev => prev && prev.opportunities_id === opportunityId 
+      setSelectedOpportunity(prev => prev && prev.opportunities_id === opportunityId
         ? { ...prev, actionItems: (prev.actionItems || []).map(item => item.action_item_id === actionItemId ? { ...item, ...updates } : item) }
         : prev);
-      
+
       try {
           await updateActionItem(actionItemId, updates);
       } catch (error) {
@@ -395,28 +371,6 @@ const App: React.FC = () => {
           setError("Failed to update action item. Reverting change.");
           setOpportunities(originalOpps);
           // Re-sync selectedOpportunity from originalOpps
-          const orig = originalOpps.find(o => o.opportunities_id === opportunityId);
-          setSelectedOpportunity(prev => prev && prev.opportunities_id === opportunityId && orig ? orig : prev);
-      }
-  };
-
-  const handleActionItemDelete = async (opportunityId: string, actionItemId: string) => {
-      const originalOpps = [...opportunities];
-      // Optimistic update
-      setOpportunities(prev => prev.map(opp => opp.opportunities_id === opportunityId 
-          ? {...opp, actionItems: (opp.actionItems || []).filter(item => item.action_item_id !== actionItemId)} 
-          : opp
-      ));
-      setSelectedOpportunity(prev => prev && prev.opportunities_id === opportunityId 
-        ? { ...prev, actionItems: (prev.actionItems || []).filter(item => item.action_item_id !== actionItemId) }
-        : prev);
-
-      try {
-          await deleteActionItem(actionItemId);
-      } catch (error) {
-          console.error("Failed to delete action item:", error);
-          setError("Failed to delete action item. Reverting change.");
-          setOpportunities(originalOpps);
           const orig = originalOpps.find(o => o.opportunities_id === opportunityId);
           setSelectedOpportunity(prev => prev && prev.opportunities_id === opportunityId && orig ? orig : prev);
       }
@@ -641,12 +595,9 @@ const App: React.FC = () => {
           details={selectedOpportunityDetails}
           historicalOpportunities={historicalOpps}
           onBack={handleGoBack}
-          onSave={handleSaveDisposition}
+          onSaveActionPlan={handleSaveActionPlan}
           users={users}
           currentUser={currentUser!}
-          onActionItemCreate={handleActionItemCreate}
-          onActionItemUpdate={handleActionItemUpdate}
-          onActionItemDelete={handleActionItemDelete}
           initialSectionId={detailInitialSection}
         />
       );
