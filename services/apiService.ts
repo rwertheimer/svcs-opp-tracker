@@ -15,6 +15,14 @@ import { generateOpportunities, generateAccountDetails, MOCK_USERS } from './moc
 const USE_MOCK_DATA = (import.meta.env?.VITE_USE_MOCK_DATA ?? 'true') === 'true';
 const API_BASE_URL = 'http://localhost:8080/api';
 
+const omitActionItemNotes = <T extends { [key: string]: unknown }>(value: T): Omit<T, 'notes'> => {
+  if (value && typeof value === 'object' && 'notes' in value) {
+    const { notes: _legacyNotes, ...rest } = value as T & { notes?: unknown };
+    return rest;
+  }
+  return value as Omit<T, 'notes'>;
+};
+
 // Unified fetch helper that throws enriched errors
 async function httpJson(url: string, init?: RequestInit & { timeoutMs?: number }) {
   const controller = new AbortController();
@@ -98,29 +106,31 @@ export const saveDisposition = async (opportunityId: string, disposition: Dispos
 // --- NEW: Action Item APIs ---
 
 export const createActionItem = async (opportunityId: string, item: Omit<ActionItem, 'action_item_id'>): Promise<ActionItem> => {
+    const sanitizedItem = omitActionItemNotes(item);
     if (USE_MOCK_DATA) {
-        const newItem = { ...item, action_item_id: `mock-ai-${Date.now()}` };
+        const newItem = { ...sanitizedItem, action_item_id: `mock-ai-${Date.now()}` };
         console.log("(Mock) Creating action item:", newItem);
         return Promise.resolve(newItem as ActionItem);
     } else {
         return httpJson(`${API_BASE_URL}/action-items`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ opportunity_id: opportunityId, ...item }),
+            body: JSON.stringify({ opportunity_id: opportunityId, ...sanitizedItem }),
         });
     }
 };
 
 export const updateActionItem = async (actionItemId: string, updates: Partial<ActionItem>): Promise<ActionItem> => {
+     const sanitizedUpdates = omitActionItemNotes(updates);
      if (USE_MOCK_DATA) {
-        console.log(`(Mock) Updating action item ${actionItemId}:`, updates);
+        console.log(`(Mock) Updating action item ${actionItemId}:`, sanitizedUpdates);
         // This won't actually persist in mock mode, but we can simulate success.
         return Promise.resolve({} as ActionItem);
     } else {
         return httpJson(`${API_BASE_URL}/action-items/${actionItemId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(updates),
+            body: JSON.stringify(sanitizedUpdates),
         });
     }
 };
