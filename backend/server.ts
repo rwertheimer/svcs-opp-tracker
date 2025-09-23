@@ -8,25 +8,17 @@ import { Pool } from 'pg';
 import * as dotenv from 'dotenv';
 import { BigQuery } from '@google-cloud/bigquery';
 import type { User, Opportunity, ActionItem, Disposition } from '../types';
+import {
+    stripActionItemNotes,
+    sanitizeActionItemCollection,
+    registerOpportunityActionPlanRoutes,
+} from './opportunityActionPlan';
+import type { LegacyActionItemRow } from './opportunityActionPlan';
 
 
 dotenv.config();
 
-type LegacyActionItemRow = ActionItem & { notes?: unknown };
 type OpportunityRow = Omit<Opportunity, 'actionItems'> & { actionItems: LegacyActionItemRow[] };
-
-const stripActionItemNotes = (item: LegacyActionItemRow): ActionItem => {
-    const { notes: _legacyNotes, ...rest } = item;
-    return rest;
-};
-
-const sanitizeActionItemCollection = (items: unknown): ActionItem[] => {
-    if (!Array.isArray(items)) {
-        return [];
-    }
-
-    return items.map(item => stripActionItemNotes(item as LegacyActionItemRow));
-};
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -60,6 +52,7 @@ app.use(userMiddleware);
 
 
 const apiRouter = express.Router();
+registerOpportunityActionPlanRoutes(apiRouter, pgPool);
 
 // --- Ensure Saved Views schema (idempotent) ---
 async function ensureSavedViewsSchema() {
@@ -613,25 +606,27 @@ apiRouter.get('/accounts/:accountId/project-history', async (req: expressTypes.R
 // --- SERVER START ---
 app.use('/api', apiRouter);
 
-(async () => {
-    try {
-        // Test the connection
-        const client = await pgPool.connect();
-        console.log('Successfully connected to PostgreSQL database.');
-        // Ensure helpful indexes exist for performance-sensitive queries
+if (process.env.NODE_ENV !== 'test') {
+    (async () => {
         try {
-            await client.query('CREATE INDEX IF NOT EXISTS idx_action_items_opportunity_due ON action_items (opportunity_id, due_date)');
-            console.log('Ensured index idx_action_items_opportunity_due exists.');
-        } catch (e) {
-            console.warn('Warning: Failed to ensure action_items index:', e);
-        }
-        client.release();
+            // Test the connection
+            const client = await pgPool.connect();
+            console.log('Successfully connected to PostgreSQL database.');
+            // Ensure helpful indexes exist for performance-sensitive queries
+            try {
+                await client.query('CREATE INDEX IF NOT EXISTS idx_action_items_opportunity_due ON action_items (opportunity_id, due_date)');
+                console.log('Ensured index idx_action_items_opportunity_due exists.');
+            } catch (e) {
+                console.warn('Warning: Failed to ensure action_items index:', e);
+            }
+            client.release();
 
-        app.listen(PORT, () => {
-            console.log(`Server is running on http://localhost:${PORT}`);
-        });
-    } catch (error) {
-        console.error('Failed to connect to PostgreSQL database:', error);
-        process.exit(1);
-    }
-})();
+            app.listen(PORT, () => {
+                console.log(`Server is running on http://localhost:${PORT}`);
+            });
+        } catch (error) {
+            console.error('Failed to connect to PostgreSQL database:', error);
+            process.exit(1);
+        }
+    })();
+}

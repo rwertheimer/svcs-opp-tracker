@@ -21,7 +21,7 @@ if (!('IntersectionObserver' in globalThis)) {
   };
 }
 // Avoid errors when code calls smooth scroll
-if (!('scrollTo' in window)) {
+if (typeof window !== 'undefined' && !('scrollTo' in window)) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (window as any).scrollTo = () => {};
 }
