@@ -21,7 +21,6 @@ export type StagedActionItem = {
     name: string;
     status: ActionItemStatus;
     due_date: string;
-    notes: string;
     documents: Document[];
     assigned_to_user_id: string;
 };
@@ -241,7 +240,6 @@ export const DispositionActionPlanProvider: React.FC<DispositionActionPlanProvid
                 name: item.name,
                 status: item.status,
                 due_date: item.due_date,
-                notes: item.notes,
                 documents: item.documents ?? [],
                 assigned_to_user_id: item.assigned_to_user_id || currentUser.user_id,
             });
@@ -311,7 +309,6 @@ export const DispositionActionPlanProvider: React.FC<DispositionActionPlanProvid
                     name: item.name ?? '',
                     status: item.status ?? ActionItemStatus.NotStarted,
                     due_date: item.due_date ?? '',
-                    notes: item.notes ?? '',
                     documents: item.documents ?? [],
                     assigned_to_user_id: item.assigned_to_user_id ?? currentUser.user_id,
                 },

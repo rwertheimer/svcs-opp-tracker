@@ -81,7 +81,6 @@ describe('generateDefaultPlan', () => {
                     name: 'Share proposal',
                     status: ActionItemStatus.InProgress,
                     due_date: '2024-07-04',
-                    notes: 'Custom timeline',
                     documents: [],
                     created_by_user_id: 'user-1',
                     assigned_to_user_id: 'user-1',

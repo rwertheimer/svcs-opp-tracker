@@ -369,11 +369,11 @@ apiRouter.post('/opportunities/:opportunityId/disposition', async (req: expressT
 
 // --- NEW Action Item CRUD Endpoints ---
 apiRouter.post('/action-items', async (req: expressTypes.Request, res: expressTypes.Response) => {
-    const { opportunity_id, name, status, due_date, notes, documents, created_by_user_id, assigned_to_user_id } = req.body;
+    const { opportunity_id, name, status, due_date, documents, created_by_user_id, assigned_to_user_id } = req.body;
     try {
         const result = await pgPool.query<ActionItem>(
-            'INSERT INTO action_items (opportunity_id, name, status, due_date, notes, documents, created_by_user_id, assigned_to_user_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
-            [opportunity_id, name, status, due_date || null, notes, documents || [], created_by_user_id, assigned_to_user_id]
+            'INSERT INTO action_items (opportunity_id, name, status, due_date, documents, created_by_user_id, assigned_to_user_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+            [opportunity_id, name, status, due_date || null, documents || [], created_by_user_id, assigned_to_user_id]
         );
         res.status(201).json(result.rows[0]);
     } catch (error) {
@@ -384,9 +384,9 @@ apiRouter.post('/action-items', async (req: expressTypes.Request, res: expressTy
 
 apiRouter.put('/action-items/:itemId', async (req: expressTypes.Request, res: expressTypes.Response) => {
     const { itemId } = req.params;
-    const fields = Object.keys(req.body);
+    const fields = Object.keys(req.body).filter(field => field !== 'notes');
     const setClause = fields.map((field, index) => `"${field}" = $${index + 1}`).join(', ');
-    const values = Object.values(req.body);
+    const values = fields.map(field => req.body[field]);
 
     if (fields.length === 0) return res.status(400).send('No update fields provided.');
 

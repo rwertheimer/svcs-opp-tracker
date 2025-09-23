@@ -4,7 +4,6 @@ export interface GeneratedActionPlanItem {
     name: string;
     status: ActionItemStatus;
     due_date: string;
-    notes: string;
     documents: Document[];
 }
 
@@ -16,35 +15,30 @@ const DEFAULT_PLAN_TEMPLATES: DefaultPlanTemplate[] = [
     {
         name: 'Contact Opp Owner',
         status: ActionItemStatus.NotStarted,
-        notes: '',
         documents: [],
         offsetDays: 0,
     },
     {
         name: 'Scope and develop proposal',
         status: ActionItemStatus.NotStarted,
-        notes: '',
         documents: [],
         offsetDays: 7,
     },
     {
         name: 'Share proposal',
         status: ActionItemStatus.NotStarted,
-        notes: '',
         documents: [],
         offsetDays: 14,
     },
     {
         name: 'Finalize proposal',
         status: ActionItemStatus.NotStarted,
-        notes: '',
         documents: [],
         offsetDays: 21,
     },
     {
         name: 'Ironclad approval',
         status: ActionItemStatus.NotStarted,
-        notes: '',
         documents: [],
         offsetDays: 28,
     },
@@ -120,7 +114,6 @@ export const generateDefaultPlan = (
         return {
             name: template.name,
             status: template.status,
-            notes: template.notes,
             documents: cloneDocuments(template.documents),
             due_date,
         };

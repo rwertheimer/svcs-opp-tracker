@@ -119,7 +119,7 @@ const ActionItemsManager: React.FC<ActionItemsManagerProps> = ({ users }) => {
                         {ICONS.trash}
                     </button>
                 </div>
-                <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                     <label className="flex flex-col text-xs font-medium text-slate-600">
                         <span>Status</span>
                         <select
@@ -173,22 +173,27 @@ const ActionItemsManager: React.FC<ActionItemsManagerProps> = ({ users }) => {
                             disabled={disableInteractions}
                         />
                     </label>
-                    <label className="flex flex-col text-xs font-medium text-slate-600 sm:col-span-2 lg:col-span-1">
-                        <span>Notes</span>
-                        <textarea
-                            value={item.notes || ''}
-                            onChange={event =>
-                                updateActionItem(item.action_item_id, {
-                                    notes: event.target.value,
-                                })
-                            }
-                            rows={2}
-                            className="mt-1 w-full rounded-md border border-slate-300 p-2 text-sm"
-                            placeholder="Add notes"
-                            disabled={disableInteractions}
-                        />
-                    </label>
                 </div>
+                {item.documents && item.documents.length > 0 && (
+                    <div className="mt-4 border-t border-slate-100 pt-4">
+                        <h4 className="text-xs font-bold uppercase tracking-wide text-slate-500">Documents</h4>
+                        <ul className="mt-2 space-y-1 text-xs">
+                            {item.documents.map(document => (
+                                <li key={document.id}>
+                                    <a
+                                        href={document.url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-1 text-indigo-600 hover:underline"
+                                    >
+                                        {ICONS.link}
+                                        <span>{document.text || document.url}</span>
+                                    </a>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                )}
             </article>
         );
     };
@@ -237,7 +242,7 @@ const ActionItemsManager: React.FC<ActionItemsManagerProps> = ({ users }) => {
                         {ICONS.trash}
                     </button>
                 </div>
-                <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                     <label className="flex flex-col text-xs font-medium text-slate-600">
                         <span>Status</span>
                         <select
@@ -284,17 +289,6 @@ const ActionItemsManager: React.FC<ActionItemsManagerProps> = ({ users }) => {
                             onChange={event => updateStagedActionItem(index, { due_date: event.target.value })}
                             className="mt-1 w-full rounded-md border border-indigo-200 bg-white p-2 text-sm"
                             aria-describedby={dueDescriptorId}
-                            disabled={disableInteractions}
-                        />
-                    </label>
-                    <label className="flex flex-col text-xs font-medium text-slate-600 sm:col-span-2 lg:col-span-1">
-                        <span>Notes</span>
-                        <textarea
-                            value={item.notes}
-                            onChange={event => updateStagedActionItem(index, { notes: event.target.value })}
-                            rows={2}
-                            className="mt-1 w-full rounded-md border border-indigo-200 bg-white p-2 text-sm"
-                            placeholder="Add notes"
                             disabled={disableInteractions}
                         />
                     </label>

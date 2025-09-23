@@ -117,11 +117,6 @@ const TaskCockpit: React.FC<TaskCockpitProps> = ({ tasks, onTaskUpdate, onSelect
                         </select>
                     </div>
                 </div>
-                {task.notes && (
-                    <div className="mt-2 pt-2 border-t border-slate-100 text-xs text-slate-600">
-                        <p className="whitespace-pre-wrap">{task.notes}</p>
-                    </div>
-                )}
                 {task.documents && task.documents.length > 0 && (
                     <div className="mt-2 pt-2 border-t border-slate-100">
                         <h4 className="text-xs font-bold text-slate-500 mb-1">Documents:</h4>
