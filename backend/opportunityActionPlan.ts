@@ -241,15 +241,16 @@ export const persistOpportunityActionPlan = async (
         throw new ActionPlanNotFoundError('Opportunity not found.');
     }
 
-    const updatedDisposition = await persistDisposition(client, opportunityId, snapshot.disposition, dispositionPayload, userId);
+    await persistDisposition(client, opportunityId, snapshot.disposition, dispositionPayload, userId);
     await persistActionItems(client, opportunityId, snapshot, actionItemsPayload, userId);
 
     const refreshed = await loadOpportunityActionPlan(client, opportunityId);
     if (!refreshed) {
-        throw new ActionPlanNotFoundError('Opportunity not found.');
+        // This should not happen, but as a safeguard.
+        throw new ActionPlanNotFoundError('Opportunity not found after update.');
     }
 
-    return { disposition: { ...updatedDisposition, notes: refreshed.disposition.notes }, actionItems: refreshed.actionItems };
+    return refreshed;
 };
 
 export const registerOpportunityActionPlanRoutes = (router: Router, pool: Pool) => {
@@ -283,4 +284,3 @@ export const registerOpportunityActionPlanRoutes = (router: Router, pool: Pool) 
         }
     });
 };
-

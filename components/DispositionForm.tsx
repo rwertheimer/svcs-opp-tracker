@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import type { Disposition, Opportunity } from '../types';
 import { DispositionStatus } from '../types';
 import { ICONS, FORECAST_CATEGORIES } from '../constants';
@@ -19,6 +19,19 @@ const DispositionForm: React.FC<DispositionFormProps> = ({
     onDispositionChange,
     lastUpdatedBy,
 }) => {
+    // Local state for text areas to prevent re-renders on every keystroke
+    const [localNotes, setLocalNotes] = useState(disposition.notes || '');
+    const [localReason, setLocalReason] = useState(disposition.reason || '');
+
+    useEffect(() => {
+        setLocalNotes(disposition.notes || '');
+    }, [disposition.notes]);
+
+    useEffect(() => {
+        setLocalReason(disposition.reason || '');
+    }, [disposition.reason]);
+
+
     const handleSetDispositionStatus = (status: DispositionStatus) => {
         const allowChange = onStatusChange(status);
         if (allowChange === false) return;
@@ -61,7 +74,15 @@ const DispositionForm: React.FC<DispositionFormProps> = ({
             {disposition.status === 'No Action Needed' && opportunity.opportunities_has_services_flag === 'No' && (
                 <div className="animate-fade-in">
                     <label htmlFor="reason" className="block text-sm font-medium text-slate-700 mb-2">Reason for No Services Opp</label>
-                    <textarea id="reason" rows={3} className="w-full p-2 border border-slate-300 rounded-md shadow-sm" placeholder="e.g., Customer has a capable in-house team..." value={disposition.reason || ''} onChange={e => onDispositionChange({ reason: e.target.value })} />
+                    <textarea
+                        id="reason"
+                        rows={3}
+                        className="w-full p-2 border border-slate-300 rounded-md shadow-sm"
+                        placeholder="e.g., Customer has a capable in-house team..."
+                        value={localReason}
+                        onChange={e => setLocalReason(e.target.value)}
+                        onBlur={() => onDispositionChange({ reason: localReason })}
+                    />
                 </div>
             )}
 
@@ -86,7 +107,15 @@ const DispositionForm: React.FC<DispositionFormProps> = ({
 
             <div>
                 <label htmlFor="notes" className="block text-sm font-medium text-slate-700 mb-2">General Notes</label>
-                <textarea id="notes" rows={8} className="w-full p-2 border border-slate-300 rounded-md shadow-sm" placeholder="e.g., Customer is planning a major migration..." value={disposition.notes || ''} onChange={e => onDispositionChange({ notes: e.target.value })} />
+                <textarea
+                    id="notes"
+                    rows={8}
+                    className="w-full p-2 border border-slate-300 rounded-md shadow-sm"
+                    placeholder="e.g., Customer is planning a major migration..."
+                    value={localNotes}
+                    onChange={e => setLocalNotes(e.target.value)}
+                    onBlur={() => onDispositionChange({ notes: localNotes })}
+                />
             </div>
         </div>
     </div>

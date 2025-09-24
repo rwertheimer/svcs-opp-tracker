@@ -257,7 +257,7 @@ const App: React.FC = () => {
       // If toggle is OFF, apply the more restrictive default filters
       // Be tolerant of common type variants by doing a contains match
       const typeLower = (opp.opportunities_type || '').toLowerCase();
-      const typeMatch = ['renewal', 'new', 'upsell', 'expansion'].some(k => typeLower.includes(k));
+      const typeMatch = ['renewal', 'new', 'upsell'].some(k => typeLower.includes(k));
       
       const regionMatch = opp.accounts_region_name === 'NA - Enterprise' || opp.accounts_region_name === 'NA - Commercial';
       

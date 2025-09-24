@@ -21,7 +21,7 @@ import type {
 import { generateOpportunities, generateAccountDetails, MOCK_USERS } from './mockData';
 
 const USE_MOCK_DATA = (import.meta.env?.VITE_USE_MOCK_DATA ?? 'true') === 'true';
-const API_BASE_URL = 'http://localhost:8080/api';
+const API_BASE_URL = '/api';
 
 const omitActionItemNotes = <T extends { [key: string]: unknown }>(value: T): Omit<T, 'notes'> => {
   if (value && typeof value === 'object' && 'notes' in value) {
