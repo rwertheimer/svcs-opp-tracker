@@ -255,10 +255,31 @@ describe('ActionItemsManager - staged add', () => {
 
     const linkTextInput = await scoped.findByLabelText('Link text');
     const linkUrlInput = await scoped.findByLabelText('Link URL');
+    const saveLinkButton = scoped.getByRole('button', { name: /save link/i });
+
+    expect(saveLinkButton).toBeDisabled();
 
     fireEvent.change(linkTextInput, { target: { value: 'Spec Outline' } });
     fireEvent.change(linkUrlInput, { target: { value: 'https://example.com/spec' } });
 
+    expect(saveLinkButton).toBeEnabled();
+
+    fireEvent.click(saveLinkButton);
+
+    await waitFor(() => {
+      expect(scoped.queryByLabelText('Link text')).not.toBeInTheDocument();
+    });
+
+    const previewLinks = scoped.getAllByRole('link', { name: /spec outline/i });
+    expect(previewLinks.length).toBeGreaterThan(0);
+
+    fireEvent.click(scoped.getByRole('button', { name: /edit link/i }));
+
+    const reopenedTextInput = await scoped.findByLabelText('Link text');
+    expect(reopenedTextInput).toHaveValue('Spec Outline');
+
+    fireEvent.click(scoped.getByRole('button', { name: /save link/i }));
+      
     const saveButton = await screen.findByRole('button', { name: /save changes/i });
     fireEvent.click(saveButton);
 
@@ -304,8 +325,11 @@ describe('ActionItemsManager - staged add', () => {
     fireEvent.click(scoped.getByRole('button', { name: /add link/i }));
     const linkTextInput = await scoped.findByLabelText('Link text');
     const linkUrlInput = await scoped.findByLabelText('Link URL');
+    const saveLinkButton = scoped.getByRole('button', { name: /save link/i });
     fireEvent.change(linkTextInput, { target: { value: 'Deck' } });
     fireEvent.change(linkUrlInput, { target: { value: 'invalid-url' } });
+
+    expect(saveLinkButton).toBeDisabled();
 
     const saveButton = await screen.findByRole('button', { name: /save changes/i });
     fireEvent.click(saveButton);

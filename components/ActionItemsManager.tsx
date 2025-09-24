@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import type { Document, User } from '../types';
 import { ActionItemStatus } from '../types';
 import { ICONS } from '../constants';
@@ -32,6 +32,7 @@ const ActionItemsManager: React.FC<ActionItemsManagerProps> = ({ users }) => {
         currentUser,
     } = useDispositionActionPlan();
     const [newActionText, setNewActionText] = useState('');
+    const [documentEditingState, setDocumentEditingState] = useState<Record<string, boolean>>({});
 
     const sortedActionItems = useMemo(() => {
         const items = [...actionItems];
@@ -88,6 +89,43 @@ const ActionItemsManager: React.FC<ActionItemsManagerProps> = ({ users }) => {
         }
     };
 
+    useEffect(() => {
+        setDocumentEditingState(prevState => {
+            const nextState: Record<string, boolean> = { ...prevState };
+            let hasChanges = false;
+            const visibleDocumentIds = new Set<string>();
+            const normalize = (collection: { documents?: Document[] | null }[]) => {
+                collection.forEach(item => {
+                    const docs = Array.isArray(item.documents) ? item.documents : [];
+                    docs.forEach(doc => {
+                        const trimmedUrl = doc.url?.trim() ?? '';
+                        const trimmedText = doc.text?.trim() ?? '';
+                        visibleDocumentIds.add(doc.id);
+                        if (!(doc.id in nextState)) {
+                            nextState[doc.id] = trimmedText.length === 0 && trimmedUrl.length === 0;
+                            hasChanges = true;
+                        } else if (nextState[doc.id] && trimmedUrl.length > 0 && isValidHttpUrl(trimmedUrl)) {
+                            nextState[doc.id] = false;
+                            hasChanges = true;
+                        }
+                    });
+                });
+            };
+
+            normalize(actionItems);
+            normalize(stagedActionItems);
+
+            Object.keys(nextState).forEach(id => {
+                if (!visibleDocumentIds.has(id)) {
+                    delete nextState[id];
+                    hasChanges = true;
+                }
+            });
+
+            return hasChanges ? nextState : prevState;
+        });
+    }, [actionItems, stagedActionItems]);
+
     const renderDocumentEditor = (
         documents: Document[],
         idPrefix: string,
@@ -95,7 +133,7 @@ const ActionItemsManager: React.FC<ActionItemsManagerProps> = ({ users }) => {
             disabled: boolean;
             onChange: (index: number, updates: Partial<Document>) => void;
             onRemove: (index: number) => void;
-            onAdd: () => void;
+            onAdd: (document: Document) => void;
         }
     ) => {
         const baseInputClasses =
@@ -107,7 +145,11 @@ const ActionItemsManager: React.FC<ActionItemsManagerProps> = ({ users }) => {
                     <h4 className="text-xs font-bold uppercase tracking-wide text-slate-500">Supporting links</h4>
                     <button
                         type="button"
-                        onClick={options.onAdd}
+                        onClick={() => {
+                            const newDocument = createEmptyDocument();
+                            setDocumentEditingState(prev => ({ ...prev, [newDocument.id]: true }));
+                            options.onAdd(newDocument);
+                        }}
                         className="inline-flex items-center gap-1 rounded-md border border-indigo-200 bg-white px-2 py-1 text-xs font-semibold text-indigo-600 transition hover:bg-indigo-50 disabled:cursor-not-allowed disabled:text-slate-400"
                         disabled={options.disabled}
                     >
@@ -122,89 +164,153 @@ const ActionItemsManager: React.FC<ActionItemsManagerProps> = ({ users }) => {
                         {documents.map((document, docIndex) => {
                             const trimmedUrl = document.url ? document.url.trim() : '';
                             const trimmedText = document.text ? document.text.trim() : '';
-                            const missingUrl = trimmedText.length > 0 && trimmedUrl.length === 0;
+                            const isEditing = documentEditingState[document.id] ?? (trimmedText.length === 0 && trimmedUrl.length === 0);
                             const invalidUrl = trimmedUrl.length > 0 && !isValidHttpUrl(trimmedUrl);
+                            const missingUrl = trimmedText.length > 0 && trimmedUrl.length === 0;
                             const errorMessage = invalidUrl
                                 ? 'Enter a valid URL starting with http:// or https://.'
                                 : missingUrl
                                 ? 'Link URL is required.'
                                 : '';
-
+                            const canSave = trimmedUrl.length > 0 && !invalidUrl;
+                            const showPreview = isValidHttpUrl(trimmedUrl);
+                  
                             return (
                                 <li
                                     key={`${idPrefix}-${document.id ?? docIndex}`}
                                     className="rounded-md border border-slate-200 bg-slate-50 p-3"
                                 >
                                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                                        <div className="grid flex-1 gap-3 sm:grid-cols-2 sm:gap-4">
-                                            <label className="flex flex-col text-xs font-medium text-slate-600">
-                                                <span>Link text</span>
-                                                <input
-                                                    type="text"
-                                                    value={document.text}
-                                                    onChange={event =>
-                                                        options.onChange(docIndex, {
-                                                            text: event.target.value,
-                                                        })
-                                                    }
-                                                    className={`${baseInputClasses} border-slate-300 focus:border-indigo-500 focus:ring-indigo-200`}
-                                                    placeholder="e.g. Implementation plan"
-                                                    disabled={options.disabled}
-                                                />
-                                            </label>
-                                            <label className="flex flex-col text-xs font-medium text-slate-600">
-                                                <span>Link URL</span>
-                                                <input
-                                                    type="url"
-                                                    value={document.url}
-                                                    onChange={event =>
-                                                        options.onChange(docIndex, {
-                                                            url: event.target.value,
-                                                        })
-                                                    }
-                                                    className={`${baseInputClasses} ${
-                                                        errorMessage
-                                                            ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-200'
-                                                            : 'border-slate-300 focus:border-indigo-500 focus:ring-indigo-200'
-                                                    }`}
-                                                    placeholder="https://example.com/resource"
-                                                    disabled={options.disabled}
-                                                    aria-invalid={errorMessage ? 'true' : 'false'}
-                                                    aria-describedby={
-                                                        errorMessage ? `${idPrefix}-doc-${docIndex}-error` : undefined
-                                                    }
-                                                />
-                                                {errorMessage && (
-                                                    <span
-                                                        id={`${idPrefix}-doc-${docIndex}-error`}
-                                                        className="mt-1 text-xs text-rose-600"
+                                        <div className="flex-1">
+                                            {isEditing ? (
+                                                <>
+                                                    <div className="grid gap-3 sm:grid-cols-2 sm:gap-4">
+                                                        <label className="flex flex-col text-xs font-medium text-slate-600">
+                                                            <span>Link text</span>
+                                                            <input
+                                                                type="text"
+                                                                value={document.text}
+                                                                onChange={event =>
+                                                                    options.onChange(docIndex, {
+                                                                        text: event.target.value,
+                                                                    })
+                                                                }
+                                                                className={`${baseInputClasses} border-slate-300 focus:border-indigo-500 focus:ring-indigo-200`}
+                                                                placeholder="e.g. Implementation plan"
+                                                                disabled={options.disabled}
+                                                            />
+                                                        </label>
+                                                        <label className="flex flex-col text-xs font-medium text-slate-600">
+                                                            <span>Link URL</span>
+                                                            <input
+                                                                type="url"
+                                                                value={document.url}
+                                                                onChange={event =>
+                                                                    options.onChange(docIndex, {
+                                                                        url: event.target.value,
+                                                                    })
+                                                                }
+                                                                className={`${baseInputClasses} ${
+                                                                    errorMessage
+                                                                        ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-200'
+                                                                        : 'border-slate-300 focus:border-indigo-500 focus:ring-indigo-200'
+                                                                }`}
+                                                                placeholder="https://example.com/resource"
+                                                                disabled={options.disabled}
+                                                                aria-invalid={errorMessage ? 'true' : 'false'}
+                                                                aria-describedby={
+                                                                    errorMessage ? `${idPrefix}-doc-${docIndex}-error` : undefined
+                                                                }
+                                                            />
+                                                            {errorMessage && (
+                                                                <span
+                                                                    id={`${idPrefix}-doc-${docIndex}-error`}
+                                                                    className="mt-1 text-xs text-rose-600"
+                                                                >
+                                                                    {errorMessage}
+                                                                </span>
+                                                            )}
+                                                        </label>
+                                                    </div>
+                                                    {showPreview && (
+                                                        <div className="mt-3 text-xs">
+                                                            <a
+                                                                href={trimmedUrl}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="inline-flex items-center gap-1 text-indigo-600 hover:underline"
+                                                            >
+                                                                {ICONS.link}
+                                                                <span>{trimmedText || trimmedUrl}</span>
+                                                            </a>
+                                                        </div>
+                                                    )}
+                                                </>
+                                            ) : showPreview ? (
+                                                <div className="text-xs">
+                                                    <a
+                                                        href={trimmedUrl}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="inline-flex items-center gap-1 text-indigo-600 hover:underline"
                                                     >
-                                                        {errorMessage}
-                                                    </span>
-                                                )}
-                                            </label>
+                                                        {ICONS.link}
+                                                        <span>{trimmedText || trimmedUrl}</span>
+                                                    </a>
+                                                </div>
+                                            ) : (
+                                                <p className="text-xs text-slate-500">Link details unavailable.</p>
+                                            )}
                                         </div>
-                                        <button
-                                            type="button"
-                                            onClick={() => options.onRemove(docIndex)}
-                                            className="inline-flex items-center self-start rounded-md border border-transparent p-1 text-slate-400 transition hover:text-red-600 disabled:cursor-not-allowed disabled:text-slate-300"
-                                            disabled={options.disabled}
-                                            aria-label="Remove link"
-                                        >
-                                            {ICONS.trash}
-                                        </button>
-                                    </div>
-                                    {isValidHttpUrl(trimmedUrl) && (
-                                        <div className="mt-3 text-xs">
-                                            <a
-                                                href={trimmedUrl}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="inline-flex items-center gap-1 text-indigo-600 hover:underline"
+                                        <div className="flex items-center gap-2 self-start">
+                                            {!isEditing && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setDocumentEditingState(prev => ({ ...prev, [document.id]: true }))}
+                                                    className="inline-flex items-center rounded-md border border-transparent p-1 text-slate-400 transition hover:text-indigo-600 disabled:cursor-not-allowed disabled:text-slate-300"
+                                                    disabled={options.disabled}
+                                                    aria-label="Edit link"
+                                                >
+                                                    {ICONS.pencil}
+                                                </button>
+                                            )}
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setDocumentEditingState(prev => {
+                                                        if (!(document.id in prev)) {
+                                                            return prev;
+                                                        }
+                                                        const next = { ...prev };
+                                                        delete next[document.id];
+                                                        return next;
+                                                    });
+                                                    options.onRemove(docIndex);
+                                                }}
+                                                className="inline-flex items-center rounded-md border border-transparent p-1 text-slate-400 transition hover:text-red-600 disabled:cursor-not-allowed disabled:text-slate-300"
+                                                disabled={options.disabled}
+                                                aria-label="Remove link"
                                             >
-                                                {ICONS.link}
-                                                <span>{trimmedText || trimmedUrl}</span>
-                                            </a>
+                                                {ICONS.trash}
+                                            </button>
+                                        </div>
+                                    </div>
+                                    {isEditing && (
+                                        <div className="mt-3 flex justify-end">
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    if (!canSave) {
+                                                        return;
+                                                    }
+                                                    setDocumentEditingState(prev => ({ ...prev, [document.id]: false }));
+                                                }}
+                                                className="inline-flex items-center gap-2 rounded-md bg-indigo-600 px-3 py-1 text-xs font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-indigo-300"
+                                                disabled={!canSave || options.disabled}
+                                            >
+                                                {ICONS.save}
+                                                <span>Save link</span>
+                                            </button>
                                         </div>
                                     )}
                                 </li>
@@ -328,9 +434,9 @@ const ActionItemsManager: React.FC<ActionItemsManagerProps> = ({ users }) => {
                 </div>
                 {renderDocumentEditor(documents, `persisted-${item.action_item_id}`, {
                     disabled: disableInteractions,
-                    onAdd: () =>
+                    onAdd: newDocument =>
                         updateActionItem(item.action_item_id, {
-                            documents: [...documents, createEmptyDocument()],
+                            documents: [...documents, newDocument],
                         }),
                     onChange: (docIndex, updates) => {
                         const nextDocs = documents.map((doc, idx) =>
@@ -445,9 +551,9 @@ const ActionItemsManager: React.FC<ActionItemsManagerProps> = ({ users }) => {
                 </div>
                 {renderDocumentEditor(documents, `staged-${index}`, {
                     disabled: disableInteractions,
-                    onAdd: () =>
+                    onAdd: newDocument =>
                         updateStagedActionItem(index, {
-                            documents: [...documents, createEmptyDocument()],
+                            documents: [...documents, newDocument],
                         }),
                     onChange: (docIndex, updates) => {
                         const nextDocs = documents.map((doc, idx) =>
