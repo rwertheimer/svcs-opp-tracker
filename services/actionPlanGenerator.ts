@@ -22,25 +22,25 @@ const DEFAULT_PLAN_TEMPLATES: DefaultPlanTemplate[] = [
         name: 'Scope and develop proposal',
         status: ActionItemStatus.NotStarted,
         documents: [],
-        offsetDays: 7,
+        offsetDays: 4,
     },
     {
         name: 'Share proposal',
         status: ActionItemStatus.NotStarted,
         documents: [],
-        offsetDays: 14,
+        offsetDays: 8,
     },
     {
         name: 'Finalize proposal',
         status: ActionItemStatus.NotStarted,
         documents: [],
-        offsetDays: 21,
+        offsetDays: 12,
     },
     {
         name: 'Ironclad approval',
         status: ActionItemStatus.NotStarted,
         documents: [],
-        offsetDays: 28,
+        offsetDays: 16,
     },
 ];
 
