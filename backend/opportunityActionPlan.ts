@@ -1,5 +1,6 @@
 import type { Router, Request, Response } from 'express';
 import type { Pool, PoolClient } from 'pg';
+import { randomUUID } from 'node:crypto';
 import type { ActionItem, Disposition, Document } from '../types';
 
 export type LegacyActionItemRow = ActionItem & { notes?: unknown };
@@ -49,12 +50,60 @@ export class ActionPlanValidationError extends Error {}
 export class ActionPlanConflictError extends Error {}
 export class ActionPlanNotFoundError extends Error {}
 
+const isValidHttpUrl = (value: string): boolean => {
+    if (!value) return false;
+    try {
+        const parsed = new URL(value);
+        return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    } catch {
+        return false;
+    }
+};
+
+const coerceDocumentId = (value: unknown): string => {
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (trimmed.length > 0) {
+            return trimmed;
+        }
+    }
+    return randomUUID();
+};
+
 const normalizeDocuments = (documents: unknown): Document[] => {
     if (!Array.isArray(documents)) {
         return [];
     }
 
-    return documents as Document[];
+    const normalized: Document[] = [];
+
+    documents.forEach((entry, index) => {
+        if (!entry || typeof entry !== 'object') {
+            return;
+        }
+
+        const candidate = entry as Partial<Document>;
+        const rawUrl = typeof candidate.url === 'string' ? candidate.url.trim() : '';
+        const text = typeof candidate.text === 'string' ? candidate.text.trim() : '';
+
+        if (!rawUrl) {
+            throw new ActionPlanValidationError(`Document at index ${index} is missing a URL.`);
+        }
+
+        if (!isValidHttpUrl(rawUrl)) {
+            throw new ActionPlanValidationError(
+                `Document URL must start with http:// or https:// (index ${index}).`
+            );
+        }
+
+        normalized.push({
+            id: coerceDocumentId(candidate.id),
+            text,
+            url: rawUrl,
+        });
+    });
+
+    return normalized;
 };
 
 const normalizeDueDate = (due: string | null | undefined): string | null => {

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import type { User } from '../types';
+import type { Document, User } from '../types';
 import { ActionItemStatus } from '../types';
 import { ICONS } from '../constants';
 import { useDispositionActionPlan } from './disposition/DispositionActionPlanContext';
@@ -71,10 +71,162 @@ const ActionItemsManager: React.FC<ActionItemsManagerProps> = ({ users }) => {
         );
     };
 
+    const generateDocumentId = (): string => {
+        if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+            return crypto.randomUUID();
+        }
+        return `doc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    };
+
+    const isValidHttpUrl = (value: string): boolean => {
+        if (!value) return false;
+        try {
+            const parsed = new URL(value);
+            return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+        } catch {
+            return false;
+        }
+    };
+
+    const renderDocumentEditor = (
+        documents: Document[],
+        idPrefix: string,
+        options: {
+            disabled: boolean;
+            onChange: (index: number, updates: Partial<Document>) => void;
+            onRemove: (index: number) => void;
+            onAdd: () => void;
+        }
+    ) => {
+        const baseInputClasses =
+            'mt-1 w-full rounded-md border px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2';
+
+        return (
+            <div className="mt-4 border-t border-slate-100 pt-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h4 className="text-xs font-bold uppercase tracking-wide text-slate-500">Supporting links</h4>
+                    <button
+                        type="button"
+                        onClick={options.onAdd}
+                        className="inline-flex items-center gap-1 rounded-md border border-indigo-200 bg-white px-2 py-1 text-xs font-semibold text-indigo-600 transition hover:bg-indigo-50 disabled:cursor-not-allowed disabled:text-slate-400"
+                        disabled={options.disabled}
+                    >
+                        {ICONS.add}
+                        Add link
+                    </button>
+                </div>
+                {documents.length === 0 ? (
+                    <p className="mt-2 text-xs text-slate-500">No links added yet.</p>
+                ) : (
+                    <ul className="mt-3 space-y-3">
+                        {documents.map((document, docIndex) => {
+                            const trimmedUrl = document.url ? document.url.trim() : '';
+                            const trimmedText = document.text ? document.text.trim() : '';
+                            const missingUrl = trimmedText.length > 0 && trimmedUrl.length === 0;
+                            const invalidUrl = trimmedUrl.length > 0 && !isValidHttpUrl(trimmedUrl);
+                            const errorMessage = invalidUrl
+                                ? 'Enter a valid URL starting with http:// or https://.'
+                                : missingUrl
+                                ? 'Link URL is required.'
+                                : '';
+
+                            return (
+                                <li
+                                    key={`${idPrefix}-${document.id ?? docIndex}`}
+                                    className="rounded-md border border-slate-200 bg-slate-50 p-3"
+                                >
+                                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                        <div className="grid flex-1 gap-3 sm:grid-cols-2 sm:gap-4">
+                                            <label className="flex flex-col text-xs font-medium text-slate-600">
+                                                <span>Link text</span>
+                                                <input
+                                                    type="text"
+                                                    value={document.text}
+                                                    onChange={event =>
+                                                        options.onChange(docIndex, {
+                                                            text: event.target.value,
+                                                        })
+                                                    }
+                                                    className={`${baseInputClasses} border-slate-300 focus:border-indigo-500 focus:ring-indigo-200`}
+                                                    placeholder="e.g. Implementation plan"
+                                                    disabled={options.disabled}
+                                                />
+                                            </label>
+                                            <label className="flex flex-col text-xs font-medium text-slate-600">
+                                                <span>Link URL</span>
+                                                <input
+                                                    type="url"
+                                                    value={document.url}
+                                                    onChange={event =>
+                                                        options.onChange(docIndex, {
+                                                            url: event.target.value,
+                                                        })
+                                                    }
+                                                    className={`${baseInputClasses} ${
+                                                        errorMessage
+                                                            ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-200'
+                                                            : 'border-slate-300 focus:border-indigo-500 focus:ring-indigo-200'
+                                                    }`}
+                                                    placeholder="https://example.com/resource"
+                                                    disabled={options.disabled}
+                                                    aria-invalid={errorMessage ? 'true' : 'false'}
+                                                    aria-describedby={
+                                                        errorMessage ? `${idPrefix}-doc-${docIndex}-error` : undefined
+                                                    }
+                                                />
+                                                {errorMessage && (
+                                                    <span
+                                                        id={`${idPrefix}-doc-${docIndex}-error`}
+                                                        className="mt-1 text-xs text-rose-600"
+                                                    >
+                                                        {errorMessage}
+                                                    </span>
+                                                )}
+                                            </label>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => options.onRemove(docIndex)}
+                                            className="inline-flex items-center self-start rounded-md border border-transparent p-1 text-slate-400 transition hover:text-red-600 disabled:cursor-not-allowed disabled:text-slate-300"
+                                            disabled={options.disabled}
+                                            aria-label="Remove link"
+                                        >
+                                            {ICONS.trash}
+                                        </button>
+                                    </div>
+                                    {isValidHttpUrl(trimmedUrl) && (
+                                        <div className="mt-3 text-xs">
+                                            <a
+                                                href={trimmedUrl}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="inline-flex items-center gap-1 text-indigo-600 hover:underline"
+                                            >
+                                                {ICONS.link}
+                                                <span>{trimmedText || trimmedUrl}</span>
+                                            </a>
+                                        </div>
+                                    )}
+                                </li>
+                            );
+                        })}
+                    </ul>
+                )}
+            </div>
+        );
+    };
+
+    const createEmptyDocument = (): Document => ({
+        id: generateDocumentId(),
+        text: '',
+        url: '',
+    });
+
     const renderPersistedItem = (index: number) => {
         const item = sortedActionItems[index];
         const createdBy = users.find(u => u.user_id === item.created_by_user_id)?.name || 'Unknown';
         const dueDescriptorId = `persisted-${item.action_item_id}-due`;
+        const documents = Array.isArray(item.documents) ? item.documents : [];
 
         return (
             <article key={item.action_item_id} className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
@@ -174,26 +326,23 @@ const ActionItemsManager: React.FC<ActionItemsManagerProps> = ({ users }) => {
                         />
                     </label>
                 </div>
-                {item.documents && item.documents.length > 0 && (
-                    <div className="mt-4 border-t border-slate-100 pt-4">
-                        <h4 className="text-xs font-bold uppercase tracking-wide text-slate-500">Documents</h4>
-                        <ul className="mt-2 space-y-1 text-xs">
-                            {item.documents.map(document => (
-                                <li key={document.id}>
-                                    <a
-                                        href={document.url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="inline-flex items-center gap-1 text-indigo-600 hover:underline"
-                                    >
-                                        {ICONS.link}
-                                        <span>{document.text || document.url}</span>
-                                    </a>
-                                </li>
-                            ))}
-                        </ul>
-                    </div>
-                )}
+                {renderDocumentEditor(documents, `persisted-${item.action_item_id}`, {
+                    disabled: disableInteractions,
+                    onAdd: () =>
+                        updateActionItem(item.action_item_id, {
+                            documents: [...documents, createEmptyDocument()],
+                        }),
+                    onChange: (docIndex, updates) => {
+                        const nextDocs = documents.map((doc, idx) =>
+                            idx === docIndex ? { ...doc, ...updates } : doc
+                        );
+                        updateActionItem(item.action_item_id, { documents: nextDocs });
+                    },
+                    onRemove: docIndex => {
+                        const nextDocs = documents.filter((_, idx) => idx !== docIndex);
+                        updateActionItem(item.action_item_id, { documents: nextDocs });
+                    },
+                })}
             </article>
         );
     };
@@ -201,6 +350,7 @@ const ActionItemsManager: React.FC<ActionItemsManagerProps> = ({ users }) => {
     const renderStagedItem = (index: number) => {
         const item = stagedActionItems[index];
         const dueDescriptorId = `staged-${index}-due`;
+        const documents = Array.isArray(item.documents) ? item.documents : [];
 
         return (
             <article
@@ -293,6 +443,23 @@ const ActionItemsManager: React.FC<ActionItemsManagerProps> = ({ users }) => {
                         />
                     </label>
                 </div>
+                {renderDocumentEditor(documents, `staged-${index}`, {
+                    disabled: disableInteractions,
+                    onAdd: () =>
+                        updateStagedActionItem(index, {
+                            documents: [...documents, createEmptyDocument()],
+                        }),
+                    onChange: (docIndex, updates) => {
+                        const nextDocs = documents.map((doc, idx) =>
+                            idx === docIndex ? { ...doc, ...updates } : doc
+                        );
+                        updateStagedActionItem(index, { documents: nextDocs });
+                    },
+                    onRemove: docIndex => {
+                        const nextDocs = documents.filter((_, idx) => idx !== docIndex);
+                        updateStagedActionItem(index, { documents: nextDocs });
+                    },
+                })}
             </article>
         );
     };
