@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 import { randomUUID } from 'node:crypto';
-import type { ActionItem, Disposition } from '../../types';
+import type { ActionItem, Disposition, Document } from '../../types';
 import {
     ActionPlanConflictError,
     ActionPlanValidationError,
@@ -20,6 +20,18 @@ interface FakeDatabaseState {
 
 class FakeClient {
     constructor(private state: FakeDatabaseState) {}
+
+    private parseDocuments(value: unknown): Document[] {
+        if (typeof value === 'string') {
+            try {
+                const parsed = JSON.parse(value);
+                return Array.isArray(parsed) ? (parsed as Document[]) : [];
+            } catch {
+                return [];
+            }
+        }
+        return Array.isArray(value) ? (value as Document[]) : [];
+    }
 
     async query(sql: string, params: any[] = []): Promise<{ rows: any[]; rowCount?: number }> {
         if (sql.startsWith('SELECT disposition')) {
@@ -61,7 +73,7 @@ class FakeClient {
                 existing.name = name;
                 existing.status = status;
                 existing.due_date = dueDate ?? '';
-                existing.documents = Array.isArray(documents) ? documents : [];
+                existing.documents = this.parseDocuments(documents);
                 existing.assigned_to_user_id = assignedTo;
             }
             return { rows: [] };
@@ -76,7 +88,7 @@ class FakeClient {
                 name,
                 status,
                 due_date: dueDate ?? '',
-                documents: Array.isArray(documents) ? documents : [],
+                documents: this.parseDocuments(documents),
                 created_by_user_id: createdBy,
                 assigned_to_user_id: assignedTo,
             };

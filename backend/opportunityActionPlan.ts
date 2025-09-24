@@ -238,6 +238,7 @@ const persistActionItems = async (
 
     for (const item of payload) {
         const normalizedDocuments = normalizeDocuments(item.documents);
+        const documentsJson = JSON.stringify(normalizedDocuments);
         const dueDate = normalizeDueDate(item.due_date ?? null);
 
         if (item.action_item_id) {
@@ -252,17 +253,17 @@ const persistActionItems = async (
                  SET name = $1,
                      status = $2,
                      due_date = $3,
-                     documents = $4,
+                     documents = $4::jsonb,
                      assigned_to_user_id = $5
                  WHERE action_item_id = $6`,
-                [item.name, item.status, dueDate, normalizedDocuments, item.assigned_to_user_id, item.action_item_id]
+                [item.name, item.status, dueDate, documentsJson, item.assigned_to_user_id, item.action_item_id]
             );
         } else {
             const createdBy = item.created_by_user_id ?? userId;
             await client.query(
                 `INSERT INTO action_items (opportunity_id, name, status, due_date, documents, created_by_user_id, assigned_to_user_id)
                  VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-                [opportunityId, item.name, item.status, dueDate, normalizedDocuments, createdBy, item.assigned_to_user_id]
+                [opportunityId, item.name, item.status, dueDate, documentsJson, createdBy, item.assigned_to_user_id]
             );
         }
     }
