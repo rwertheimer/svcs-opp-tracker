@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 import { randomUUID } from 'node:crypto';
-import type { ActionItem, Disposition } from '../../types';
+import type { ActionItem, Disposition, Document } from '../../types';
 import {
     ActionPlanConflictError,
     ActionPlanValidationError,
@@ -20,6 +20,18 @@ interface FakeDatabaseState {
 
 class FakeClient {
     constructor(private state: FakeDatabaseState) {}
+
+    private parseDocuments(value: unknown): Document[] {
+        if (typeof value === 'string') {
+            try {
+                const parsed = JSON.parse(value);
+                return Array.isArray(parsed) ? (parsed as Document[]) : [];
+            } catch {
+                return [];
+            }
+        }
+        return Array.isArray(value) ? (value as Document[]) : [];
+    }
 
     async query(sql: string, params: any[] = []): Promise<{ rows: any[]; rowCount?: number }> {
         if (sql.startsWith('SELECT disposition')) {
@@ -61,7 +73,7 @@ class FakeClient {
                 existing.name = name;
                 existing.status = status;
                 existing.due_date = dueDate ?? '';
-                existing.documents = Array.isArray(documents) ? documents : [];
+                existing.documents = this.parseDocuments(documents);
                 existing.assigned_to_user_id = assignedTo;
             }
             return { rows: [] };
@@ -76,7 +88,7 @@ class FakeClient {
                 name,
                 status,
                 due_date: dueDate ?? '',
-                documents: Array.isArray(documents) ? documents : [],
+                documents: this.parseDocuments(documents),
                 created_by_user_id: createdBy,
                 assigned_to_user_id: assignedTo,
             };
@@ -211,6 +223,71 @@ describe('persistOpportunityActionPlan', () => {
         expect(Array.from(state.actionItems.values()).some(item => item.name === 'Removable Task')).toBe(false);
         expect(state.history).toHaveLength(1);
         expect(state.history[0]).toMatchObject({ notes: 'Updated note' });
+    });
+
+    it('rejects documents with invalid urls', async () => {
+        const existingId = Array.from(state.actionItems.keys())[0];
+
+        await expect(
+            persistOpportunityActionPlan(client as any, oppId, userId, {
+                disposition: {
+                    status: 'Not Reviewed',
+                    reason: 'Initial note',
+                    services_amount_override: undefined,
+                    forecast_category_override: undefined,
+                    version: 1,
+                    notes: 'Initial note',
+                },
+                actionItems: [
+                    {
+                        action_item_id: existingId,
+                        name: 'Existing Task',
+                        status: 'Not Started',
+                        due_date: '2024-07-01',
+                        documents: [{ id: 'doc-invalid', text: 'Spec', url: 'nota-url' }],
+                        assigned_to_user_id: assigneeId,
+                    },
+                ],
+            })
+        ).rejects.toThrow(ActionPlanValidationError);
+    });
+
+    it('normalizes document fields by trimming whitespace and generating ids when missing', async () => {
+        const existingId = Array.from(state.actionItems.keys())[0];
+
+        const result = await persistOpportunityActionPlan(client as any, oppId, userId, {
+            disposition: {
+                status: 'Not Reviewed',
+                reason: 'Initial note',
+                services_amount_override: undefined,
+                forecast_category_override: undefined,
+                version: 1,
+                notes: 'Initial note',
+            },
+            actionItems: [
+                {
+                    action_item_id: existingId,
+                    name: 'Existing Task',
+                    status: 'Not Started',
+                    due_date: '2024-07-01',
+                    documents: [
+                        { id: '  ', text: '  Launch Plan  ', url: ' https://example.com/plan ' },
+                    ],
+                    assigned_to_user_id: assigneeId,
+                },
+            ],
+        });
+
+        const updatedItem = result.actionItems.find(item => item.action_item_id === existingId);
+        expect(updatedItem?.documents).toHaveLength(1);
+        const [doc] = updatedItem?.documents ?? [];
+        expect(doc?.url).toBe('https://example.com/plan');
+        expect(doc?.text).toBe('Launch Plan');
+        expect(typeof doc?.id).toBe('string');
+        expect(doc?.id?.trim().length).toBeGreaterThan(0);
+
+        const stored = state.actionItems.get(existingId);
+        expect(stored?.documents?.[0]?.url).toBe('https://example.com/plan');
     });
 
     it('throws a validation error when required fields are missing', async () => {

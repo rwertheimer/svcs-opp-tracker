@@ -1,5 +1,5 @@
 import React, { useLayoutEffect } from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import ActionItemsManager from '../../components/ActionItemsManager';
 import SaveBar from '../../components/disposition/SaveBar';
 import type { Opportunity, User } from '../../types';
@@ -57,10 +57,16 @@ const ManagerHarness: React.FC = () => (
   </>
 );
 
+const showToast = vi.fn();
+
 vi.mock('../../components/Toast', () => ({
   ToastProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  useToast: () => ({ showToast: vi.fn() }),
+  useToast: () => ({ showToast }),
 }));
+
+beforeEach(() => {
+  showToast.mockReset();
+});
 
 describe('ActionItemsManager - staged add', () => {
   it('adds to staged list (pre-save) instead of persisting', async () => {
@@ -203,6 +209,140 @@ describe('ActionItemsManager - staged add', () => {
     const documentLink = await screen.findByRole('link', { name: /implementation plan/i });
     expect(documentLink).toHaveAttribute('href', 'https://example.com/plan');
     expect(documentLink).toHaveAttribute('target', '_blank');
+  });
+
+  it('includes staged document metadata in the save payload', async () => {
+    const onSaveActionPlan = vi.fn().mockImplementation(async payload => ({
+      disposition: {
+        ...baseOpportunity.disposition,
+        status: payload.disposition.status,
+        version: baseOpportunity.disposition.version + 1,
+      },
+      actionItems: payload.actionItems.map((item, index) => ({
+        action_item_id: item.action_item_id ?? `ai-${index}`,
+        opportunity_id: baseOpportunity.opportunities_id,
+        name: item.name,
+        status: item.status,
+        due_date: item.due_date ?? '',
+        documents: item.documents ?? [],
+        created_by_user_id: users[0].user_id,
+        assigned_to_user_id: item.assigned_to_user_id,
+      })),
+    }));
+
+    render(
+      <DispositionActionPlanProvider
+        opportunity={baseOpportunity}
+        currentUser={users[0]}
+        onSaveActionPlan={onSaveActionPlan}
+      >
+        <PrimeStaging>
+          <ManagerHarness />
+        </PrimeStaging>
+      </DispositionActionPlanProvider>
+    );
+
+    const taskInput = screen.getByPlaceholderText('Add a new task');
+    fireEvent.change(taskInput, { target: { value: 'Review implementation doc' } });
+    fireEvent.click(screen.getByRole('button', { name: /add task/i }));
+
+    const stagedInput = await screen.findByDisplayValue('Review implementation doc');
+    const stagedArticle = stagedInput.closest('article');
+    expect(stagedArticle).toBeTruthy();
+
+    const scoped = within(stagedArticle as HTMLElement);
+    fireEvent.click(scoped.getByRole('button', { name: /add link/i }));
+
+    const linkTextInput = await scoped.findByLabelText('Link text');
+    const linkUrlInput = await scoped.findByLabelText('Link URL');
+    const saveLinkButton = scoped.getByRole('button', { name: /save link/i });
+
+    expect(saveLinkButton).toBeDisabled();
+
+    fireEvent.change(linkTextInput, { target: { value: 'Spec Outline' } });
+    fireEvent.change(linkUrlInput, { target: { value: 'https://example.com/spec' } });
+
+    expect(saveLinkButton).toBeEnabled();
+
+    fireEvent.click(saveLinkButton);
+
+    await waitFor(() => {
+      expect(scoped.queryByLabelText('Link text')).not.toBeInTheDocument();
+    });
+
+    const previewLinks = scoped.getAllByRole('link', { name: /spec outline/i });
+    expect(previewLinks.length).toBeGreaterThan(0);
+
+    fireEvent.click(scoped.getByRole('button', { name: /edit link/i }));
+
+    const reopenedTextInput = await scoped.findByLabelText('Link text');
+    expect(reopenedTextInput).toHaveValue('Spec Outline');
+
+    fireEvent.click(scoped.getByRole('button', { name: /save link/i }));
+
+    const saveButton = await screen.findByRole('button', { name: /save changes/i });
+    fireEvent.click(saveButton);
+
+    await waitFor(() => {
+      expect(onSaveActionPlan).toHaveBeenCalledTimes(1);
+    });
+
+    const payload = onSaveActionPlan.mock.calls[0][0];
+    const savedTask = payload.actionItems.find((item: any) => item.name === 'Review implementation doc');
+    expect(savedTask).toBeDefined();
+    expect(savedTask.documents).toHaveLength(1);
+    expect(savedTask.documents[0]).toMatchObject({
+      text: 'Spec Outline',
+      url: 'https://example.com/spec',
+    });
+    expect(savedTask.documents[0].id).toBeTruthy();
+  });
+
+  it('prevents saving staged links with invalid urls', async () => {
+    const onSaveActionPlan = vi.fn();
+
+    render(
+      <DispositionActionPlanProvider
+        opportunity={baseOpportunity}
+        currentUser={users[0]}
+        onSaveActionPlan={onSaveActionPlan}
+      >
+        <PrimeStaging>
+          <ManagerHarness />
+        </PrimeStaging>
+      </DispositionActionPlanProvider>
+    );
+
+    const taskInput = screen.getByPlaceholderText('Add a new task');
+    fireEvent.change(taskInput, { target: { value: 'Share deck' } });
+    fireEvent.click(screen.getByRole('button', { name: /add task/i }));
+
+    const stagedInput = await screen.findByDisplayValue('Share deck');
+    const stagedArticle = stagedInput.closest('article');
+    expect(stagedArticle).toBeTruthy();
+
+    const scoped = within(stagedArticle as HTMLElement);
+    fireEvent.click(scoped.getByRole('button', { name: /add link/i }));
+    const linkTextInput = await scoped.findByLabelText('Link text');
+    const linkUrlInput = await scoped.findByLabelText('Link URL');
+    const saveLinkButton = scoped.getByRole('button', { name: /save link/i });
+    fireEvent.change(linkTextInput, { target: { value: 'Deck' } });
+    fireEvent.change(linkUrlInput, { target: { value: 'invalid-url' } });
+
+    expect(saveLinkButton).toBeDisabled();
+
+    const saveButton = await screen.findByRole('button', { name: /save changes/i });
+    fireEvent.click(saveButton);
+
+    await waitFor(() => {
+      expect(onSaveActionPlan).not.toHaveBeenCalled();
+      expect(showToast).toHaveBeenCalledWith(
+        'Fix invalid link URLs before saving (use http:// or https://).',
+        'error'
+      );
+    });
+
+    expect(scoped.getByText(/Enter a valid URL/i)).toBeInTheDocument();
   });
 });
 
