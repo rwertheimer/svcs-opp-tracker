@@ -1,5 +1,6 @@
 import type { Router, Request, Response } from 'express';
 import type { Pool, PoolClient } from 'pg';
+import { randomUUID } from 'node:crypto';
 import type { ActionItem, Disposition, Document } from '../types';
 
 export type LegacyActionItemRow = ActionItem & { notes?: unknown };
@@ -49,12 +50,60 @@ export class ActionPlanValidationError extends Error {}
 export class ActionPlanConflictError extends Error {}
 export class ActionPlanNotFoundError extends Error {}
 
+const isValidHttpUrl = (value: string): boolean => {
+    if (!value) return false;
+    try {
+        const parsed = new URL(value);
+        return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    } catch {
+        return false;
+    }
+};
+
+const coerceDocumentId = (value: unknown): string => {
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (trimmed.length > 0) {
+            return trimmed;
+        }
+    }
+    return randomUUID();
+};
+
 const normalizeDocuments = (documents: unknown): Document[] => {
     if (!Array.isArray(documents)) {
         return [];
     }
 
-    return documents as Document[];
+    const normalized: Document[] = [];
+
+    documents.forEach((entry, index) => {
+        if (!entry || typeof entry !== 'object') {
+            return;
+        }
+
+        const candidate = entry as Partial<Document>;
+        const rawUrl = typeof candidate.url === 'string' ? candidate.url.trim() : '';
+        const text = typeof candidate.text === 'string' ? candidate.text.trim() : '';
+
+        if (!rawUrl) {
+            throw new ActionPlanValidationError(`Document at index ${index} is missing a URL.`);
+        }
+
+        if (!isValidHttpUrl(rawUrl)) {
+            throw new ActionPlanValidationError(
+                `Document URL must start with http:// or https:// (index ${index}).`
+            );
+        }
+
+        normalized.push({
+            id: coerceDocumentId(candidate.id),
+            text,
+            url: rawUrl,
+        });
+    });
+
+    return normalized;
 };
 
 const normalizeDueDate = (due: string | null | undefined): string | null => {
@@ -189,6 +238,7 @@ const persistActionItems = async (
 
     for (const item of payload) {
         const normalizedDocuments = normalizeDocuments(item.documents);
+        const documentsJson = JSON.stringify(normalizedDocuments);
         const dueDate = normalizeDueDate(item.due_date ?? null);
 
         if (item.action_item_id) {
@@ -203,17 +253,17 @@ const persistActionItems = async (
                  SET name = $1,
                      status = $2,
                      due_date = $3,
-                     documents = $4,
+                     documents = $4::jsonb,
                      assigned_to_user_id = $5
                  WHERE action_item_id = $6`,
-                [item.name, item.status, dueDate, normalizedDocuments, item.assigned_to_user_id, item.action_item_id]
+                [item.name, item.status, dueDate, documentsJson, item.assigned_to_user_id, item.action_item_id]
             );
         } else {
             const createdBy = item.created_by_user_id ?? userId;
             await client.query(
                 `INSERT INTO action_items (opportunity_id, name, status, due_date, documents, created_by_user_id, assigned_to_user_id)
                  VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-                [opportunityId, item.name, item.status, dueDate, normalizedDocuments, createdBy, item.assigned_to_user_id]
+                [opportunityId, item.name, item.status, dueDate, documentsJson, createdBy, item.assigned_to_user_id]
             );
         }
     }

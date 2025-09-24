@@ -33,6 +33,55 @@ const sanitizeActionItemCollection = (items: ActionItem[] | null | undefined): A
     return items.map(sanitizeActionItem);
 };
 
+const generateDocumentId = (): string => {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+        return crypto.randomUUID();
+    }
+    return `doc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+};
+
+const isValidHttpUrl = (value: string): boolean => {
+    if (!value) return false;
+    try {
+        const parsed = new URL(value);
+        return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    } catch {
+        return false;
+    }
+};
+
+const sanitizeDocumentsForCommit = (documents: Document[] | undefined): { sanitized: Document[]; invalidCount: number } => {
+    if (!Array.isArray(documents)) {
+        return { sanitized: [], invalidCount: 0 };
+    }
+
+    const sanitized: Document[] = [];
+    let invalidCount = 0;
+
+    documents.forEach(entry => {
+        if (!entry || typeof entry !== 'object') {
+            return;
+        }
+
+        const text = typeof entry.text === 'string' ? entry.text.trim() : '';
+        const url = typeof entry.url === 'string' ? entry.url.trim() : '';
+
+        if (!url || !isValidHttpUrl(url)) {
+            invalidCount += 1;
+            return;
+        }
+
+        const id =
+            typeof entry.id === 'string' && entry.id.trim().length > 0
+                ? entry.id.trim()
+                : generateDocumentId();
+
+        sanitized.push({ id, text, url });
+    });
+
+    return { sanitized, invalidCount };
+};
+
 const normalizeDocumentsForCompare = (documents: Document[] | undefined): Document[] => {
     if (!Array.isArray(documents)) return [];
     return documents.map(doc => ({ id: doc.id, text: doc.text, url: doc.url }));
@@ -304,28 +353,52 @@ export const DispositionActionPlanProvider: React.FC<DispositionActionPlanProvid
             setIsStagePersisting(true);
         }
 
+        const normalizedDraftItems = sanitizeActionItemCollection(draftActionItems);
+        let invalidDocumentCount = 0;
+
+        const draftPayload = normalizedDraftItems.map(item => {
+            const { sanitized, invalidCount } = sanitizeDocumentsForCommit(item.documents);
+            invalidDocumentCount += invalidCount;
+            return {
+                action_item_id: item.action_item_id,
+                name: item.name,
+                status: item.status,
+                due_date: item.due_date ? item.due_date : null,
+                documents: sanitized,
+                assigned_to_user_id: item.assigned_to_user_id,
+                created_by_user_id: item.created_by_user_id,
+            } satisfies SaveDispositionActionPlanPayload['actionItems'][number];
+        });
+
+        const stagedPayload = stagedActionItems.map(item => {
+            const { sanitized, invalidCount } = sanitizeDocumentsForCommit(item.documents);
+            invalidDocumentCount += invalidCount;
+            return {
+                name: item.name,
+                status: item.status,
+                due_date: item.due_date ? item.due_date : null,
+                documents: sanitized,
+                assigned_to_user_id: item.assigned_to_user_id || currentUser.user_id,
+                created_by_user_id: currentUser.user_id,
+            } satisfies SaveDispositionActionPlanPayload['actionItems'][number];
+        });
+
+        if (invalidDocumentCount > 0) {
+            showToast('Fix invalid link URLs before saving (use http:// or https://).', 'error');
+            if (shouldSaveActionPlan) {
+                setIsStagePersisting(false);
+            }
+            setIsCommittingDraft(false);
+            return;
+        }
+
+        const mergedActionItems: SaveDispositionActionPlanPayload['actionItems'] = [
+            ...draftPayload,
+            ...stagedPayload,
+        ];
+
         try {
             await queueSaveOperation(async () => {
-                const mergedActionItems: SaveDispositionActionPlanPayload['actionItems'] = [
-                    ...sanitizeActionItemCollection(draftActionItems).map(item => ({
-                        action_item_id: item.action_item_id,
-                        name: item.name,
-                        status: item.status,
-                        due_date: item.due_date ? item.due_date : null,
-                        documents: Array.isArray(item.documents) ? item.documents : [],
-                        assigned_to_user_id: item.assigned_to_user_id,
-                        created_by_user_id: item.created_by_user_id,
-                    })),
-                    ...stagedActionItems.map(item => ({
-                        name: item.name,
-                        status: item.status,
-                        due_date: item.due_date ? item.due_date : null,
-                        documents: Array.isArray(item.documents) ? item.documents : [],
-                        assigned_to_user_id: item.assigned_to_user_id || currentUser.user_id,
-                        created_by_user_id: currentUser.user_id,
-                    })),
-                ];
-
                 const dispositionPayload: SaveDispositionActionPlanPayload['disposition'] = {
                     status: draftDisposition.status,
                     reason: draftDisposition.reason ?? '',
@@ -353,7 +426,9 @@ export const DispositionActionPlanProvider: React.FC<DispositionActionPlanProvid
                 showToast('Action plan saved', 'success');
             });
         } catch (error: any) {
-            if (error?.status === 409) {
+            if (error?.status === 400) {
+                showToast(error?.message || 'Fix validation errors before saving.', 'error');
+            } else if (error?.status === 409) {
                 showToast('Save conflict: another user updated this opportunity. Refresh to continue.', 'error');
             } else {
                 showToast('Failed to save changes', 'error');

@@ -162,6 +162,7 @@ describe('OpportunityDetail staging defaults', () => {
 
     const notes = screen.getByLabelText(/general notes/i);
     fireEvent.change(notes, { target: { value: 'Updated notes' } });
+    fireEvent.blur(notes);
 
     expect(await screen.findByText(/unsaved disposition changes/i)).toBeInTheDocument();
 

@@ -136,11 +136,51 @@ export interface SaveDispositionActionPlanResponse {
   actionItems: ActionItem[];
 }
 
+const generateDocumentId = (): string => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `doc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+};
+
+const isValidHttpUrl = (value: string): boolean => {
+  if (!value) return false;
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+};
+
 const sanitizeActionPlanDocuments = (documents?: Document[]): Document[] => {
   if (!Array.isArray(documents)) {
     return [];
   }
-  return documents;
+
+  const sanitized: Document[] = [];
+
+  documents.forEach(entry => {
+    if (!entry || typeof entry !== 'object') {
+      return;
+    }
+
+    const text = typeof entry.text === 'string' ? entry.text.trim() : '';
+    const url = typeof entry.url === 'string' ? entry.url.trim() : '';
+
+    if (!url || !isValidHttpUrl(url)) {
+      return;
+    }
+
+    const id =
+      typeof entry.id === 'string' && entry.id.trim().length > 0
+        ? entry.id.trim()
+        : generateDocumentId();
+
+    sanitized.push({ id, text, url });
+  });
+
+  return sanitized;
 };
 
 const sanitizeActionPlanDueDate = (due?: string | null): string | null => {
