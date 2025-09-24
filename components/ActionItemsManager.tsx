@@ -174,7 +174,7 @@ const ActionItemsManager: React.FC<ActionItemsManagerProps> = ({ users }) => {
                                 : '';
                             const canSave = trimmedUrl.length > 0 && !invalidUrl;
                             const showPreview = isValidHttpUrl(trimmedUrl);
-
+                  
                             return (
                                 <li
                                     key={`${idPrefix}-${document.id ?? docIndex}`}

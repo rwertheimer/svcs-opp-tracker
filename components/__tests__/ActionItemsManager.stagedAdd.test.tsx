@@ -279,7 +279,7 @@ describe('ActionItemsManager - staged add', () => {
     expect(reopenedTextInput).toHaveValue('Spec Outline');
 
     fireEvent.click(scoped.getByRole('button', { name: /save link/i }));
-
+      
     const saveButton = await screen.findByRole('button', { name: /save changes/i });
     fireEvent.click(saveButton);
 
