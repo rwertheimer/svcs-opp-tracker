@@ -117,6 +117,16 @@ apiRouter.get('/users', async (req: expressTypes.Request, res: expressTypes.Resp
 // --- Opportunity Endpoint ---
 apiRouter.get('/opportunities', async (req: expressTypes.Request, res: expressTypes.Response) => {
     const GET_OPPS_QUERY = `
+        WITH action_items_agg AS (
+            SELECT
+                ai.opportunity_id,
+                COALESCE(
+                    jsonb_agg((to_jsonb(ai) - 'notes') ORDER BY ai.due_date ASC NULLS LAST),
+                    '[]'::jsonb
+                ) AS action_items
+            FROM action_items ai
+            GROUP BY ai.opportunity_id
+        )
         SELECT 
             -- Explicit column list with aliases to match Opportunity interface
             o.opportunities_id,
@@ -149,16 +159,9 @@ apiRouter.get('/opportunities', async (req: expressTypes.Request, res: expressTy
             o.opportunities_incremental_bookings,
             o.opportunities_amount,
             o.disposition,
-            -- Subquery to aggregate action items for each opportunity
-            (
-                SELECT COALESCE(
-                    jsonb_agg((to_jsonb(ai) - 'notes') ORDER BY ai.due_date ASC NULLS LAST),
-                    '[]'::jsonb
-                )
-                FROM action_items ai
-                WHERE ai.opportunity_id = o.opportunities_id
-            ) as "actionItems"
+            COALESCE(action_items_agg.action_items, '[]'::jsonb) AS "actionItems"
         FROM opportunities o
+        LEFT JOIN action_items_agg ON action_items_agg.opportunity_id = o.opportunities_id
         ORDER BY o.opportunities_close_date ASC;
     `;
     try {
