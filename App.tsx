@@ -626,6 +626,8 @@ const App: React.FC = () => {
           opportunities={filteredOpportunities}
           onSelect={handleSelectOpportunity}
           savedFilters={savedFilters}
+          activeSavedViewId={activeViewId}
+          activeSavedViewName={activeSavedView?.name ?? null}
           onSaveFilter={handleSaveFilter}
           onApplyFilter={handleApplySavedFilter}
           onClearFilters={handleClearFilters}
@@ -634,7 +636,6 @@ const App: React.FC = () => {
           onOpenOrgChart={() => setIsOrgChartModalOpen(true)}
           activeFilterCount={filters.rules.length}
           onOpenManageSavedViews={() => setIsManageViewsOpen(true)}
-          apiModeInfo={USE_SAVED_VIEWS_API ? (savedViewsApiOnline ? `API • ${currentUser?.email ?? (currentUser?.user_id || '').slice(0,8)}` : 'API • offline') : 'Local'}
           searchResetToken={searchResetToken}
         />
       </>
