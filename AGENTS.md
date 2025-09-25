@@ -50,5 +50,13 @@ This document explains how the Services Opportunity Tracker is organized, the pr
 - Postgres schema migrations live in `backend/migrations/`. Use `npx ts-node <path>` to execute them (e.g., removal of legacy action item notes).
 - Saved views persistence relies on the `saved_views` table and related indexes (`ux_saved_views_user_lower_name`, `ux_saved_views_one_default_per_user`). Ensure migrations run before deploying.
 
+## Documentation Updates
+Follow these guardrails whenever work requires guidance updates:
+
+- **README.md** should be updated when project-wide onboarding or runtime expectations change. Examples include new setup steps, additional services that must be running, shifts in tech stack/tooling, or changes to how the app is launched, tested, or deployed.
+- **AGENTS.md** should capture workflow or decision-making guardrails for future contributors. Update it when processes, coding standards, architectural principles, or testing requirements change, or when you add new subsystems that require explicit guidance.
+- **Both README.md and AGENTS.md** must be revised together when a change impacts both onboarding instructions and contributor workflows (e.g., introducing a new mandatory service plus new coding conventions around its usage).
+- If your change does not alter contributor expectations or project setup, avoid touching these documents; prefer inline comments or feature-specific docs instead.
+
 ## Support
 Questions about product behavior, data definitions (e.g., stage mappings, ticket status classification), or roadmap priorities should go to the product owner before implementation.
