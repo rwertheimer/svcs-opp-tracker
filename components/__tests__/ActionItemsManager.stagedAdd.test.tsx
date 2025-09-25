@@ -298,6 +298,43 @@ describe('ActionItemsManager - staged add', () => {
     expect(savedTask.documents[0].id).toBeTruthy();
   });
 
+  it('keeps staged link inputs visible until the user saves the link', async () => {
+    render(
+      <DispositionActionPlanProvider
+        opportunity={baseOpportunity}
+        currentUser={users[0]}
+        onSaveActionPlan={vi.fn()}
+      >
+        <PrimeStaging>
+          <ManagerHarness />
+        </PrimeStaging>
+      </DispositionActionPlanProvider>
+    );
+
+    const taskInput = screen.getByPlaceholderText('Add a new task');
+    fireEvent.change(taskInput, { target: { value: 'Draft success plan' } });
+    fireEvent.click(screen.getByRole('button', { name: /add task/i }));
+
+    const stagedInput = await screen.findByDisplayValue('Draft success plan');
+    const stagedArticle = stagedInput.closest('article');
+    expect(stagedArticle).toBeTruthy();
+
+    const scoped = within(stagedArticle as HTMLElement);
+    fireEvent.click(scoped.getByRole('button', { name: /add link/i }));
+
+    const linkTextInput = await scoped.findByLabelText('Link text');
+    const linkUrlInput = await scoped.findByLabelText('Link URL');
+
+    fireEvent.change(linkTextInput, { target: { value: 'CSM Plan' } });
+    fireEvent.change(linkUrlInput, { target: { value: 'https://example.com/csm-plan' } });
+
+    await waitFor(() => {
+      expect(scoped.getByRole('button', { name: /save link/i })).toBeEnabled();
+      expect(scoped.getByLabelText('Link text')).toBeInTheDocument();
+      expect(scoped.getByLabelText('Link URL')).toBeInTheDocument();
+    });
+  });
+
   it('prevents saving staged links with invalid urls', async () => {
     const onSaveActionPlan = vi.fn();
 
@@ -345,4 +382,3 @@ describe('ActionItemsManager - staged add', () => {
     expect(scoped.getByText(/Enter a valid URL/i)).toBeInTheDocument();
   });
 });
-

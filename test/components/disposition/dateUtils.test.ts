@@ -17,10 +17,10 @@ describe('getDueDateDescriptor', () => {
         expect(getDueDateDescriptor('2024-03-05')).toBe('Due today');
     });
 
-    it('omits the descriptor for upcoming due dates within the next week', () => {
+    it('returns a countdown descriptor for upcoming due dates within the next week', () => {
         vi.setSystemTime(new Date('2024-03-01T09:00:00Z'));
 
-        expect(getDueDateDescriptor('2024-03-05')).toBe('');
+        expect(getDueDateDescriptor('2024-03-05')).toBe('Due in 4 days');
     });
 
     it('omits the descriptor for future due dates beyond a week', () => {

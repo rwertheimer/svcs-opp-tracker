@@ -104,9 +104,6 @@ const ActionItemsManager: React.FC<ActionItemsManagerProps> = ({ users }) => {
                         if (!(doc.id in nextState)) {
                             nextState[doc.id] = trimmedText.length === 0 && trimmedUrl.length === 0;
                             hasChanges = true;
-                        } else if (nextState[doc.id] && trimmedUrl.length > 0 && isValidHttpUrl(trimmedUrl)) {
-                            nextState[doc.id] = false;
-                            hasChanges = true;
                         }
                     });
                 });

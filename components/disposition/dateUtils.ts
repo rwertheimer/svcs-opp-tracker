@@ -77,6 +77,10 @@ export const getDueDateDescriptor = (dueDate?: string | null): string => {
         return 'Due tomorrow';
     }
 
+    if (diff <= 7) {
+        return `Due in ${pluralize(diff, 'day', 'days')}`;
+    }
+
     return '';
 };
 

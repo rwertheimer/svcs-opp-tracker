@@ -8,7 +8,7 @@ import {
   setDefaultSavedView,
 } from '../apiService';
 
-const API = 'http://localhost:8080/api';
+const API = 'http://localhost:3000/api';
 const userId = 'u-123';
 
 describe('Saved Views API service', () => {
