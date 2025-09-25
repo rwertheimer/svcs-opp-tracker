@@ -14,13 +14,14 @@
 // --- Example using Google Cloud Functions ---
 import { BigQuery } from '@google-cloud/bigquery';
 import { Firestore } from '@google-cloud/firestore';
+import logger from './logger';
 
 const bigquery = new BigQuery();
 const firestore = new Firestore();
 
 // This function would be triggered by Cloud Scheduler
 export const syncOpportunities = async (req, res) => {
-    console.log('Starting scheduled opportunity sync...');
+    logger.info('Starting scheduled opportunity sync');
 
     try {
         // Step 1: Define the BigQuery SQL query to fetch all relevant opportunities.
@@ -62,7 +63,7 @@ export const syncOpportunities = async (req, res) => {
 
         // Step 2: Execute the query
         const [rows] = await bigquery.query({ query });
-        console.log(`Fetched ${rows.length} opportunities from BigQuery.`);
+        logger.info({ count: rows.length }, 'Fetched opportunities from BigQuery');
 
         // Step 3: Write the results to Firestore.
         // We use a "batch" write for efficiency, which can handle up to 500 operations at once.
@@ -80,12 +81,12 @@ export const syncOpportunities = async (req, res) => {
 
         // Step 4: Commit the batch write.
         await batch.commit();
-        console.log('Successfully synced opportunities to Firestore.');
+        logger.info('Successfully synced opportunities to Firestore');
 
         res.status(200).send('Sync completed successfully.');
 
     } catch (error) {
-        console.error('Error during scheduled opportunity sync:', error);
+        logger.error({ err: error }, 'Error during scheduled opportunity sync');
         res.status(500).send('Sync failed.');
     }
 };

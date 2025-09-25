@@ -1,14 +1,3 @@
-
-
-declare global {
-  interface ImportMeta {
-    readonly env: {
-      readonly VITE_USE_MOCK_DATA?: string;
-      readonly VITE_SAVED_VIEWS_API?: string;
-    }
-  }
-}
-
 import type {
   Opportunity,
   AccountDetails,
@@ -19,8 +8,9 @@ import type {
   Document,
 } from '../types';
 import { generateOpportunities, generateAccountDetails, MOCK_USERS } from './mockData';
+import { clientLogger } from './logger';
 
-const USE_MOCK_DATA = (import.meta.env?.VITE_USE_MOCK_DATA ?? 'true') === 'true';
+const USE_MOCK_DATA = (import.meta.env.VITE_USE_MOCK_DATA ?? 'true') === 'true';
 const API_BASE_URL = '/api';
 
 const omitActionItemNotes = <T extends { [key: string]: unknown }>(value: T): Omit<T, 'notes'> => {
@@ -85,7 +75,7 @@ export const fetchOpportunityDetails = async (accountId: string): Promise<Accoun
       return { supportTickets, usageHistory, projectHistory };
 
     } catch (error) {
-      console.error("Error in fetchOpportunityDetails:", error);
+      clientLogger.error('Error in fetchOpportunityDetails', error);
       throw error;
     }
   }
@@ -93,7 +83,7 @@ export const fetchOpportunityDetails = async (accountId: string): Promise<Accoun
 
 export const saveDisposition = async (opportunityId: string, disposition: Disposition, userId: string): Promise<Disposition> => {
   if (USE_MOCK_DATA) {
-    console.log(`(Mock) Saving disposition for ${opportunityId}`, { ...disposition, version: disposition.version + 1 });
+    clientLogger.info('(Mock) Saving disposition', { opportunityId, disposition: { ...disposition, version: disposition.version + 1 } });
     return Promise.resolve({ ...disposition, version: disposition.version + 1 });
   } else {
     try {
@@ -265,11 +255,11 @@ export const saveDispositionActionPlan = async (
 
 // --- NEW: Action Item APIs ---
 
-export const createActionItem = async (opportunityId: string, item: Omit<ActionItem, 'action_item_id'>): Promise<ActionItem> => {
+export const createActionItem = async (opportunityId: string, item: Omit<ActionItem, 'action_item_id' | 'opportunity_id'>): Promise<ActionItem> => {
     const sanitizedItem = omitActionItemNotes(item);
     if (USE_MOCK_DATA) {
         const newItem = { ...sanitizedItem, action_item_id: `mock-ai-${Date.now()}` };
-        console.log("(Mock) Creating action item:", newItem);
+        clientLogger.info('(Mock) Creating action item', newItem);
         return Promise.resolve(newItem as ActionItem);
     } else {
         return httpJson(`${API_BASE_URL}/action-items`, {
@@ -283,7 +273,7 @@ export const createActionItem = async (opportunityId: string, item: Omit<ActionI
 export const updateActionItem = async (actionItemId: string, updates: Partial<ActionItem>): Promise<ActionItem> => {
      const sanitizedUpdates = omitActionItemNotes(updates);
      if (USE_MOCK_DATA) {
-        console.log(`(Mock) Updating action item ${actionItemId}:`, sanitizedUpdates);
+        clientLogger.info('(Mock) Updating action item', { actionItemId, updates: sanitizedUpdates });
         // This won't actually persist in mock mode, but we can simulate success.
         return Promise.resolve({} as ActionItem);
     } else {
@@ -297,7 +287,7 @@ export const updateActionItem = async (actionItemId: string, updates: Partial<Ac
 
 export const deleteActionItem = async (actionItemId: string): Promise<void> => {
     if (USE_MOCK_DATA) {
-        console.log(`(Mock) Deleting action item ${actionItemId}`);
+        clientLogger.info('(Mock) Deleting action item', { actionItemId });
         return Promise.resolve();
     } else {
         const res = await fetch(`${API_BASE_URL}/action-items/${actionItemId}`, { method: 'DELETE' });

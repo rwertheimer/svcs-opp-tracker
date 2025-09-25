@@ -7,6 +7,7 @@
 import { BigQuery } from '@google-cloud/bigquery';
 import { Pool, PoolClient } from 'pg'; // Import PoolClient for typing
 import * as dotenv from 'dotenv';
+import logger from './logger';
 
 dotenv.config();
 
@@ -133,38 +134,38 @@ const MOCK_USERS = [
 ];
 
 async function seedDatabase() {
-  console.log('--- Starting PostgreSQL Database Seeding ---');
+  logger.info('Starting PostgreSQL database seeding');
   const pool = new Pool(POSTGRES_CONFIG);
   let client: PoolClient | null = null;
   
   try {
     client = await pool.connect();
 
-    console.log('Step 1: Creating database schema...');
+    logger.info('Creating database schema');
     await client.query(CREATE_SCHEMA_SQL);
-    console.log('> Schema created successfully.');
+    logger.info('Schema created successfully');
     
     await client.query('BEGIN');
-    console.log('Step 2: Inserting mock users...');
+    logger.info('Inserting mock users');
     const userInsertPromises = MOCK_USERS.map(user => 
         client!.query('INSERT INTO users (name, email) VALUES ($1, $2)', [user.name, user.email])
     );
     await Promise.all(userInsertPromises);
     const { rows: insertedUsers } = await client.query('SELECT * FROM users');
-    console.log(`> Inserted ${insertedUsers.length} users successfully.`);
+    logger.info({ userCount: insertedUsers.length }, 'Inserted mock users');
 
-    console.log('Step 3: Fetching opportunities from BigQuery...');
+    logger.info('Fetching opportunities from BigQuery');
     const [rows] = await bigquery.query({ query: OPPORTUNITIES_QUERY });
-    console.log(`> Fetched ${rows.length} opportunities from BigQuery.`);
+    logger.info({ count: rows.length }, 'Fetched opportunities from BigQuery');
 
     if (rows.length === 0) {
-      console.log('No opportunities found, committing transaction.');
+      logger.info('No opportunities found; committing transaction');
       await client.query('COMMIT');
       return;
     }
 
-    console.log(`Step 4: Inserting ${rows.length} opportunities in batches...`);
     const BATCH_SIZE = 1000;
+    logger.info({ total: rows.length, batchSize: BATCH_SIZE }, 'Inserting opportunities in batches');
     const firstOpp = rows[0]; // Keep a reference for adding action items later
     const columns = Object.keys(firstOpp);
     const columnsList = [...columns, 'disposition'].join(', ');
@@ -197,12 +198,12 @@ async function seedDatabase() {
 
         const queryText = `INSERT INTO opportunities (${columnsList}) VALUES ${valueClauses.join(', ')}`;
         await client.query(queryText, queryParams);
-        console.log(`> Inserted batch of ${batchRows.length} opportunities (rows ${i + 1}-${i + batchRows.length}).`);
+        logger.info({ batchSize: batchRows.length, rangeStart: i + 1, rangeEnd: i + batchRows.length }, 'Inserted opportunity batch');
     }
 
-    console.log('> Finished inserting all opportunities.');
+    logger.info('Finished inserting all opportunities');
 
-    console.log(`> Adding sample action items for first opportunity: ${firstOpp.opportunities_name}`);
+    logger.info({ opportunityId: firstOpp.opportunities_id }, 'Adding sample action items to first opportunity');
     const actionItems = [
         { name: 'Initial Scoping Call', status: 'Completed', created_by: insertedUsers[0].user_id, assigned_to: insertedUsers[0].user_id },
         { name: 'Develop Initial Proposal', status: 'In Progress', created_by: insertedUsers[0].user_id, assigned_to: insertedUsers[1].user_id },
@@ -215,16 +216,16 @@ async function seedDatabase() {
         );
     }
     
-    console.log('Step 5: Committing transaction...');
+    logger.info('Committing transaction');
     await client.query('COMMIT');
-    console.log('> Database transaction committed successfully.');
-    console.log('\n--- Database Seeding Complete ---');
+    logger.info('Database transaction committed successfully');
+    logger.info('PostgreSQL database seeding complete');
 
   } catch (error) {
     if (client) {
-        console.error('--- An error occurred, attempting to roll back transaction... ---');
+        logger.error({ err: error }, 'Error during PostgreSQL seeding; attempting rollback');
         await client.query('ROLLBACK');
-        console.error('> Transaction rolled back.');
+        logger.warn('Transaction rolled back');
     }
     throw error;
   } finally {
@@ -237,11 +238,11 @@ async function seedDatabase() {
 
 seedDatabase()
   .then(() => {
-    console.log('Script finished successfully.');
+    logger.info('PostgreSQL seeding script finished successfully');
     process.exit(0);
   })
   .catch((error) => {
-    console.error('\n--- A FATAL ERROR OCCURRED ---');
-    console.error(error);
+    logger.error('Fatal error during PostgreSQL seeding');
+    logger.error({ err: error }, 'PostgreSQL seeding failed');
     process.exit(1);
   });

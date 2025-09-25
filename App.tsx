@@ -34,6 +34,7 @@ import AdvancedFilterBuilder from './components/AdvancedFilterBuilder';
 import SalesOrgChart from './components/SalesOrgChart';
 import { useToast } from './components/Toast';
 import { ICONS } from './constants';
+import { clientLogger } from './services/logger';
 
 const initialFilterGroup: FilterGroup = {
     id: 'root',
@@ -75,7 +76,7 @@ const App: React.FC = () => {
   const [detailInitialSection, setDetailInitialSection] = useState<string | undefined>(undefined);
   // Internal: prime Advanced Filter Builder with org-chart selections
   const [pendingOrgFilters, setPendingOrgFilters] = useState<FilterGroup | null>(null);
-  const USE_SAVED_VIEWS_API = import.meta.env?.VITE_SAVED_VIEWS_API === 'true';
+  const USE_SAVED_VIEWS_API = import.meta.env.VITE_SAVED_VIEWS_API === 'true';
   
   // --- NEW: User Management State ---
   const [users, setUsers] = useState<User[]>([]);
@@ -106,7 +107,7 @@ const App: React.FC = () => {
       setOpportunities(sanitizedOpportunities);
     } catch (err: any) {
       setError('Failed to fetch initial data. Please try again.');
-      console.error(err);
+      clientLogger.error('Failed to fetch initial data', err);
     } finally {
       setIsLoading(false);
     }
@@ -346,7 +347,7 @@ const App: React.FC = () => {
 
       return { disposition: result.disposition, actionItems: sanitizedItems };
     } catch (err) {
-      console.error('Failed to save action plan:', err);
+      clientLogger.error('Failed to save action plan', err);
       throw err;
     }
   };
@@ -367,7 +368,7 @@ const App: React.FC = () => {
       try {
           await updateActionItem(actionItemId, updates);
       } catch (error) {
-          console.error("Failed to update action item:", error);
+          clientLogger.error('Failed to update action item', error);
           setError("Failed to update action item. Reverting change.");
           setOpportunities(originalOpps);
           // Re-sync selectedOpportunity from originalOpps

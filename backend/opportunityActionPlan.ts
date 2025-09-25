@@ -2,6 +2,7 @@ import type { Router, Request, Response } from 'express';
 import type { Pool, PoolClient } from 'pg';
 import { randomUUID } from 'node:crypto';
 import type { ActionItem, Disposition, Document } from '../types';
+import logger from './logger';
 
 export type LegacyActionItemRow = ActionItem & { notes?: unknown };
 
@@ -326,7 +327,7 @@ export const registerOpportunityActionPlanRoutes = (router: Router, pool: Pool) 
             } else if (error instanceof ActionPlanNotFoundError) {
                 res.status(404).send(error.message);
             } else {
-                console.error(`Error saving action plan for opp ${opportunityId}:`, error);
+                logger.error({ err: error, opportunityId }, 'Error saving action plan');
                 res.status(500).send('Internal Server Error');
             }
         } finally {
