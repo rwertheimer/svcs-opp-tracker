@@ -14,6 +14,7 @@ import {
     registerOpportunityActionPlanRoutes,
 } from './opportunityActionPlan';
 import type { LegacyActionItemRow } from './opportunityActionPlan';
+import logger from './logger';
 
 
 dotenv.config();
@@ -61,7 +62,7 @@ async function ensureSavedViewsSchema() {
         try {
             await client.query('CREATE EXTENSION IF NOT EXISTS pgcrypto');
         } catch (extErr) {
-            console.warn('Warning: could not ensure pgcrypto extension (gen_random_uuid). Proceeding:', extErr);
+            logger.warn({ err: extErr }, 'Failed to ensure pgcrypto extension; continuing without it.');
         }
 
         await client.query(`
@@ -94,9 +95,9 @@ async function ensureSavedViewsSchema() {
               ON saved_views (user_id, updated_at DESC)
         `);
 
-        console.log('Ensured saved_views schema.');
+        logger.info('Ensured saved_views schema.');
     } catch (error) {
-        console.warn('Warning: failed to ensure saved_views schema:', error);
+        logger.warn({ err: error }, 'Failed to ensure saved_views schema');
     } finally {
         client.release();
     }
@@ -108,7 +109,7 @@ apiRouter.get('/users', async (req: expressTypes.Request, res: expressTypes.Resp
         const result = await pgPool.query<User>('SELECT user_id, name, email FROM users ORDER BY name');
         res.status(200).json(result.rows);
     } catch (error) {
-        console.error('Error fetching users:', error);
+        logger.error({ err: error }, 'Error fetching users');
         res.status(500).send('Internal Server Error');
     }
 });
@@ -172,7 +173,7 @@ apiRouter.get('/opportunities', async (req: expressTypes.Request, res: expressTy
         }));
         res.status(200).json(sanitizedRows);
     } catch (error) {
-        console.error('Error fetching opportunities:', error);
+        logger.error({ err: error }, 'Error fetching opportunities');
         res.status(500).send('Internal Server Error');
     }
 });
@@ -205,11 +206,11 @@ apiRouter.get('/users/:userId/views', async (req: expressTypes.Request, res: exp
                 const result = await run();
                 return res.status(200).json(result.rows.map(mapSavedViewRow));
             } catch (e2) {
-                console.error(`Error fetching saved views for user ${userId} after ensure:`, e2);
+                logger.error({ err: e2, userId }, 'Error fetching saved views after ensuring schema');
                 return res.status(500).send('Internal Server Error fetching saved views.');
             }
         }
-        console.error(`Error fetching saved views for user ${userId}:`, error);
+        logger.error({ err: error, userId }, 'Error fetching saved views for user');
         res.status(500).send('Internal Server Error fetching saved views.');
     }
 });
@@ -236,7 +237,7 @@ apiRouter.post('/users/:userId/views', async (req: expressTypes.Request, res: ex
         if (error?.code === '23505') {
             return res.status(409).send('A view with that name already exists.');
         }
-        console.error(`Error creating saved view for user ${userId}:`, error);
+        logger.error({ err: error, userId }, 'Error creating saved view for user');
         res.status(500).send('Internal Server Error creating saved view.');
     } finally {
         client.release();
@@ -282,7 +283,7 @@ apiRouter.put('/users/:userId/views/:viewId', async (req: expressTypes.Request, 
         if (error?.code === '23505') {
             return res.status(409).send('A view with that name already exists.');
         }
-        console.error(`Error updating saved view ${viewId} for user ${userId}:`, error);
+        logger.error({ err: error, viewId, userId }, 'Error updating saved view for user');
         res.status(500).send('Internal Server Error updating saved view.');
     } finally {
         client.release();
@@ -296,7 +297,7 @@ apiRouter.delete('/users/:userId/views/:viewId', async (req: expressTypes.Reques
         if (result.rowCount === 0) return res.status(404).send('Saved view not found.');
         res.status(204).send();
     } catch (error) {
-        console.error(`Error deleting saved view ${viewId} for user ${userId}:`, error);
+        logger.error({ err: error, viewId, userId }, 'Error deleting saved view for user');
         res.status(500).send('Internal Server Error deleting saved view.');
     }
 });
@@ -313,7 +314,7 @@ apiRouter.put('/users/:userId/views/:viewId/default', async (req: expressTypes.R
         res.status(200).json(mapSavedViewRow(result.rows[0]));
     } catch (error) {
         await client.query('ROLLBACK');
-        console.error(`Error setting default saved view ${viewId} for user ${userId}:`, error);
+        logger.error({ err: error, viewId, userId }, 'Error setting default saved view for user');
         res.status(500).send('Internal Server Error setting default saved view.');
     } finally {
         client.release();
@@ -378,7 +379,7 @@ apiRouter.post('/opportunities/:opportunityId/disposition', async (req: expressT
 
     } catch (error) {
         await client.query('ROLLBACK');
-        console.error(`Error saving disposition for opp ${opportunityId}:`, error);
+        logger.error({ err: error, opportunityId }, 'Error saving disposition');
         res.status(500).send('Internal Server Error');
     } finally {
         client.release();
@@ -389,7 +390,7 @@ apiRouter.post('/opportunities/:opportunityId/disposition', async (req: expressT
 // --- NEW Action Item CRUD Endpoints ---
 apiRouter.post('/action-items', async (req: expressTypes.Request, res: expressTypes.Response) => {
     if (Object.prototype.hasOwnProperty.call(req.body, 'notes')) {
-        console.warn('Rejected action item create request containing deprecated notes field.');
+        logger.warn({ reason: 'deprecated_notes_field' }, 'Rejected action item create request');
         return res.status(400).send('The action item notes field has been removed.');
     }
 
@@ -407,7 +408,7 @@ apiRouter.post('/action-items', async (req: expressTypes.Request, res: expressTy
         const savedItem = stripActionItemNotes(result.rows[0]);
         res.status(201).json(savedItem);
     } catch (error) {
-        console.error('Error creating action item:', error);
+        logger.error({ err: error }, 'Error creating action item');
         res.status(500).send('Internal Server Error');
     }
 });
@@ -415,7 +416,7 @@ apiRouter.post('/action-items', async (req: expressTypes.Request, res: expressTy
 apiRouter.put('/action-items/:itemId', async (req: expressTypes.Request, res: expressTypes.Response) => {
     const { itemId } = req.params;
     if (Object.prototype.hasOwnProperty.call(req.body, 'notes')) {
-        console.warn(`Rejected action item update for ${itemId} containing deprecated notes field.`);
+        logger.warn({ itemId, reason: 'deprecated_notes_field' }, 'Rejected action item update');
         return res.status(400).send('The action item notes field has been removed.');
     }
 
@@ -442,7 +443,7 @@ apiRouter.put('/action-items/:itemId', async (req: expressTypes.Request, res: ex
         const updatedItem = stripActionItemNotes(result.rows[0]);
         res.status(200).json(updatedItem);
     } catch (error) {
-        console.error(`Error updating action item ${itemId}:`, error);
+        logger.error({ err: error, itemId }, 'Error updating action item');
         res.status(500).send('Internal Server Error');
     }
 });
@@ -454,7 +455,7 @@ apiRouter.delete('/action-items/:itemId', async (req: expressTypes.Request, res:
         if (result.rowCount === 0) return res.status(404).send('Action item not found.');
         res.status(204).send();
     } catch (error) {
-        console.error(`Error deleting action item ${itemId}:`, error);
+        logger.error({ err: error, itemId }, 'Error deleting action item');
         res.status(500).send('Internal Server Error');
     }
 });
@@ -463,7 +464,7 @@ apiRouter.delete('/action-items/:itemId', async (req: expressTypes.Request, res:
 // --- Account Detail Endpoints ---
 apiRouter.get('/accounts/:accountId/support-tickets', async (req: expressTypes.Request, res: expressTypes.Response) => {
     const { accountId } = req.params;
-    console.log(`[Live Endpoint] GET Support Tickets for account ${accountId}`);
+    logger.info({ accountId }, 'Live GET support tickets request');
     const query = `
         SELECT
             a.salesforce_account_id AS accounts_salesforce_account_id,
@@ -495,14 +496,14 @@ apiRouter.get('/accounts/:accountId/support-tickets', async (req: expressTypes.R
         const [rows] = await bigquery.query({ query, params: { accountId } });
         res.status(200).json(rows);
     } catch (error) {
-        console.error(`Error fetching support tickets for account ${accountId}:`, error);
+        logger.error({ err: error, accountId }, 'Error fetching support tickets');
         res.status(500).send('Internal Server Error fetching support tickets.');
     }
 });
 
 apiRouter.get('/accounts/:accountId/usage-history', async (req: expressTypes.Request, res: expressTypes.Response) => {
     const { accountId } = req.params;
-    console.log(`[Live Endpoint] GET Usage History for account ${accountId}`);
+    logger.info({ accountId }, 'Live GET usage history request');
 
     const GET_USAGE_QUERY = `
         DECLARE start_date DATE DEFAULT DATE_TRUNC(DATE_SUB(CURRENT_DATE('America/Los_Angeles'), INTERVAL 2 MONTH), MONTH);
@@ -560,14 +561,14 @@ apiRouter.get('/accounts/:accountId/usage-history', async (req: expressTypes.Req
         const [rows] = await bigquery.query({ query: GET_USAGE_QUERY, params: { accountId } });
         res.status(200).json(rows);
     } catch (error) {
-        console.error(`Error fetching usage history for account ${accountId}:`, error);
+        logger.error({ err: error, accountId }, 'Error fetching usage history');
         res.status(500).send('Internal Server Error fetching usage history.');
     }
 });
 
 apiRouter.get('/accounts/:accountId/project-history', async (req: expressTypes.Request, res: expressTypes.Response) => {
     const { accountId } = req.params;
-    console.log(`[Live Endpoint] GET Project History for account ${accountId}`);
+    logger.info({ accountId }, 'Live GET project history request');
     const query = `
         SELECT
             a.salesforce_account_id AS accounts_salesforce_account_id,
@@ -600,7 +601,7 @@ apiRouter.get('/accounts/:accountId/project-history', async (req: expressTypes.R
         const [rows] = await bigquery.query({ query, params: { accountId } });
         res.status(200).json(rows);
     } catch (error) {
-        console.error(`Error fetching project history for account ${accountId}:`, error);
+        logger.error({ err: error, accountId }, 'Error fetching project history');
         res.status(500).send('Internal Server Error fetching project history.');
     }
 });
@@ -614,21 +615,21 @@ if (process.env.NODE_ENV !== 'test') {
         try {
             // Test the connection
             const client = await pgPool.connect();
-            console.log('Successfully connected to PostgreSQL database.');
+            logger.info('Successfully connected to PostgreSQL database.');
             // Ensure helpful indexes exist for performance-sensitive queries
             try {
                 await client.query('CREATE INDEX IF NOT EXISTS idx_action_items_opportunity_due ON action_items (opportunity_id, due_date)');
-                console.log('Ensured index idx_action_items_opportunity_due exists.');
+                logger.info('Ensured index idx_action_items_opportunity_due exists.');
             } catch (e) {
-                console.warn('Warning: Failed to ensure action_items index:', e);
+                logger.warn({ err: e }, 'Failed to ensure action_items index');
             }
             client.release();
 
             app.listen(PORT, () => {
-                console.log(`Server is running on http://localhost:${PORT}`);
+                logger.info({ port: PORT }, 'Server is running');
             });
         } catch (error) {
-            console.error('Failed to connect to PostgreSQL database:', error);
+            logger.error({ err: error }, 'Failed to connect to PostgreSQL database');
             process.exit(1);
         }
     })();

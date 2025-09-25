@@ -53,6 +53,12 @@ A full-stack application for tracking services opportunities, action plans, and 
 - **Backend**: `npm run start:server` (nodemon + ts-node on port 8080 unless overridden by `PORT`).
 - Ensure the frontend `.env.local` proxies API calls to the Express server if running on a non-default port.
 
+## Logging
+- Backend logs are emitted through a shared Pino instance (`backend/logger.ts`) so Cloud Run receives structured JSON entries.
+- Control backend verbosity with `LOG_LEVEL` (defaults to `debug` locally and `info` in production) and set `SERVICE_NAME` to label entries in Google Cloud Logging.
+- During local development logs are prettified automatically via `pino-pretty`; Cloud environments continue to emit newline-delimited JSON.
+- Frontend modules use `clientLogger` (`services/logger.ts`) to silence debug noise in production builds while still surfacing warnings and errors during the pilot.
+
 ## Testing
 - Single run: `npm run test`
 - Watch mode: `npm run test:watch`

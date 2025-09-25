@@ -1,6 +1,7 @@
 import { Pool } from 'pg';
 import type { PoolClient } from 'pg';
 import * as dotenv from 'dotenv';
+import logger from '../logger';
 
 dotenv.config();
 
@@ -21,11 +22,11 @@ interface LegacyNoteRow {
 
 async function archiveLegacyNotes(client: PoolClient, rows: LegacyNoteRow[]) {
     if (rows.length === 0) {
-        console.log('No legacy action item notes found. Skipping archival.');
+        logger.info('No legacy action item notes found; skipping archival');
         return;
     }
 
-    console.log(`Archiving ${rows.length} legacy action item note(s) to action_item_notes_archive...`);
+    logger.info({ noteCount: rows.length }, 'Archiving legacy action item notes to archive table');
     await client.query(`
         CREATE TABLE IF NOT EXISTS action_item_notes_archive (
             archive_id SERIAL PRIMARY KEY,
@@ -41,7 +42,7 @@ async function archiveLegacyNotes(client: PoolClient, rows: LegacyNoteRow[]) {
             'INSERT INTO action_item_notes_archive (action_item_id, opportunity_id, note) VALUES ($1, $2, $3)',
             [row.action_item_id, row.opportunity_id, row.notes]
         );
-        console.log(`  • Archived note from action_item_id=${row.action_item_id}`);
+        logger.info({ actionItemId: row.action_item_id }, 'Archived legacy action item note');
     }
 }
 
@@ -61,13 +62,13 @@ async function run() {
 
             await archiveLegacyNotes(client, rows);
 
-            console.log('Dropping notes column from action_items...');
+            logger.info('Dropping notes column from action_items');
             await client.query('ALTER TABLE action_items DROP COLUMN IF EXISTS notes');
         } else {
-            console.log('notes column does not exist on action_items. Nothing to drop.');
+            logger.info('Notes column missing on action_items; skipping drop');
         }
 
-        console.log('Removing any lingering notes key from documents JSON...');
+        logger.info('Removing notes key from action_item documents JSON');
         await client.query(
             `UPDATE action_items
              SET documents = jsonb_strip_nulls(documents - 'notes')
@@ -75,10 +76,10 @@ async function run() {
         );
 
         await client.query('COMMIT');
-        console.log('Migration completed successfully.');
+        logger.info('Migration completed successfully');
     } catch (error) {
         await client.query('ROLLBACK');
-        console.error('Migration failed:', error);
+        logger.error({ err: error }, 'Migration failed');
         process.exitCode = 1;
     } finally {
         client.release();
@@ -87,6 +88,6 @@ async function run() {
 }
 
 run().catch(error => {
-    console.error('Migration encountered an unexpected error:', error);
+    logger.error({ err: error }, 'Migration encountered an unexpected error');
     process.exitCode = 1;
 });

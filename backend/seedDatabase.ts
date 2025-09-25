@@ -17,6 +17,7 @@
 
 import { BigQuery } from '@google-cloud/bigquery';
 import { Firestore } from '@google-cloud/firestore';
+import logger from './logger';
 
 // --- CONFIGURATION ---
 // IMPORTANT: Replace with your actual GCP Project ID
@@ -68,21 +69,21 @@ const OPPORTUNITIES_QUERY = `
 `;
 
 async function seedDatabase() {
-  console.log('--- Starting Database Seeding Process ---');
+  logger.info('Starting database seeding process');
 
   try {
     // 1. Fetch data from BigQuery
-    console.log('Step 1: Fetching opportunities from BigQuery...');
+    logger.info('Fetching opportunities from BigQuery');
     const [rows] = await bigquery.query({ query: OPPORTUNITIES_QUERY });
-    console.log(`\t> Found ${rows.length} opportunities to sync.`);
+    logger.info({ count: rows.length }, 'Found opportunities to sync');
 
     if (rows.length === 0) {
-      console.log('No rows returned from BigQuery. Exiting.');
+      logger.info('No rows returned from BigQuery; exiting');
       return;
     }
 
     // 2. Write data to Firestore in batches
-    console.log(`Step 2: Writing data to Firestore collection '${FIRESTORE_COLLECTION}'...`);
+    logger.info({ collection: FIRESTORE_COLLECTION }, 'Writing data to Firestore');
     
     // Firestore batches have a limit of 500 operations.
     const BATCH_SIZE = 499;
@@ -93,7 +94,7 @@ async function seedDatabase() {
     for (let i = 0; i < rows.length; i++) {
         const row = rows[i];
         if (!row.opportunities_id) {
-            console.warn(`\t> Skipping row ${i+1} due to missing 'opportunities_id'.`);
+            logger.warn({ rowNumber: i + 1 }, "Skipping row missing 'opportunities_id'");
             continue;
         }
 
@@ -108,7 +109,7 @@ async function seedDatabase() {
 
         // When the batch is full, commit it and start a new one.
         if (operationCount === BATCH_SIZE || i === rows.length - 1) {
-            console.log(`\t> Committing batch of ${operationCount} documents...`);
+            logger.info({ batchSize: operationCount }, 'Committing Firestore batch');
             await batch.commit();
             totalDocsWritten += operationCount;
             
@@ -118,11 +119,11 @@ async function seedDatabase() {
         }
     }
 
-    console.log(`\t> Successfully wrote ${totalDocsWritten} documents to Firestore.`);
-    console.log('--- Database Seeding Process Complete ---');
+    logger.info({ documentsWritten: totalDocsWritten }, 'Finished writing documents to Firestore');
+    logger.info('Database seeding process complete');
 
   } catch (error) {
-    console.error('An error occurred during the seeding process:', error);
+    logger.error({ err: error }, 'Seeding process failed');
     // Fix: Suppress TypeScript error for process.exit, which is valid in Node.js.
     // @ts-ignore
     process.exit(1);
