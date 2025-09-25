@@ -182,16 +182,16 @@ const OpportunityList: React.FC<OpportunityListProps> = ({
 
   // Initial column widths
   const initialWidths = useMemo(() => ({
-    accounts_salesforce_account_name: 200,
-    opportunities_name: 250,
-    opportunities_owner_name: 150,
-    opportunities_type: 150,
-    opportunities_close_date: 120,
-    opportunities_stage_name: 150,
-    opportunities_incremental_bookings: 150,
-    opportunities_amount: 150,
-    opportunities_has_services_flag: 180,
-    opportunities_amount_services: 150,
+    accounts_salesforce_account_name: 180,
+    opportunities_name: 220,
+    opportunities_owner_name: 140,
+    opportunities_type: 130,
+    opportunities_close_date: 110,
+    opportunities_stage_name: 130,
+    opportunities_incremental_bookings: 130,
+    opportunities_amount: 140,
+    opportunities_has_services_flag: 120,
+    opportunities_amount_services: 140,
   }), []);
   
   const { columnWidths, onMouseDown } = useResizableColumns(initialWidths);
@@ -317,31 +317,29 @@ const OpportunityList: React.FC<OpportunityListProps> = ({
                 </div>
             </div>
 
-            <div className="space-y-4">
-                <div className="flex flex-col lg:flex-row lg:items-center gap-3">
-                    <div className="flex flex-col sm:flex-row flex-1 gap-2">
-                        <select
-                            onChange={(e) => e.target.value ? onApplyFilter(e.target.value) : onClearFilters()}
-                            className="flex-1 p-2 border border-slate-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-                            value={activeSavedViewId ?? ''}
-                        >
-                            <option value="">Load a Saved View</option>
-                            {savedFilters.map(sf => (
-                                <option key={sf.id} value={sf.id}>{sf.name}</option>
-                            ))}
-                        </select>
-                        <button
-                            onClick={onOpenManageSavedViews}
-                            className="px-3 py-2 bg-white text-slate-700 border border-slate-300 rounded-md hover:bg-slate-100 text-sm whitespace-nowrap"
-                        >
-                            Manage
-                        </button>
-                    </div>
-                    <span className="px-2 py-1 text-[10px] uppercase tracking-wide rounded-md bg-slate-200 text-slate-700 whitespace-nowrap self-start">
-                        Active: {activeSavedViewName?.trim() ? activeSavedViewName : 'None'}
-                    </span>
+            <div className="flex flex-col gap-3 md:flex-row md:flex-nowrap md:items-center">
+                <div className="flex flex-col sm:flex-row flex-1 min-w-[220px] gap-2">
+                    <select
+                        onChange={(e) => e.target.value ? onApplyFilter(e.target.value) : onClearFilters()}
+                        className="flex-1 p-2 border border-slate-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                        value={activeSavedViewId ?? ''}
+                    >
+                        <option value="">Load a Saved View</option>
+                        {savedFilters.map(sf => (
+                            <option key={sf.id} value={sf.id}>{sf.name}</option>
+                        ))}
+                    </select>
+                    <button
+                        onClick={onOpenManageSavedViews}
+                        className="px-3 py-2 bg-white text-slate-700 border border-slate-300 rounded-md hover:bg-slate-100 text-sm whitespace-nowrap"
+                    >
+                        Manage
+                    </button>
                 </div>
-                <div className="flex flex-col sm:flex-row gap-2">
+                <span className="px-2 py-1 text-[10px] uppercase tracking-wide rounded-md bg-slate-200 text-slate-700 whitespace-nowrap">
+                    Active: {activeSavedViewName?.trim() ? activeSavedViewName : 'None'}
+                </span>
+                <div className="flex flex-col sm:flex-row flex-1 min-w-[240px] gap-2">
                     <input
                         type="text"
                         placeholder="Enter name to save view..."
@@ -362,17 +360,17 @@ const OpportunityList: React.FC<OpportunityListProps> = ({
         </div>
 
       <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 400px)' }}>
-        <table className="w-full table-fixed text-sm text-left text-slate-500 border-separate border-spacing-0">
+        <table className="w-full table-fixed text-[13px] text-left text-slate-500 border-separate border-spacing-0">
           <colgroup>
             {tableHeaders.map(({ key }) => (
               <col key={`col-${key}`} style={{ width: columnWidths[key] }} />
             ))}
           </colgroup>
-          <thead className="text-xs text-slate-700 uppercase">
+          <thead className="text-[11px] text-slate-700 uppercase tracking-wide">
             <tr>
               {tableHeaders.map(({ key, label, className }) => (
                 <th key={key} scope="col" 
-                    className={`relative group px-4 py-3 bg-slate-50 border-b border-slate-200 sticky top-0 z-10 ${className || ''}`}
+                    className={`relative group px-3 py-2.5 bg-slate-50 border-b border-slate-200 sticky top-0 z-10 ${className || ''}`}
                     >
                   <div className="flex items-center justify-between">
                     <span>{label}</span>
@@ -390,15 +388,15 @@ const OpportunityList: React.FC<OpportunityListProps> = ({
           <tbody className="bg-white">
             {displayedOpportunities.map((opp) => (
               <tr key={opp.opportunities_id} className="border-b hover:bg-slate-50 cursor-pointer" onClick={() => onSelect(opp)}>
-                <td className="px-4 py-3 font-medium text-slate-800 truncate" title={opp.accounts_salesforce_account_name}>{opp.accounts_salesforce_account_name}</td>
-                <td className="px-4 py-3 text-indigo-600 font-semibold truncate" title={opp.opportunities_name}>{opp.opportunities_name}</td>
-                <td className="px-4 py-3 truncate" title={opp.opportunities_owner_name}>{opp.opportunities_owner_name}</td>
-                <td className="px-4 py-3 truncate" title={opp.opportunities_type}>{opp.opportunities_type}</td>
-                <td className="px-4 py-3 whitespace-nowrap">{formatDate(opp.opportunities_close_date)}</td>
-                <td className="px-4 py-3 text-center truncate" title={opp.opportunities_stage_name}><Tag status={opp.opportunities_stage_name} /></td>
-                <td className="px-4 py-3 text-right font-medium text-slate-700 whitespace-nowrap">{formatCurrency(opp.opportunities_incremental_bookings)}</td>
-                <td className="px-4 py-3 text-right font-bold text-green-700 whitespace-nowrap">{formatCurrency(opp.opportunities_amount)}</td>
-                <td className="px-4 py-3 text-center">
+                <td className="px-3 py-2.5 font-medium text-slate-800 truncate" title={opp.accounts_salesforce_account_name}>{opp.accounts_salesforce_account_name}</td>
+                <td className="px-3 py-2.5 text-indigo-600 font-semibold truncate" title={opp.opportunities_name}>{opp.opportunities_name}</td>
+                <td className="px-3 py-2.5 truncate" title={opp.opportunities_owner_name}>{opp.opportunities_owner_name}</td>
+                <td className="px-3 py-2.5 truncate" title={opp.opportunities_type}>{opp.opportunities_type}</td>
+                <td className="px-3 py-2.5 whitespace-nowrap">{formatDate(opp.opportunities_close_date)}</td>
+                <td className="px-3 py-2.5 text-center truncate" title={opp.opportunities_stage_name}><Tag status={opp.opportunities_stage_name} /></td>
+                <td className="px-3 py-2.5 text-right font-medium text-slate-700 whitespace-nowrap">{formatCurrency(opp.opportunities_incremental_bookings)}</td>
+                <td className="px-3 py-2.5 text-right font-bold text-green-700 whitespace-nowrap">{formatCurrency(opp.opportunities_amount)}</td>
+                <td className="px-3 py-2.5 text-center">
                     <div className="flex items-center justify-center space-x-2">
                         <Tag status={opp.opportunities_has_services_flag} />
                         {opp.disposition?.status === 'Services Fit' && <span className="text-green-500" title="Disposition: Services Fit">{ICONS.checkCircle}</span>}
@@ -406,7 +404,7 @@ const OpportunityList: React.FC<OpportunityListProps> = ({
                         {opp.disposition?.status === 'Watchlist' && <span className="text-blue-500" title="Disposition: Watchlist">{ICONS.eye}</span>}
                    </div>
                 </td>
-                <td className="px-4 py-3 text-right whitespace-nowrap">{renderServicesAmount(opp)}</td>
+                <td className="px-3 py-2.5 text-right whitespace-nowrap">{renderServicesAmount(opp)}</td>
               </tr>
             ))}
           </tbody>
