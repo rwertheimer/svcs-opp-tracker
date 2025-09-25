@@ -144,6 +144,8 @@ interface OpportunityListProps {
   opportunities: Opportunity[];
   onSelect: (opportunity: Opportunity) => void;
   savedFilters: SavedFilter[];
+  activeSavedViewId: string | null;
+  activeSavedViewName: string | null;
   onSaveFilter: (name: string) => void;
   onApplyFilter: (id: string) => void;
   onClearFilters: () => void;
@@ -152,23 +154,23 @@ interface OpportunityListProps {
   onOpenOrgChart: () => void;
   activeFilterCount: number;
   onOpenManageSavedViews: () => void;
-  apiModeInfo?: string;
   searchResetToken: number;
 }
 
 const OpportunityList: React.FC<OpportunityListProps> = ({
     opportunities,
     onSelect,
-    savedFilters, 
-    onSaveFilter, 
-    onApplyFilter, 
-    onClearFilters, 
+    savedFilters,
+    activeSavedViewId,
+    activeSavedViewName,
+    onSaveFilter,
+    onApplyFilter,
+    onClearFilters,
     onAddScoping,
     onOpenFilterBuilder,
     onOpenOrgChart,
     activeFilterCount,
     onOpenManageSavedViews,
-    apiModeInfo,
     searchResetToken
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -218,7 +220,12 @@ const OpportunityList: React.FC<OpportunityListProps> = ({
 
   const formatCurrency = (amount: number | null) => {
     if (amount === null || amount === undefined || amount === 0) return '-';
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(amount);
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount);
   };
   
   const formatDate = (dateString: string) => {
@@ -273,61 +280,85 @@ const OpportunityList: React.FC<OpportunityListProps> = ({
 
         {/* Saved Views and Filters Panel */}
         <div className="p-4 bg-slate-50 border-b space-y-4">
-             <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    {ICONS.search}
+            <div className="grid gap-4 lg:grid-cols-12 items-stretch">
+                <div className="lg:col-span-8">
+                    <div className="relative h-full">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            {ICONS.search}
+                        </div>
+                        <input
+                            type="text"
+                            placeholder="Search by account or opportunity name..."
+                            value={searchTerm}
+                            onChange={e => setSearchTerm(e.target.value)}
+                            className="w-full h-full p-2 pl-10 border border-slate-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                        />
+                    </div>
                 </div>
-                <input
-                    type="text"
-                    placeholder="Search by account or opportunity name..."
-                    value={searchTerm}
-                    onChange={e => setSearchTerm(e.target.value)}
-                    className="w-full p-2 pl-10 border border-slate-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-                />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <div className="flex items-center space-x-2">
-                    <select
-                        onChange={(e) => e.target.value ? onApplyFilter(e.target.value) : onClearFilters()}
-                        className="flex-grow p-2 border border-slate-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-                        value={""}
+                <div className="lg:col-span-4 flex flex-col sm:flex-row gap-2">
+                    <button
+                        onClick={onOpenFilterBuilder}
+                        className="relative flex-1 px-4 py-2 bg-white text-slate-700 border border-slate-300 rounded-md hover:bg-slate-100 font-semibold text-sm flex items-center justify-center space-x-2"
                     >
-                        <option value="">Load a Saved View</option>
-                        {savedFilters.map(sf => (
-                            <option key={sf.id} value={sf.id}>{sf.name}</option>
-                        ))}
-                    </select>
-                    <button onClick={onOpenManageSavedViews} className="px-3 py-2 bg-white text-slate-700 border border-slate-300 rounded-md hover:bg-slate-100 text-sm">Manage</button>
-                    {apiModeInfo && (
-                      <span className="px-2 py-1 text-[10px] uppercase tracking-wide rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200 whitespace-nowrap" title="Saved Views Persistence">
-                        {apiModeInfo}
-                      </span>
-                    )}
+                        {ICONS.filter}
+                        <span>Advanced Filter</span>
+                        {activeFilterCount > 0 && (
+                            <span className="absolute -top-2 -right-2 bg-indigo-600 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                                {activeFilterCount}
+                            </span>
+                        )}
+                    </button>
+                    <button
+                        onClick={onClearFilters}
+                        className="px-4 py-2 bg-white text-slate-700 border border-slate-300 rounded-md hover:bg-slate-100 font-semibold text-sm"
+                    >
+                        Clear
+                    </button>
                 </div>
-                 <div className="flex items-center space-x-2">
+            </div>
+
+            <div className="space-y-4">
+                <div className="flex flex-col lg:flex-row lg:items-center gap-3">
+                    <div className="flex flex-col sm:flex-row flex-1 gap-2">
+                        <select
+                            onChange={(e) => e.target.value ? onApplyFilter(e.target.value) : onClearFilters()}
+                            className="flex-1 p-2 border border-slate-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                            value={activeSavedViewId ?? ''}
+                        >
+                            <option value="">Load a Saved View</option>
+                            {savedFilters.map(sf => (
+                                <option key={sf.id} value={sf.id}>{sf.name}</option>
+                            ))}
+                        </select>
+                        <button
+                            onClick={onOpenManageSavedViews}
+                            className="px-3 py-2 bg-white text-slate-700 border border-slate-300 rounded-md hover:bg-slate-100 text-sm whitespace-nowrap"
+                        >
+                            Manage
+                        </button>
+                    </div>
+                    <span className="px-2 py-1 text-[10px] uppercase tracking-wide rounded-md bg-slate-200 text-slate-700 whitespace-nowrap self-start">
+                        Active: {activeSavedViewName?.trim() ? activeSavedViewName : 'None'}
+                    </span>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2">
                     <input
                         type="text"
                         placeholder="Enter name to save view..."
                         value={newViewName}
                         onChange={e => setNewViewName(e.target.value)}
-                        className="flex-grow p-2 border border-slate-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                        className="flex-1 p-2 border border-slate-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm"
                     />
-                    <button onClick={handleSaveClick} className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 font-semibold text-sm flex items-center space-x-2">
-                        {ICONS.save}<span>Save</span>
-                    </button>
-                </div>
-                 <div className="flex items-center space-x-2">
-                     <button onClick={onOpenFilterBuilder} className="relative w-full px-4 py-2 bg-white text-slate-700 border border-slate-300 rounded-md hover:bg-slate-100 font-semibold text-sm flex items-center space-x-2">
-                        {ICONS.filter}
-                        <span>Advanced Filter</span>
-                        {activeFilterCount > 0 && <span className="absolute -top-2 -right-2 bg-indigo-600 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">{activeFilterCount}</span>}
-                    </button>
-                    <button onClick={onClearFilters} className="px-4 py-2 bg-white text-slate-700 border border-slate-300 rounded-md hover:bg-slate-100 font-semibold text-sm">
-                        Clear
+                    <button
+                        onClick={handleSaveClick}
+                        className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 font-semibold text-sm flex items-center justify-center space-x-2"
+                    >
+                        {ICONS.save}
+                        <span>Save</span>
                     </button>
                 </div>
             </div>
-            
+
         </div>
 
       <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 400px)' }}>
